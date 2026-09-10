@@ -1,0 +1,287 @@
+classDiagram
+    direction LR
+
+    %% ===================== core 纯逻辑层 =====================
+    class Mood {
+        <<enumeration>>
+        IDLE
+        FOCUS
+        REST
+        SLEEP
+    }
+    class Expression {
+        <<enumeration>>
+        HAPPY
+        FOCUS
+        SLEEPY
+        SURPRISED
+        SULKY
+        YAWN
+        SLEEPING
+        EXCITED
+    }
+    class Gesture {
+        <<enumeration>>
+        NONE
+        CLICK
+        HOVER
+        DRAG
+        WAKE
+    }
+
+    class AppConfig {
+        +int version
+        +int window_x
+        +int window_y
+        +float scale
+        +bool listen_enabled
+        +bool bubble_enabled
+        +bool autostart
+        +to_dict() dict
+        +from_dict(data: dict) AppConfig
+    }
+
+    class ConfigStore {
+        -Path path
+        +__init__(path: Path)
+        +static default_path() Path
+        +load() AppConfig
+        +save(cfg: AppConfig) None
+        -_read_raw() dict
+    }
+
+    class KeystrokeResult {
+        +int burst_count
+        +bool high_frequency
+        +float rate_per_sec
+    }
+
+    class KeystrokeAggregator {
+        -float window_ms
+        -int threshold
+        -Deque~float~ _timestamps
+        -bool _high_freq
+        +__init__(window_ms: float, threshold: int)
+        +record(timestamp: float) KeystrokeResult
+        +is_high_frequency() bool
+        +reset() None
+    }
+
+    class MoodTransition {
+        +Mood from_mood
+        +Mood to_mood
+        +Expression expression
+        +str reason
+        +float timestamp
+        +bool changed
+    }
+
+    class MoodStateMachine {
+        -Mood _state
+        -float _state_since
+        -float _last_input_ts
+        -float _idle_start_s
+        -float _rest_s
+        -float _sleep_s
+        -float _min_dwell_s
+        +__init__(idle_start_s: float, rest_s: float, sleep_s: float, min_dwell_s: float)
+        +update(now: float) MoodTransition
+        +on_keystroke(now: float, high_frequency: bool) MoodTransition
+        +on_wake(now: float) MoodTransition
+        +on_gesture(gesture: Gesture, now: float) MoodTransition
+        +idle_seconds(now: float) float
+        +state_since() float
+        +force(mood: Mood, now: float) None
+        -_can_transition(now: float) bool
+        -_set_state(mood: Mood, now: float, reason: str) MoodTransition
+    }
+
+    class PetPose {
+        +float body_y
+        +float body_squash
+        +float head_y
+        +float head_tilt
+        +float look_x
+        +float look_y
+        +float eye_open_l
+        +float eye_open_r
+        +float eye_curve
+        +float pupil_dilate
+        +float mouth_curve
+        +float mouth_open
+        +float tongue_show
+        +float ear_l_angle
+        +float ear_r_angle
+        +float ear_l_tilt
+        +float ear_r_tilt
+        +float arm_l_press
+        +float arm_r_press
+        +float arm_dangle
+        +float tail_angle
+        +float tail_curve
+        +float blush_alpha
+        +float glow_alpha
+        +float tear_alpha
+        +float zzz_alpha
+        +lerp_to(other: PetPose, t: float) PetPose
+    }
+
+    class PetModel {
+        -PetPose _current
+        -PetPose _target
+        -float _blink_timer
+        -float _breath_phase
+        -float _tail_phase
+        -float _press_timer
+        -int _press_arm
+        -bool _dragging
+        -bool _hovering
+        -float _temp_action_until
+        -Expression _base_expression
+        +__init__()
+        +set_expression(expr: Expression, duration: float) None
+        +set_base_expression(expr: Expression) None
+        +trigger_click() None
+        +set_dragging(active: bool) None
+        +set_hover(active: bool) None
+        +press_arm() None
+        +update(dt: float, now: float) None
+        +pose() PetPose
+        +static pose_for_expression(expr: Expression) PetPose
+    }
+
+    %% ===================== ui 渲染层 =====================
+    class PetRenderer {
+        +__init__()
+        +paint(painter: QPainter, pose: PetPose, scale: float, size: QSize) None
+        +static build_tray_icon() QIcon
+        -_draw_glow(painter: QPainter, pose: PetPose)
+        -_draw_tail(painter: QPainter, pose: PetPose)
+        -_draw_body(painter: QPainter, pose: PetPose)
+        -_draw_arms(painter: QPainter, pose: PetPose)
+        -_draw_head(painter: QPainter, pose: PetPose)
+        -_draw_face(painter: QPainter, pose: PetPose)
+        -_draw_zzz(painter: QPainter, pose: PetPose)
+    }
+
+    class PetWindow {
+        +Signal position_changed
+        +Signal gesture_triggered
+        +Signal drag_finished
+        -PetModel _model
+        -PetRenderer _renderer
+        -QTimer _timer
+        -float _scale
+        -QPoint _drag_origin
+        -bool _dragging
+        -float _press_ts
+        +__init__(model: PetModel, renderer: PetRenderer, scale: float)
+        +set_scale(scale: float) None
+        +set_fps(fps: int) None
+        +restore_position(x: int, y: int) None
+        +paintEvent(event: QPaintEvent) None
+        +mousePressEvent(event: QMouseEvent) None
+        +mouseMoveEvent(event: QMouseEvent) None
+        +mouseReleaseEvent(event: QMouseEvent) None
+        +enterEvent(event: QEnterEvent) None
+        +leaveEvent(event: QEvent) None
+        +contextMenuEvent(event: QContextMenuEvent) None
+        -_on_frame() None
+    }
+
+    class BubbleWindow {
+        -str _text
+        -float _alpha
+        -int _phase
+        -QTimer _timer
+        +__init__()
+        +show_message(text: str, duration: float) None
+        +paintEvent(event: QPaintEvent) None
+        -_update_alpha() None
+        -_compute_geometry(anchor: QPoint) QRect
+    }
+
+    class TrayController {
+        +Signal listen_toggled
+        +Signal scale_selected
+        +Signal minimize_requested
+        +Signal restore_requested
+        +Signal autostart_toggled
+        +Signal quit_requested
+        -QSystemTrayIcon _tray
+        -QMenu _menu
+        -QIcon _icon
+        +__init__(icon: QIcon, cfg: AppConfig)
+        +show() None
+        +notify(title: str, msg: str) None
+        +set_listen_checked(checked: bool) None
+        +set_scale_checked(scale: float) None
+        -_build_menu() None
+    }
+
+    %% ===================== app 组装层 =====================
+    class KeystrokeBridge {
+        +Signal keystroke
+        +__init__()
+        +emit_keystroke(timestamp: float) None
+    }
+
+    class KeyboardListener {
+        -KeystrokeBridge _bridge
+        -Any _listener
+        -bool _running
+        +__init__(bridge: KeystrokeBridge)
+        +start() None
+        +stop() None
+        +is_running() bool
+        -_on_press(key: Any) None
+    }
+
+    class PetAppController {
+        -QApplication _app
+        -ConfigStore _store
+        -AppConfig _cfg
+        -PetModel _model
+        -PetRenderer _renderer
+        -PetWindow _window
+        -BubbleWindow _bubble
+        -TrayController _tray
+        -KeyboardListener _keyboard
+        -KeystrokeBridge _bridge
+        -KeystrokeAggregator _aggregator
+        -MoodStateMachine _sm
+        +__init__(app: QApplication, store: ConfigStore)
+        +start() None
+        +shutdown() None
+        -_on_keystroke(timestamp: float) None
+        -_on_frame_tick() None
+        -_on_gesture(gesture: int) None
+        -_sync_fps_and_visuals(transition: MoodTransition) None
+        -_show_bubble_for(expr: Expression) None
+        -_apply_scale(scale: float) None
+        -_persist() None
+        -_set_autostart(enabled: bool) None
+    }
+
+    %% ===================== 关系 =====================
+    ConfigStore ..> AppConfig : creates
+    KeystrokeAggregator ..> KeystrokeResult : creates
+    MoodStateMachine ..> MoodTransition : creates
+    PetModel ..> PetPose : owns
+    PetModel ..> Expression : uses
+    MoodStateMachine ..> Mood : uses
+    MoodStateMachine ..> Expression : maps
+    MoodStateMachine ..> Gesture : uses
+    PetWindow --> PetModel : drives
+    PetWindow --> PetRenderer : uses
+    BubbleWindow ..> Expression : shows text for
+    TrayController ..> AppConfig : reads
+    KeyboardListener --> KeystrokeBridge : emits via
+    PetAppController --> ConfigStore : uses
+    PetAppController --> PetModel : owns
+    PetAppController --> PetWindow : owns
+    PetAppController --> BubbleWindow : owns
+    PetAppController --> TrayController : owns
+    PetAppController --> KeyboardListener : owns
+    PetAppController --> KeystrokeAggregator : owns
+    PetAppController --> MoodStateMachine : owns

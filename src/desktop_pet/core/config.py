@@ -1,0 +1,255 @@
+"""core.config —— 应用配置：``AppConfig`` dataclass + ``ConfigStore`` JSON 读写。
+
+**本模块禁止 import 任何图形界面（Qt/GUI）库。**
+
+容错是硬要求（FR-39 / 架构 §9.6）：
+- 文件缺失 / JSON 解析失败 / 字段类型错误 / 越界值 → **逐字段** 回落默认值，绝不抛异常崩溃。
+- 保存采用「写临时文件 + ``os.replace`` 原子替换」，避免半写损坏。
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import tempfile
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Final
+
+from desktop_pet.core import constants as C
+
+logger = logging.getLogger(__name__)
+
+#: ``scale`` 允许的容差（浮点比较）
+_SCALE_EPSILON: Final[float] = 1e-6
+
+
+def _coerce_int(value: Any, default: int) -> int:
+    """把任意值安全转换为 int；bool 视为非法（避免 True→1 的语义混淆）。"""
+
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        # 仅当是整数值的浮点才接受
+        return int(value) if float(value).is_integer() else default
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except (ValueError, TypeError):
+            return default
+    return default
+
+
+def _coerce_float(value: Any, default: float) -> float:
+    """把任意值安全转换为 float。"""
+
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except (ValueError, TypeError):
+            return default
+    return default
+
+
+def _coerce_bool(value: Any, default: bool) -> bool:
+    """把任意值安全转换为 bool；字符串仅接受常见真/假字面量。"""
+
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ("true", "1", "yes", "on"):
+            return True
+        if normalized in ("false", "0", "no", "off"):
+            return False
+    return default
+
+
+def _coerce_scale(value: Any, default: float) -> float:
+    """把缩放值收敛到 ``SCALES`` 允许档位；非法值回落默认。"""
+
+    candidate = _coerce_float(value, default)
+    for allowed in C.SCALES:
+        if abs(candidate - allowed) < _SCALE_EPSILON:
+            return float(allowed)
+    return float(default)
+
+
+@dataclass
+class AppConfig:
+    """应用配置数据载体（架构 §9.6 schema）。
+
+    Attributes:
+        version: schema 版本号，便于未来迁移。
+        window_x: 窗口左上角 x（``-1`` 表示自动定位到主屏右下角）。
+        window_y: 窗口左上角 y（``-1`` 表示自动定位到主屏右下角）。
+        scale: 缩放档位，取值 ``0.8 / 1.0 / 1.2``。
+        listen_enabled: 全局键盘监听开关。
+        bubble_enabled: 气泡提示开关（PRD Q-01 的"静音"含义）。
+        autostart: 开机自启开关。
+    """
+
+    version: int = C.CONFIG_VERSION
+    window_x: int = C.DEFAULT_WINDOW_X
+    window_y: int = C.DEFAULT_WINDOW_Y
+    scale: float = C.DEFAULT_SCALE
+    listen_enabled: bool = True
+    bubble_enabled: bool = True
+    autostart: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        """序列化为可 JSON 化的字典。"""
+
+        return {
+            "version": int(self.version),
+            "window_x": int(self.window_x),
+            "window_y": int(self.window_y),
+            "scale": float(self.scale),
+            "listen_enabled": bool(self.listen_enabled),
+            "bubble_enabled": bool(self.bubble_enabled),
+            "autostart": bool(self.autostart),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "AppConfig":
+        """从字典**逐字段容错**构造配置。
+
+        缺失字段、类型错误、越界值一律回落默认值，绝不抛异常。
+        """
+
+        defaults = cls()
+        if not isinstance(data, dict):
+            logger.warning("配置数据不是 dict（type=%s），全部使用默认值", type(data).__name__)
+            return defaults
+
+        def get(key: str) -> Any:
+            return data.get(key, None)
+
+        return cls(
+            version=_coerce_int(get("version"), defaults.version),
+            window_x=_coerce_int(get("window_x"), defaults.window_x),
+            window_y=_coerce_int(get("window_y"), defaults.window_y),
+            scale=_coerce_scale(get("scale"), defaults.scale),
+            listen_enabled=_coerce_bool(get("listen_enabled"), defaults.listen_enabled),
+            bubble_enabled=_coerce_bool(get("bubble_enabled"), defaults.bubble_enabled),
+            autostart=_coerce_bool(get("autostart"), defaults.autostart),
+        )
+
+
+class ConfigStore:
+    """负责 ``config.json`` 的容错读取与原子保存。"""
+
+    def __init__(self, path: Path) -> None:
+        """创建配置存储。
+
+        Args:
+            path: 配置文件绝对路径。
+        """
+
+        self._path: Path = Path(path)
+
+    @property
+    def path(self) -> Path:
+        """配置文件路径。"""
+
+        return self._path
+
+    @staticmethod
+    def default_path() -> Path:
+        """返回默认配置文件路径 ``%APPDATA%\\desktop-pet\\config.json``。
+
+        当 ``APPDATA`` 不可用时回落到用户主目录，保证任何环境下都能返回一个可写路径。
+        """
+
+        appdata = os.environ.get("APPDATA")
+        base = Path(appdata) if appdata else Path.home()
+        return base / C.CONFIG_DIR_NAME / C.CONFIG_FILE_NAME
+
+    @staticmethod
+    def log_path() -> Path:
+        """返回默认日志文件路径 ``%APPDATA%\\desktop-pet\\app.log``。"""
+
+        appdata = os.environ.get("APPDATA")
+        base = Path(appdata) if appdata else Path.home()
+        return base / C.CONFIG_DIR_NAME / C.LOG_FILE_NAME
+
+    def _read_raw(self) -> dict[str, Any]:
+        """读取并解析原始 JSON。
+
+        任何异常（文件缺失 / 权限 / 解析失败 / 非对象根）都被捕获，
+        返回空字典以触发全默认回落（FR-39）。
+        """
+
+        try:
+            if not self._path.exists():
+                return {}
+            text = self._path.read_text(encoding="utf-8")
+            if not text.strip():
+                logger.warning("配置文件为空：%s，使用默认值", self._path)
+                return {}
+            data = json.loads(text)
+            if not isinstance(data, dict):
+                logger.warning("配置根节点不是对象：%s，使用默认值", self._path)
+                return {}
+            return data
+        except json.JSONDecodeError as exc:
+            logger.warning("配置文件 JSON 解析失败（%s）：%s，使用默认值", self._path, exc)
+        except OSError as exc:
+            logger.warning("读取配置文件失败（%s）：%s，使用默认值", self._path, exc)
+        except Exception:  # noqa: BLE001 —— 边界处绝不冒泡崩溃
+            logger.exception("读取配置时发生未预期异常（%s），使用默认值", self._path)
+        return {}
+
+    def load(self) -> AppConfig:
+        """加载配置；任何异常/损坏都回落默认值，永不为抛异常设计。"""
+
+        raw = self._read_raw()
+        try:
+            cfg = AppConfig.from_dict(raw)
+            logger.info("配置加载完成：%s", cfg.to_dict())
+            return cfg
+        except Exception:  # noqa: BLE001
+            logger.exception("构造配置对象失败（%s），使用全默认值", self._path)
+            return AppConfig()
+
+    def save(self, cfg: AppConfig) -> None:
+        """原子保存配置（写临时文件 → ``os.replace``）。
+
+        失败仅记 warning，不抛出（避免阻塞退出流程）。
+        """
+
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            payload = json.dumps(cfg.to_dict(), ensure_ascii=False, indent=2)
+            fd, tmp_name = tempfile.mkstemp(
+                prefix="config-", suffix=".tmp", dir=str(self._path.parent)
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    handle.write(payload)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(tmp_name, self._path)
+            except Exception:
+                # 清理残留临时文件后继续抛出到外层统一处理
+                try:
+                    if os.path.exists(tmp_name):
+                        os.remove(tmp_name)
+                except OSError:
+                    pass
+                raise
+            logger.info("配置已保存：%s", cfg.to_dict())
+        except Exception:  # noqa: BLE001 —— 边界处绝不冒泡崩溃
+            logger.exception("保存配置失败（%s），忽略本次保存", self._path)
+
+
+__all__ = ["AppConfig", "ConfigStore"]

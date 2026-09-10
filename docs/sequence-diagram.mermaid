@@ -1,0 +1,31 @@
+sequenceDiagram
+    autonumber
+    participant KB as 系统键盘
+    participant PL as pynput Listener<br/>(工作线程)
+    participant BR as KeystrokeBridge
+    participant CT as PetAppController<br/>(主线程 slot)
+    participant AG as KeystrokeAggregator
+    participant SM as MoodStateMachine
+    participant MD as PetModel
+    participant WN as PetWindow
+    participant RD as PetRenderer
+
+    KB->>PL: key press (任意前台窗口)
+    PL->>PL: _on_press(key) 取 time.monotonic()
+    PL->>BR: emit_keystroke(ts)
+    Note over BR,CT: Qt 信号跨线程 → 自动 QueuedConnection
+    BR-->>CT: keystroke(ts) 队列投递到主线程
+    CT->>AG: record(ts)
+    AG->>AG: 剔除窗口外时间戳, 计数 burst_count
+    AG-->>CT: KeystrokeResult(burst_count, high_frequency)
+    CT->>SM: on_keystroke(ts, high_frequency)
+    SM->>SM: 重置无输入计时器; 若 high_frequency → FOCUS
+    SM-->>CT: MoodTransition(from, to, expression, reason)
+    CT->>MD: press_arm()  (FR-02 敲击动画, 优先打断)
+    CT->>MD: set_expression(expr, duration)
+    CT->>WN: set_fps(30)
+    CT->>WN: update()  触发脏区重绘
+    WN->>MD: update(dt, now)  推进姿态插值
+    WN->>RD: paint(painter, pose, scale, size)
+    RD-->>WN: 已绘制的猫（爪子按压帧）
+    Note over KB,RD: 端到端延迟目标 < 100ms (FR-02)

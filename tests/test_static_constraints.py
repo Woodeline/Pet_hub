@@ -1,0 +1,216 @@
+"""静态约束回归测试（防止架构腐化）。
+
+- ``core/`` 零 Qt/GUI 依赖（架构 §1.2 硬性要求）。
+- 依赖方向单向：``core`` 不 import ``ui``/``app``；``ui`` 不 import ``app``。
+- ``src/`` 下无 ``print(``（统一 logging）。
+- 无任何图片素材文件（零外部素材承诺）。
+- ``constants.py`` 关键阈值与 PRD 一致（防实现与需求漂移）。
+"""
+
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+
+import pytest
+
+from desktop_pet.core import constants as C
+from desktop_pet.core.constants import Expression, Mood
+
+_QT_PREFIXES = ("PySide6", "PyQt5", "PyQt6", "qtpy")
+
+
+def _iter_py_files(root: Path):
+    return sorted(p for p in root.rglob("*.py") if "__pycache__" not in p.parts)
+
+
+def _imported_modules(path: Path) -> list[str]:
+    """返回文件里所有被 import 的模块名（含 from xxx import 的 xxx）。"""
+
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    modules: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                modules.append(node.module)
+    return modules
+
+
+# --------------------------------------------------------------------------- #
+# 1. core 零 Qt 依赖
+# --------------------------------------------------------------------------- #
+def test_core_has_no_qt_imports(src_root: Path) -> None:
+    core = src_root / "core"
+    offenders: list[str] = []
+    for path in _iter_py_files(core):
+        for module in _imported_modules(path):
+            if module.startswith(_QT_PREFIXES):
+                offenders.append(f"{path.name}: {module}")
+    assert not offenders, f"core 出现 Qt 依赖（架构违规）：{offenders}"
+
+
+def test_core_does_not_import_ui_or_app(src_root: Path) -> None:
+    core = src_root / "core"
+    offenders: list[str] = []
+    for path in _iter_py_files(core):
+        for module in _imported_modules(path):
+            if module.startswith("desktop_pet.ui") or module.startswith("desktop_pet.app"):
+                offenders.append(f"{path.name}: {module}")
+    assert not offenders, f"core 反向依赖 ui/app（架构违规）：{offenders}"
+
+
+def test_ui_does_not_import_app(src_root: Path) -> None:
+    ui = src_root / "ui"
+    offenders: list[str] = []
+    for path in _iter_py_files(ui):
+        for module in _imported_modules(path):
+            if module.startswith("desktop_pet.app"):
+                offenders.append(f"{path.name}: {module}")
+    assert not offenders, f"ui 反向依赖 app（架构违规）：{offenders}"
+
+
+def test_core_imports_without_loading_qt(project_root: Path) -> None:
+    """在**全新子进程**中导入 core 全模块，断言 PySide6 从未被加载。
+
+    这比进程内 AST 检查更强：直接证明纯逻辑层运行时不依赖 Qt。
+    """
+
+    import os
+    import subprocess
+    import sys
+
+    src = project_root / "src"
+    code = (
+        "import sys\n"
+        "import desktop_pet.core.constants\n"
+        "import desktop_pet.core.config\n"
+        "import desktop_pet.core.event_aggregator\n"
+        "import desktop_pet.core.motion\n"
+        "import desktop_pet.core.mood_state_machine\n"
+        "import desktop_pet.core.pet_model\n"
+        "loaded = [m for m in sys.modules if m.startswith('PySide6')]\n"
+        "assert not loaded, 'core 导入过程加载了 Qt: %r' % loaded\n"
+        "print('CORE_IS_QT_FREE')\n"
+    )
+    env = {**os.environ, "PYTHONPATH": str(src)}
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, env=env, timeout=60
+    )
+    assert result.returncode == 0, f"子进程导入失败：{result.stderr}"
+    assert "CORE_IS_QT_FREE" in result.stdout
+
+
+# --------------------------------------------------------------------------- #
+# 2. 无 print(（统一 logging）
+# --------------------------------------------------------------------------- #
+def test_no_print_calls_in_src(src_root: Path) -> None:
+    offenders: list[str] = []
+    for path in _iter_py_files(src_root):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "print"
+            ):
+                offenders.append(f"{path.relative_to(src_root.parent)}:{node.lineno}")
+    assert not offenders, f"src 下存在 print 调用（应使用 logging）：{offenders}"
+
+
+# --------------------------------------------------------------------------- #
+# 3. 零外部图片素材
+# --------------------------------------------------------------------------- #
+_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".svg", ".webp",
+                   ".tif", ".tiff", ".qrc", ".xpm"}
+
+
+def test_no_image_assets(project_root: Path) -> None:
+    offenders = [
+        str(p.relative_to(project_root))
+        for p in project_root.rglob("*")
+        if p.is_file()
+        and p.suffix.lower() in _IMAGE_SUFFIXES
+        and ".venv" not in p.parts
+        and "__pycache__" not in p.parts
+    ]
+    assert not offenders, f"发现图片素材（违背零外部素材承诺）：{offenders}"
+
+
+# --------------------------------------------------------------------------- #
+# 4. 常量与 PRD 一致（防漂移）
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    "attr,expected",
+    [
+        ("HIGH_FREQ_WINDOW_MS", 300.0),
+        ("HIGH_FREQ_THRESHOLD", 3),
+        ("IDLE_START_S", 20.0),
+        ("REST_THRESHOLD_S", 120.0),
+        ("SLEEP_THRESHOLD_S", 300.0),
+        ("MIN_DWELL_S", 5.0),
+        ("WAKE_SULKY_S", 3.0),
+        ("EXCITED_THRESHOLD_S", 5.0),
+        ("SLEEPY_REST_S", 30.0),
+        ("SURPRISED_IDLE_S", 120.0),
+        ("BLINK_MIN_S", 3.0),
+        ("BLINK_MAX_S", 6.0),
+        ("BREATH_PERIOD_S", 3.0),
+        ("TAIL_MIN_S", 2.0),
+        ("TAIL_MAX_S", 4.0),
+        ("YAWN_MIN_S", 15.0),
+        ("YAWN_MAX_S", 30.0),
+        ("HOVER_TRIGGER_S", 1.0),
+        ("CLICK_ANIM_S", 1.5),
+        ("DRAG_THRESHOLD_PX", 5),
+        ("BUBBLE_MIN_GAP_S", 3.0),
+        ("FPS_ACTIVE", 30),
+        ("FPS_IDLE", 15),
+        ("FPS_SLEEP", 8),
+        ("BASE_W", 160),
+        ("BASE_H", 180),
+        ("CONFIG_VERSION", 1),
+    ],
+)
+def test_constants_match_prd(attr: str, expected) -> None:
+    assert getattr(C, attr) == expected, f"{attr} 与 PRD 不一致"
+
+
+def test_scales_match_prd() -> None:
+    assert C.SCALES == (0.8, 1.0, 1.2)
+
+
+def test_mood_has_four_states() -> None:
+    assert {m.name for m in Mood} == {"IDLE", "FOCUS", "REST", "SLEEP"}
+
+
+def test_expression_count_matches_prd() -> None:
+    assert len(list(Expression)) == 8
+
+
+def test_color_palette_matches_prd() -> None:
+    expected = {
+        "cream": "#FFF4E6",
+        "caramel": "#F2C79A",
+        "warm_brown": "#8B6B4F",
+        "peach": "#F7B8A8",
+        "dark_brown": "#5A4033",
+        "white": "#FFFFFF",
+        "bubble_bg": "#FFFDF8",
+        "bubble_text": "#7A5A42",
+        "glow_yellow": "#FFD08A",
+        "glow_blue": "#B9D4E8",
+    }
+    assert C.COLORS == expected
+
+
+def test_no_pure_black_outline_in_palette() -> None:
+    """PRD §4.2：无纯黑描边。"""
+
+    assert "#000000" not in {v.upper() for v in C.COLORS.values()}
+
+
+def test_bubble_texts_cover_all_expressions() -> None:
+    for expr in Expression:
+        assert expr in C.BUBBLE_TEXTS, f"表情 {expr.name} 缺少气泡文案"

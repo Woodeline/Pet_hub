@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "desktop-pet"
+version = "1.0.0"
+description = "大圣喵风格 Windows 桌面宠物（程序化矢量绘制，零外部素材）"
+readme = "README.md"
+requires-python = ">=3.13"
+license = { text = "MIT" }
+authors = [{ name = "desktop-pet team" }]
+keywords = ["desktop-pet", "pyside6", "pynput", "windows"]
+dependencies = [
+    "PySide6>=6.8.0,<6.10",
+    "pynput>=1.7.7,<2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+]
+
+[project.scripts]
+desktop-pet = "desktop_pet.main:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"

@@ -1,0 +1,6 @@
+# 运行依赖（架构 §8 锁定版本区间）
+# 说明：本程序仅使用 QtCore / QtGui / QtWidgets（不含任何 Addons / QWebEngine / QtCharts）。
+# 如需更快安装或更小体积，可将 PySide6 替换为 PySide6-Essentials（等价子集）：
+#   PySide6-Essentials>=6.8.0,<6.10
+PySide6>=6.8.0,<6.10
+pynput>=1.7.7,<2.0

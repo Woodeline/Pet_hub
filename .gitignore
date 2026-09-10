@@ -1,0 +1,45 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# ---- Virtual envs ----
+.venv/
+venv/
+env/
+
+# ---- Test / coverage ----
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# ---- Type checkers / linters ----
+.mypy_cache/
+.ruff_cache/
+
+# ---- IDE / OS ----
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+desktop.ini
+
+# ---- App runtime (never commit user config / logs) ----
+config.json
+app.log
+*.log
+
+# ---- 本地临时产物（诊断脚本 / 命令输出 / pytest basetemp），绝不入库 ----
+# 根目录下以下划线开头的条目一律视为临时产物。
+# 注意写成 /_* 而非 _*，避免误伤子目录里的 __init__.py / __pycache__
+/_*
