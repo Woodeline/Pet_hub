@@ -1,10 +1,17 @@
-"""ui.pet_renderer —— QPainter **纯矢量**猫咪渲染器（零外部图片素材）。
+"""ui.pet_renderer —— QPainter **纯矢量**团子猫渲染器（零外部图片素材）。
 
-绘制层次严格遵循 PRD §4.1：透明底板 → 尾巴 → 身体/后腿 → 头部/耳朵 →
-迷你键盘 → 双手（前臂/手掌/手指）→ 面部（眼睛/嘴/腮红）→ 光晕 / ZZZ / 泪点。
+视觉基准（参考图）：一只**圆滚滚的团子猫**，头与身体融合为一个圆球、顶部两只小三角耳、
+填充为**柔和全息彩虹**对角渐变、所有轮廓均为**厚实纯黑描边**、脸部极简（两个近黑实心
+椭圆眼 + ω 形小弯嘴）。猫**坐在透视键盘后方**，两条短粗前肢搭在键盘上；左下角有一只
+深灰鼠标；左侧伸出一条粗弧尾巴。
+
+绘制层次（决定遮挡，"猫坐在键盘后面"的关键）：
+
+    径向光晕（最底） → 尾巴 → 团子主体（含耳朵/后肢） → 透视键盘（盖住身体下沿）
+    → 鼠标 → 前肢 + 爪子（盖在键盘之上） → 脸 → ZZZ
 
 缩放由 ``painter.scale(scale, scale)`` 统一施加，几何在**逻辑画布 160×180**内绘制。
-配色全部取自 :mod:`desktop_pet.core.constants` 的 ``COLORS``。
+配色 / 渐变 / 描边宽度全部取自 :mod:`desktop_pet.core.constants`。
 
 .. note::
    绘制几何为渲染层内部细节（非业务阈值），集中定义于本模块顶部的 ``_GEO_*``
@@ -21,10 +28,12 @@ from PySide6.QtGui import (
     QBrush,
     QColor,
     QIcon,
+    QLinearGradient,
     QPainter,
     QPainterPath,
     QPen,
     QPixmap,
+    QPolygonF,
     QRadialGradient,
 )
 
@@ -37,87 +46,86 @@ from desktop_pet.core.pet_model import PetPose
 _GEO_CANVAS_W: Final[float] = float(C.BASE_W)
 _GEO_CANVAS_H: Final[float] = float(C.BASE_H)
 
-# 身体（整体较旧版上移 6px，为底部键盘腾出空间；各部件保持相对关系）
+# 团子主体（头身融合的圆球）
 _GEO_BODY_CX: Final[float] = 80.0
-_GEO_BODY_CY: Final[float] = 118.0
-_GEO_BODY_RX: Final[float] = 45.0
-_GEO_BODY_RY: Final[float] = 42.0
-_GEO_LEG_RX: Final[float] = 16.0
-_GEO_LEG_RY: Final[float] = 11.0
+_GEO_BODY_CY: Final[float] = 77.0
+_GEO_BODY_RX: Final[float] = 48.0
+_GEO_BODY_RY: Final[float] = 45.0
 
-# 头（局部坐标以头中心为原点）
-_GEO_HEAD_CX: Final[float] = 80.0
-_GEO_HEAD_CY: Final[float] = 68.0
-_GEO_HEAD_RX: Final[float] = 40.0
-_GEO_HEAD_RY: Final[float] = 36.0
-_GEO_EYE_DX: Final[float] = 15.0
-_GEO_EYE_DY: Final[float] = -2.0
-_GEO_EYE_R: Final[float] = 7.0
-_GEO_NOSE_DY: Final[float] = 12.0
-_GEO_MOUTH_DY: Final[float] = 21.0
-_GEO_BLUSH_DX: Final[float] = 26.0
-_GEO_BLUSH_DY: Final[float] = 14.0
+# 耳朵（相对体心的三角耳）
+_GEO_EAR_X: Final[float] = 27.0          # 耳根距体心横向偏移
+_GEO_EAR_BASE_INSET: Final[float] = 9.0  # 耳根相对身体顶部的下沉（融入轮廓）
+_GEO_EAR_LEN: Final[float] = 25.0        # 耳高
+_GEO_EAR_HALF_W: Final[float] = 12.5     # 耳根半宽
+
+# 脸（相对体心）
+_GEO_EYE_DX: Final[float] = 16.0
+_GEO_EYE_DY: Final[float] = -8.0
+_GEO_EYE_RX: Final[float] = 6.0
+_GEO_EYE_RY: Final[float] = 6.8
+_GEO_MOUTH_DY: Final[float] = 9.0
+_GEO_BLUSH_DX: Final[float] = 27.0
+_GEO_BLUSH_DY: Final[float] = 5.0
 _GEO_BLUSH_RX: Final[float] = 9.0
-_GEO_BLUSH_RY: Final[float] = 6.0
+_GEO_BLUSH_RY: Final[float] = 5.5
 
-# 耳朵（局部坐标）
-_GEO_EAR_X: Final[float] = 21.0
-_GEO_EAR_BASE_Y: Final[float] = -28.0
-_GEO_EAR_TIP_Y: Final[float] = -62.0
-_GEO_EAR_HALF_W: Final[float] = 15.0
+# 后肢：参考图为「头身融合的单个圆球」，不另绘可分辨的后腿 —— 团子底部自然收束
+# 即视觉上的后肢；此处仅保留语义说明，避免多余的侧面凸块破坏圆润剪影。
 
-# 迷你键盘（画布底部，敲击落点；纯矢量，见 _draw_keyboard）
-_GEO_KEYBOARD_CX: Final[float] = 80.0
-_GEO_KEYBOARD_W: Final[float] = 72.0
-_GEO_KEYBOARD_H: Final[float] = 16.0
-_GEO_KEYBOARD_Y: Final[float] = 160.0        # 底座上沿
-_GEO_KEYBOARD_RADIUS: Final[float] = 3.0
-_GEO_KEY_COLS: Final[int] = 8                # 每排键数
-_GEO_KEY_ROWS: Final[int] = 2                # 键帽排数
-_GEO_KEY_W: Final[float] = 6.0
-_GEO_KEY_H: Final[float] = 4.0
-_GEO_KEY_GAP: Final[float] = 2.0             # 同排相邻键间距
-_GEO_KEY_ROW_GAP: Final[float] = 1.5         # 排间距
-_GEO_KEY_X0: Final[float] = 49.0             # 首键左沿
-_GEO_KEY_ROW0_Y: Final[float] = 162.0        # 首排键帽上沿
-_GEO_KEY_SINK_PX: Final[float] = 3.2         # 键帽被按下时的下沉像素（目标 ≥3）
-_GEO_KEY_RADIUS: Final[float] = 1.2
+# 前肢 / 爪子（从团子前下方伸出，短粗，末端圆润爪）
+_GEO_HAND_L_X: Final[float] = 62.0
+_GEO_HAND_R_X: Final[float] = 99.0
+_GEO_HAND_SHOULDER_Y: Final[float] = 118.0  # 前肢与身体衔接处（贴近身体下沿）
+_GEO_HAND_Y: Final[float] = 130.0           # 爪子中心（静止，搭在键盘上）
+_GEO_PAW_W: Final[float] = 21.0
+_GEO_PAW_H: Final[float] = 15.0
+_GEO_FOREARM_W: Final[float] = 12.0
+_GEO_TOE_DX: Final[float] = 4.6             # 趾凸距爪中心横向偏移
+_GEO_TOE_R: Final[float] = 2.9
+_GEO_HAND_LIFT_PX: Final[float] = 13.5      # 抬腕上移像素（目标 >=12）
+_GEO_HAND_PRESS_PX: Final[float] = 10.0     # 落指下压像素（目标 >=8，留抗锯齿余量）
+_GEO_DANGLE_DEG: Final[float] = 38.0        # 被拎起时前肢外摆角度
 
-# 手（前臂 + 手掌 + 三指；左手在键盘左 1/3、右手在右 1/3）
-# 尺寸按 **scale=1.0 实际观感** 标定（用户看到的就是 1x），不靠放大预览撑场面。
-_GEO_HAND_L_X: Final[float] = 56.0
-_GEO_HAND_R_X: Final[float] = 104.0
-_GEO_HAND_SHOULDER_Y: Final[float] = 122.0   # 前臂与身体衔接处
-_GEO_HAND_Y: Final[float] = 148.0            # 手掌中心（静止）
-_GEO_HAND_PALM_W: Final[float] = 20.0
-_GEO_HAND_PALM_H: Final[float] = 14.0
-_GEO_HAND_PALM_RADIUS: Final[float] = 5.5
-_GEO_FOREARM_W: Final[float] = 10.0          # 前臂粗细
-_GEO_FINGER_W: Final[float] = 6.0
-_GEO_FINGER_LEN: Final[float] = 10.0         # 手指基础长度（朝下）
-_GEO_FINGER_DX: Final[float] = 6.0           # 相邻手指中心间距
-_GEO_FINGER_RADIUS: Final[float] = 2.6
-_GEO_FINGER_CURL_SHRINK: Final[float] = 0.50  # 弯曲时缩短比例
-_GEO_FINGER_LIFT_STRETCH: Final[float] = 0.15  # 抬腕时手指微伸比例
-_GEO_HAND_LIFT_PX: Final[float] = 13.5       # 抬腕上移像素（目标 ≥12）
-_GEO_HAND_PRESS_PX: Final[float] = 9.0       # 落指下压像素（目标 ≥8）
-_GEO_DANGLE_DEG: Final[float] = 38.0         # 被拎起时手臂外摆角度
+# 透视键盘（整块斜放的四边形：上下边**同向倾斜** + 键帽同角剪切 + 前缘厚度）
+# 局部坐标系以键盘中心为原点、先绘制再整体旋转 `_GEO_KEYBOARD_TILT` 度。
+_GEO_KEYBOARD_CX: Final[float] = 84.0
+_GEO_KEYBOARD_CY: Final[float] = 140.0        # 局部原点（= 键面中心）
+_GEO_KEYBOARD_TILT: Final[float] = -9.0       # 整块键盘的旋转角（度）→ 45° 俯视感
+_GEO_KEYBOARD_TOP_Y: Final[float] = -19.0     # 远边（键面顶部）
+_GEO_KEYBOARD_BOTTOM_Y: Final[float] = 15.0   # 近边（键面底部）
+_GEO_KEYBOARD_TOP_HALF_W: Final[float] = 37.0  # 远边半宽（窄）
+_GEO_KEYBOARD_BOTTOM_HALF_W: Final[float] = 47.0  # 近边半宽（宽）
+_GEO_KEYBOARD_THICK: Final[float] = 6.0       # 前缘厚度（深色侧面）
+_GEO_KEY_ROWS: Final[int] = 3
+_GEO_KEY_COLS: Final[int] = 8
+_GEO_KEY_SINK_PX: Final[float] = 4.0          # 键帽被按下时的下沉像素（目标 >=3）
+_GEO_KEY_RIGHT_BAND: Final[tuple[float, float]] = (118.0, 148.0)  # 右端键 x 区间（供自证）
 
-# 尾巴
-_GEO_TAIL_X: Final[float] = 110.0
-_GEO_TAIL_Y: Final[float] = 130.0
-_GEO_TAIL_LEN: Final[float] = 38.0
+# 鼠标（左下角，长轴斜置的椭圆仓；与键盘左前缘留出 2~4px 间隙）
+_GEO_MOUSE_CX: Final[float] = 18.0
+_GEO_MOUSE_CY: Final[float] = 163.0
+_GEO_MOUSE_RX: Final[float] = 13.5
+_GEO_MOUSE_RY: Final[float] = 11.0
+_GEO_MOUSE_TILT: Final[float] = -16.0
+
+# 尾巴（从团子左下轮廓内部伸出、渐细的**粗壮实心弧**）
+_GEO_TAIL_X: Final[float] = 46.0              # 根部落在团子轮廓**内部**（被身体压住）
+_GEO_TAIL_Y: Final[float] = 90.0
+_GEO_TAIL_LEN: Final[float] = 32.0
+_GEO_TAIL_W0: Final[float] = 16.0             # 根部粗度（接近主体描边量级）
+_GEO_TAIL_W1: Final[float] = 6.5              # 尾尖粗度
+_GEO_TAIL_CURVE_K: Final[float] = 26.0        # 弧度系数（越大越饱满）
 
 # 描边
-_STROKE_W: Final[float] = 2.6
-_STROKE_W_THIN: Final[float] = 2.0
+_STROKE_W: Final[float] = C.OUTLINE_W         # 主体厚描边
+_STROKE_W_THIN: Final[float] = C.OUTLINE_W * 0.62
 
 #: 反锯齿 / 描边导致的额外外扩（逻辑像素），保证收窄脏区不会裁掉边缘像素。
-_BOUNDS_PAD_PX: Final[float] = 2.0
+_BOUNDS_PAD_PX: Final[float] = 2.5
 
 
 class PetRenderer:
-    """把 :class:`~desktop_pet.core.pet_model.PetPose` 参数渲染为矢量猫咪。"""
+    """把 :class:`~desktop_pet.core.pet_model.PetPose` 参数渲染为矢量团子猫。"""
 
     #: 光晕绘制阈值：``pose.glow_alpha`` 大于该值时，渲染器会绘制**铺满整窗**的
     #: 径向光晕（睡觉的淡蓝柔光 / 兴奋的暖黄光晕），此时脏区无法收窄 —— 详见
@@ -125,30 +133,41 @@ class PetRenderer:
     GLOW_ALPHA_EPSILON: Final[float] = 0.01
 
     def __init__(self) -> None:
-        """预构造复用画刷/画笔，避免每帧创建大量临时对象（性能约束 §6）。"""
+        """预构造复用画笔 / 画刷，避免每帧创建大量临时对象（性能约束 §6）。"""
 
-        self._outline = QPen(QColor(C.COLORS["warm_brown"]))
+        ink = QColor(C.COLORS["ink"])
+
+        self._outline = QPen(ink)
         self._outline.setWidthF(_STROKE_W)
         self._outline.setCapStyle(Qt.PenCapStyle.RoundCap)
         self._outline.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
 
-        self._outline_thin = QPen(QColor(C.COLORS["warm_brown"]))
+        self._outline_thin = QPen(ink)
         self._outline_thin.setWidthF(_STROKE_W_THIN)
         self._outline_thin.setCapStyle(Qt.PenCapStyle.RoundCap)
         self._outline_thin.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
 
-        self._brush_cream = QBrush(QColor(C.COLORS["cream"]))
-        self._brush_caramel = QBrush(QColor(C.COLORS["caramel"]))
-        self._brush_dark = QBrush(QColor(C.COLORS["dark_brown"]))
-        self._brush_peach = QBrush(QColor(C.COLORS["peach"]))
+        self._mouth_pen = QPen(ink)
+        self._mouth_pen.setWidthF(2.2)
+        self._mouth_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        self._mouth_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
 
-        # 前臂：粗圆头描边（暖棕）+ 内填充（奶油白），预先构造避免每帧新建
-        self._forearm_outline = QPen(QColor(C.COLORS["warm_brown"]))
+        self._brush_ink = QBrush(ink)
+        self._brush_white = QBrush(QColor(C.COLORS["white"]))
+        self._brush_blush = QBrush(QColor(C.COLORS["blush"]))
+        self._brush_mouse = QBrush(QColor(C.COLORS["mouse_body"]))
+
+        self._mouse_hi_pen = QPen(QColor(C.COLORS["mouse_hi"]))
+        self._mouse_hi_pen.setWidthF(2.0)
+        self._mouse_hi_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+
+        # 前肢：墨黑粗描边 + 白芯（两笔叠画得到描边效果）
+        self._forearm_outline = QPen(ink)
         self._forearm_outline.setWidthF(_GEO_FOREARM_W + _STROKE_W)
         self._forearm_outline.setCapStyle(Qt.PenCapStyle.RoundCap)
         self._forearm_outline.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
 
-        self._forearm_fill = QPen(QColor(C.COLORS["cream"]))
+        self._forearm_fill = QPen(QColor(C.COLORS["white"]))
         self._forearm_fill.setWidthF(_GEO_FOREARM_W)
         self._forearm_fill.setCapStyle(Qt.PenCapStyle.RoundCap)
         self._forearm_fill.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
@@ -163,7 +182,7 @@ class PetRenderer:
         scale: float,
         size: QSize,
     ) -> None:
-        """在 ``painter`` 上绘制一帧猫咪。
+        """在 ``painter`` 上绘制一帧团子猫。
 
         Args:
             painter: 目标绘制器（调用方已 attach 到窗口）。
@@ -181,8 +200,8 @@ class PetRenderer:
             self._draw_glow(painter, pose)
             self._draw_tail(painter, pose)
             self._draw_body(painter, pose)
-            self._draw_head(painter, pose)
             self._draw_keyboard(painter, pose)
+            self._draw_mouse(painter, pose)
             self._draw_arms(painter, pose)
             self._draw_face(painter, pose)
             self._draw_zzz(painter, pose)
@@ -200,9 +219,9 @@ class PetRenderer:
         避免每帧无意义地整窗重绘。
 
         .. important::
-           本方法**只**覆盖猫身各部件（尾巴 / 身体 / 后腿 / 头 / 耳朵 / 前爪），
-           **不含**径向光晕。睡觉（SLEEPING）与兴奋（EXCITED）两态会绘制
-           **铺满整窗**的光晕，其 ``pose.glow_alpha > GLOW_ALPHA_EPSILON``；
+           本方法**只**覆盖猫身各部件（尾巴 / 团子主体 / 耳朵 / 后肢 / 前爪 /
+           透视键盘 / 鼠标），**不含**径向光晕。睡觉（SLEEPING）与兴奋（EXCITED）
+           两态会绘制**铺满整窗**的光晕，其 ``pose.glow_alpha > GLOW_ALPHA_EPSILON``；
            调用方必须在这两种状态下回退为**整窗矩形**，否则光晕边缘会被裁掉。
            见 :meth:`desktop_pet.ui.pet_window.PetWindow.pet_rect`。
 
@@ -237,87 +256,70 @@ class PetRenderer:
 
         rotate = PetRenderer._rotate_rect
 
-        # --- 身体 + 后腿（对应 _draw_body）---
+        # --- 团子主体 + 耳朵（对应 _draw_body 的合并轮廓）---
         squish = 1.0 - pose.body_squash
         cy = _GEO_BODY_CY + pose.body_y
-        ry = _GEO_BODY_RY * max(0.6, squish)
+        ry = _GEO_BODY_RY * max(0.55, squish)
         rx = _GEO_BODY_RX * (1.0 + pose.body_squash * 0.35)
-        add(_GEO_BODY_CX - rx, cy - ry, _GEO_BODY_CX + rx, cy + ry)
-        leg_y = cy + ry * 0.55
-        add(_GEO_BODY_CX - 26.0, leg_y,
-            _GEO_BODY_CX - 26.0 + _GEO_LEG_RX * 2.0, leg_y + _GEO_LEG_RY * 2.0)
-        add(_GEO_BODY_CX + 26.0 - _GEO_LEG_RX * 2.0, leg_y,
-            _GEO_BODY_CX + 26.0, leg_y + _GEO_LEG_RY * 2.0)
+        hx0 = _GEO_BODY_CX - rx - _GEO_EAR_HALF_W - _STROKE_W
+        hx1 = _GEO_BODY_CX + rx + _GEO_EAR_HALF_W + _STROKE_W
+        hy0 = cy - ry - _GEO_EAR_LEN - _STROKE_W
+        hy1 = cy + ry + _STROKE_W
+        add(hx0, hy0, hx1, hy1)
 
-        # --- 头部 + 耳朵（对应 _draw_head / _draw_ear）---
-        hcx = _GEO_HEAD_CX + pose.look_x * 0.3
-        hcy = _GEO_HEAD_CY + pose.head_y + pose.body_y * 0.35
-        hx0, hy0, hx1, hy1 = -_GEO_HEAD_RX, -_GEO_HEAD_RY, _GEO_HEAD_RX, _GEO_HEAD_RY
-        for side, angle, tilt in (
-            (-1.0, pose.ear_l_angle, pose.ear_l_tilt),
-            (1.0, pose.ear_r_angle, pose.ear_r_tilt),
-        ):
-            # 耳朵路径局部包围盒：x∈[-HW, HW]，y∈[TIP-BASE, 0]
-            ex0, ey0, ex1, ey1 = rotate(
-                -_GEO_EAR_HALF_W, _GEO_EAR_TIP_Y - _GEO_EAR_BASE_Y,
-                _GEO_EAR_HALF_W, 0.0, angle + side * tilt,
-            )
-            ex0 += side * _GEO_EAR_X
-            ex1 += side * _GEO_EAR_X
-            ey0 += _GEO_EAR_BASE_Y
-            ey1 += _GEO_EAR_BASE_Y
-            hx0, hy0 = min(hx0, ex0), min(hy0, ey0)
-            hx1, hy1 = max(hx1, ex1), max(hy1, ey1)
-        hx0, hy0, hx1, hy1 = rotate(hx0, hy0, hx1, hy1, pose.head_tilt)
-        add(hcx + hx0, hcy + hy0, hcx + hx1, hcy + hy1)
-
-        # --- 手（对应 _draw_arms / _draw_hand：前臂 + 手掌 + 手指，含抬腕/落指/弯曲）---
-        for side, press, lift, curl in (
-            (-1.0, pose.arm_l_press, pose.arm_l_lift, pose.finger_l_curl),
-            (1.0, pose.arm_r_press, pose.arm_r_lift, pose.finger_r_curl),
+        # --- 前肢 + 爪子（对应 _draw_arms / _draw_paw，含抬腕/落指/弯曲）---
+        for side, press, lift, dangle in (
+            (-1.0, pose.arm_l_press, pose.arm_l_lift, pose.arm_dangle),
+            (1.0, pose.arm_r_press, pose.arm_r_lift, pose.arm_dangle),
         ):
             hcx = _GEO_HAND_L_X if side < 0 else _GEO_HAND_R_X
-            palm_cy = (
+            paw_cy = (
                 _GEO_HAND_Y - lift * _GEO_HAND_LIFT_PX + press * _GEO_HAND_PRESS_PX
             )
-            palm_top = palm_cy - _GEO_HAND_PALM_H / 2.0
-            finger_len = (
-                _GEO_FINGER_LEN
-                * (1.0 - _GEO_FINGER_CURL_SHRINK * curl)
-                * (1.0 + _GEO_FINGER_LIFT_STRETCH * lift)
-            )
-            tip_y = palm_top + _GEO_HAND_PALM_H - 1.0 + finger_len
-            # 相对肩部的局部包围盒（含肩部圆头半宽 + 描边外扩）
-            half_w = max(_GEO_HAND_PALM_W, _GEO_FOREARM_W) / 2.0 + _STROKE_W
+            half_w = _GEO_PAW_W / 2.0 + _GEO_TOE_DX * 0.0 + _STROKE_W
             local_top = -_GEO_FOREARM_W / 2.0 - _STROKE_W
-            local_bottom = tip_y - _GEO_HAND_SHOULDER_Y + _STROKE_W
-            hx0, hy0, hx1, hy1 = rotate(
-                -half_w, local_top, half_w, local_bottom,
-                side * pose.arm_dangle * _GEO_DANGLE_DEG,
+            local_bottom = (
+                paw_cy - _GEO_HAND_SHOULDER_Y + _GEO_PAW_H / 2.0 + _STROKE_W
             )
-            add(hcx + hx0, _GEO_HAND_SHOULDER_Y + hy0,
-                hcx + hx1, _GEO_HAND_SHOULDER_Y + hy1)
+            bx0, by0, bx1, by1 = rotate(
+                -half_w, local_top, half_w, local_bottom,
+                side * dangle * _GEO_DANGLE_DEG,
+            )
+            add(hcx + bx0, _GEO_HAND_SHOULDER_Y + by0,
+                hcx + bx1, _GEO_HAND_SHOULDER_Y + by1)
 
-        # --- 迷你键盘（对应 _draw_keyboard：底座 + 下沉键帽，键帽始终在底座内）---
-        kb_half_w = _GEO_KEYBOARD_W / 2.0 + _STROKE_W
-        add(
-            _GEO_KEYBOARD_CX - kb_half_w,
-            _GEO_KEYBOARD_Y - _STROKE_W,
-            _GEO_KEYBOARD_CX + kb_half_w,
-            _GEO_KEYBOARD_Y + _GEO_KEYBOARD_H + _STROKE_W,
+        # --- 透视键盘（对应 _draw_keyboard：整体旋转的斜四边形 + 前缘厚度）---
+        kx0, ky0, kx1, ky1 = rotate(
+            -_GEO_KEYBOARD_BOTTOM_HALF_W - _STROKE_W,
+            _GEO_KEYBOARD_TOP_Y - _STROKE_W,
+            _GEO_KEYBOARD_BOTTOM_HALF_W + _STROKE_W,
+            _GEO_KEYBOARD_BOTTOM_Y + _GEO_KEYBOARD_THICK + _STROKE_W
+            + _GEO_KEY_SINK_PX,
+            _GEO_KEYBOARD_TILT,
         )
+        add(_GEO_KEYBOARD_CX + kx0, _GEO_KEYBOARD_CY + ky0,
+            _GEO_KEYBOARD_CX + kx1, _GEO_KEYBOARD_CY + ky1)
 
-        # --- 尾巴（对应 _draw_tail，含 13px 描边半宽与尾尖圆）---
+        # --- 鼠标（对应 _draw_mouse，斜置椭圆仓）---
+        mx0, my0, mx1, my1 = rotate(
+            -_GEO_MOUSE_RX - _STROKE_W, -_GEO_MOUSE_RY - _STROKE_W,
+            _GEO_MOUSE_RX + _STROKE_W, _GEO_MOUSE_RY + _STROKE_W,
+            _GEO_MOUSE_TILT,
+        )
+        add(_GEO_MOUSE_CX + mx0, _GEO_MOUSE_CY + my0,
+            _GEO_MOUSE_CX + mx1, _GEO_MOUSE_CY + my1)
+
+        # --- 尾巴（对应 _draw_tail，含描边半宽与尾尖圆）---
         tox = _GEO_TAIL_X + pose.look_x * 0.15
         toy = _GEO_TAIL_Y + pose.body_y
         length = _GEO_TAIL_LEN * (0.85 + 0.35 * pose.tail_curve)
-        curve = 34.0 * (0.4 + pose.tail_curve)
-        tail_pad = 13.0 / 2.0
-        lx0 = 0.0 - tail_pad
-        lx1 = max(length * 1.25, length + 12.0) + tail_pad
-        ly0 = -curve * 1.2 - tail_pad
-        ly1 = 0.0 + tail_pad
-        tx0, ty0, tx1, ty1 = rotate(lx0, ly0, lx1, ly1, pose.tail_angle)
+        curve = _GEO_TAIL_CURVE_K * (0.4 + pose.tail_curve)
+        tail_pad = _GEO_TAIL_W0 / 2.0 + _STROKE_W
+        tx0, ty0, tx1, ty1 = rotate(
+            -(length + 10.0) - tail_pad, -6.0 - tail_pad,
+            tail_pad, curve + tail_pad,
+            pose.tail_angle,
+        )
         add(tox + tx0, toy + ty0, tox + tx1, toy + ty1)
 
         # --- 合并 + 反锯齿外扩 + 钳制到逻辑画布 ---
@@ -346,7 +348,7 @@ class PetRenderer:
         return min(xs), min(ys), max(xs), max(ys)
 
     # ------------------------------------------------------------------ #
-    # 托盘图标（猫脸剪影，透明背景，PRD §4.4 / FR-25）
+    # 托盘图标（团子猫脸小图标，透明背景，PRD §4.4 / FR-25）
     # ------------------------------------------------------------------ #
     @staticmethod
     def build_tray_icon() -> QIcon:
@@ -369,47 +371,120 @@ class PetRenderer:
 
     @staticmethod
     def _paint_tray_face(painter: QPainter) -> None:
-        """在 32×32 逻辑坐标内绘制猫脸剪影。"""
+        """在 32×32 逻辑坐标内绘制团子猫脸图标。"""
 
-        outline = QPen(QColor(C.COLORS["warm_brown"]))
-        outline.setWidthF(2.0)
-        outline.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-        caramel = QBrush(QColor(C.COLORS["caramel"]))
-        dark = QBrush(QColor(C.COLORS["dark_brown"]))
+        ink = QPen(QColor(C.COLORS["ink"]))
+        ink.setWidthF(2.2)
+        ink.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        ink.setCapStyle(Qt.PenCapStyle.RoundCap)
 
-        # 耳朵
-        painter.setPen(outline)
-        painter.setBrush(caramel)
-        for cx in (12.0, 22.0):
+        gradient = QLinearGradient(QPointF(4.0, 4.0), QPointF(28.0, 28.0))
+        for pos, hexv in C.BODY_GRADIENT_STOPS:
+            gradient.setColorAt(pos, QColor(hexv))
+
+        # 耳 + 圆脸合并为一个轮廓
+        face = QPainterPath()
+        face.addEllipse(QRectF(5.0, 10.0, 22.0, 20.0))
+        for cx in (10.0, 22.0):
             ear = QPainterPath()
             ear.moveTo(cx - 5.0, 12.0)
-            ear.lineTo(cx, 3.0)
+            ear.lineTo(cx, 2.0)
             ear.lineTo(cx + 5.0, 12.0)
             ear.closeSubpath()
-            painter.drawPath(ear)
+            face = face.united(ear)
+        painter.setPen(ink)
+        painter.setBrush(QBrush(gradient))
+        painter.drawPath(face)
 
-        # 圆脸
-        painter.setBrush(caramel)
-        painter.drawEllipse(QRectF(6.0, 9.0, 20.0, 18.0))
-
-        # 眼睛
+        # 眼睛（近黑实心椭圆 + 白高光）
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(dark)
-        painter.drawEllipse(QRectF(11.0, 15.0, 3.0, 3.6))
-        painter.drawEllipse(QRectF(18.0, 15.0, 3.0, 3.6))
-        # 高光
+        painter.setBrush(QBrush(QColor(C.COLORS["ink"])))
+        painter.drawEllipse(QRectF(11.0, 17.0, 3.2, 3.8))
+        painter.drawEllipse(QRectF(17.8, 17.0, 3.2, 3.8))
         painter.setBrush(QBrush(QColor(C.COLORS["white"])))
-        painter.drawEllipse(QRectF(11.6, 15.4, 1.1, 1.3))
-        painter.drawEllipse(QRectF(18.6, 15.4, 1.1, 1.3))
+        painter.drawEllipse(QRectF(11.7, 17.5, 1.2, 1.4))
+        painter.drawEllipse(QRectF(18.5, 17.5, 1.2, 1.4))
 
-        # 小嘴
-        painter.setPen(QPen(QColor(C.COLORS["warm_brown"]), 1.4))
+        # ω 小弯嘴
+        painter.setPen(ink)
         painter.setBrush(Qt.BrushStyle.NoBrush)
         mouth = QPainterPath()
-        mouth.moveTo(15.0, 21.0)
-        mouth.lineTo(16.0, 22.5)
-        mouth.lineTo(17.5, 21.0)
+        mouth.moveTo(13.5, 23.5)
+        mouth.quadTo(14.8, 25.4, 16.0, 23.9)
+        mouth.quadTo(17.2, 25.4, 18.5, 23.5)
         painter.drawPath(mouth)
+
+    # ------------------------------------------------------------------ #
+    # 渐变 / 轮廓辅助
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _body_gradient(x0: float, y0: float, x1: float, y1: float) -> QLinearGradient:
+        """构造「左上 → 右下」的柔和全息彩虹对角渐变。"""
+
+        gradient = QLinearGradient(QPointF(x0, y0), QPointF(x1, y1))
+        for pos, hexv in C.BODY_GRADIENT_STOPS:
+            gradient.setColorAt(pos, QColor(hexv))
+        return gradient
+
+    @staticmethod
+    def _bezier(
+        p0: tuple[float, float],
+        p1: tuple[float, float],
+        p2: tuple[float, float],
+        p3: tuple[float, float],
+        n: int,
+    ) -> list[tuple[float, float]]:
+        """采样三次贝塞尔曲线，返回 ``n+1`` 个点。"""
+
+        pts: list[tuple[float, float]] = []
+        for i in range(n + 1):
+            t = i / n
+            mt = 1.0 - t
+            x = (
+                mt * mt * mt * p0[0]
+                + 3.0 * mt * mt * t * p1[0]
+                + 3.0 * mt * t * t * p2[0]
+                + t * t * t * p3[0]
+            )
+            y = (
+                mt * mt * mt * p0[1]
+                + 3.0 * mt * mt * t * p1[1]
+                + 3.0 * mt * t * t * p2[1]
+                + t * t * t * p3[1]
+            )
+            pts.append((x, y))
+        return pts
+
+    @staticmethod
+    def _tapered_path(
+        pts: list[tuple[float, float]], w0: float, w1: float
+    ) -> QPainterPath:
+        """把中心线 ``pts`` 扩展为**由粗到细**的填充路径（尾巴）。"""
+
+        n = len(pts) - 1
+        left: list[tuple[float, float]] = []
+        right: list[tuple[float, float]] = []
+        for i, (x, y) in enumerate(pts):
+            if i == 0:
+                dx, dy = pts[1][0] - x, pts[1][1] - y
+            elif i == n:
+                dx, dy = x - pts[i - 1][0], y - pts[i - 1][1]
+            else:
+                dx, dy = pts[i + 1][0] - pts[i - 1][0], pts[i + 1][1] - pts[i - 1][1]
+            length = math.hypot(dx, dy) or 1.0
+            nx, ny = -dy / length, dx / length
+            hw = (w0 + (w1 - w0) * (i / n)) / 2.0
+            left.append((x + nx * hw, y + ny * hw))
+            right.append((x - nx * hw, y - ny * hw))
+
+        path = QPainterPath()
+        path.moveTo(left[0][0], left[0][1])
+        for px, py in left[1:]:
+            path.lineTo(px, py)
+        for px, py in reversed(right):
+            path.lineTo(px, py)
+        path.closeSubpath()
+        return path
 
     # ------------------------------------------------------------------ #
     # 各部件绘制
@@ -419,14 +494,16 @@ class PetRenderer:
 
         if pose.glow_alpha <= self.GLOW_ALPHA_EPSILON:
             return
-        base = QColor(C.COLORS["glow_blue"] if pose.zzz_alpha > 0.05 else C.COLORS["glow_yellow"])
+        base = QColor(
+            C.COLORS["glow_blue"] if pose.zzz_alpha > 0.05 else C.COLORS["glow_yellow"]
+        )
         base.setAlphaF(min(1.0, max(0.0, pose.glow_alpha)) * 0.55)
         trans = QColor(base)
         trans.setAlpha(0)
 
         cx = _GEO_BODY_CX + pose.look_x * 0.2
         cy = _GEO_BODY_CY + pose.body_y
-        radius = _GEO_BODY_RY * 2.1
+        radius = _GEO_BODY_RY * 2.2
         gradient = QRadialGradient(QPointF(cx, cy), radius)
         gradient.setColorAt(0.0, base)
         gradient.setColorAt(1.0, trans)
@@ -436,7 +513,7 @@ class PetRenderer:
         painter.drawEllipse(QRectF(cx - radius, cy - radius, radius * 2.0, radius * 2.0))
 
     def _draw_tail(self, painter: QPainter, pose: PetPose) -> None:
-        """尾巴：以根部为轴旋转 ``tail_angle``，弯曲程度随 ``tail_curve``。"""
+        """尾巴：从团子左侧伸出、逐渐变细的粗弧；随 ``tail_angle`` / ``tail_curve`` 变化。"""
 
         painter.save()
         try:
@@ -446,161 +523,242 @@ class PetRenderer:
             painter.rotate(pose.tail_angle)
 
             length = _GEO_TAIL_LEN * (0.85 + 0.35 * pose.tail_curve)
-            curve = 34.0 * (0.4 + pose.tail_curve)
-            path = QPainterPath()
-            path.moveTo(0.0, 0.0)
-            path.quadTo(length * 0.55, -curve * 0.35, length, -curve * 0.15)
-            path.quadTo(length * 1.25, -curve * 0.75, length * 1.15, -curve * 1.15)
+            curve = _GEO_TAIL_CURVE_K * (0.4 + pose.tail_curve)
+            spine = self._bezier(
+                (0.0, 0.0),
+                (-length * 0.32, curve * 0.10),
+                (-length * 0.80, curve * 0.50),
+                (-length, curve),
+                12,
+            )
+            path = self._tapered_path(spine, _GEO_TAIL_W0, _GEO_TAIL_W1)
 
-            pen = QPen(QColor(C.COLORS["caramel"]))
-            pen.setWidthF(13.0)
-            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-            painter.setPen(pen)
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawPath(path)
-
-            # 描边
+            # 暖色尾巴：取彩虹渐变的中段（奶油黄 → 暖橙），贴近参考图的暖调尾巴
+            gradient = QLinearGradient(
+                QPointF(-length, curve), QPointF(0.0, 0.0)
+            )
+            gradient.setColorAt(0.0, QColor(self._sample_gradient(0.12)))
+            gradient.setColorAt(1.0, QColor(self._sample_gradient(0.62)))
             painter.setPen(self._outline)
+            painter.setBrush(QBrush(gradient))
             painter.drawPath(path)
-
-            # 尾巴尖（浅焦糖已覆盖，加深一点点花纹感）
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(self._brush_caramel)
-            painter.drawEllipse(QRectF(length * 1.0, -curve * 1.2, 12.0, 12.0))
         finally:
             painter.restore()
 
     def _draw_body(self, painter: QPainter, pose: PetPose) -> None:
-        """身体/后腿：呼吸与挤压影响高度。"""
+        """团子主体：头身融合的圆球（含耳朵、后肢），填充柔和全息彩虹渐变。"""
 
         squish = 1.0 - pose.body_squash
+        cx = _GEO_BODY_CX
         cy = _GEO_BODY_CY + pose.body_y
-        ry = _GEO_BODY_RY * max(0.6, squish)
+        ry = _GEO_BODY_RY * max(0.55, squish)
         rx = _GEO_BODY_RX * (1.0 + pose.body_squash * 0.35)
 
-        # 后腿（先画，位于身体下缘）
+        body_rect = QRectF(cx - rx, cy - ry, rx * 2.0, ry * 2.0)
+        gradient = self._body_gradient(
+            cx - rx, cy - ry, cx + rx, cy + ry,
+        )
+
+        # 轮廓 = 圆球 ∪ 两只三角耳（并集保证"头身融合"、无接缝）
+        silhouette = QPainterPath()
+        silhouette.addEllipse(body_rect)
+        for side in (-1.0, 1.0):
+            angle = pose.ear_l_angle if side < 0 else pose.ear_r_angle
+            tilt = pose.ear_l_tilt if side < 0 else pose.ear_r_tilt
+            silhouette = silhouette.united(
+                self._ear_path(side, angle, tilt, cx, cy, rx, ry)
+            )
+
+        # 主体轮廓（头身融合为一个圆球，配极简脸）
         painter.setPen(self._outline)
-        painter.setBrush(self._brush_cream)
-        leg_y = cy + ry * 0.55
-        painter.drawEllipse(QRectF(_GEO_BODY_CX - 26.0, leg_y, _GEO_LEG_RX * 2.0, _GEO_LEG_RY * 2.0))
-        painter.drawEllipse(QRectF(_GEO_BODY_CX + 26.0 - _GEO_LEG_RX * 2.0, leg_y,
-                                   _GEO_LEG_RX * 2.0, _GEO_LEG_RY * 2.0))
+        painter.setBrush(QBrush(gradient))
+        painter.drawPath(silhouette)
 
-        # 身体
-        painter.setBrush(self._brush_cream)
-        painter.drawEllipse(QRectF(_GEO_BODY_CX - rx, cy - ry, rx * 2.0, ry * 2.0))
+    def _ear_path(
+        self,
+        side: float,
+        angle: float,
+        tilt: float,
+        cx: float,
+        cy: float,
+        rx: float,
+        ry: float,
+    ) -> QPainterPath:
+        """单只三角耳（并入主体轮廓），绕耳根按 ``angle``/``tilt`` 摆动。"""
 
-        # 腹部浅色高光
-        painter.setPen(Qt.PenStyle.NoPen)
-        highlight = QColor(C.COLORS["white"])
-        highlight.setAlphaF(0.5)
-        painter.setBrush(QBrush(highlight))
-        painter.drawEllipse(QRectF(
-            _GEO_BODY_CX - rx * 0.5,
-            cy - ry * 0.35,
-            rx * 1.0,
-            ry * 1.1,
-        ))
+        base_x = cx + side * _GEO_EAR_X
+        base_y = cy - ry + _GEO_EAR_BASE_INSET
+        # 对称语义：正角度 → 双耳外张（耷拉）；负角度 → 内收（竖立）
+        ang = math.radians(side * angle + side * tilt)
+        cos_a, sin_a = math.cos(ang), math.sin(ang)
 
-    def _draw_head(self, painter: QPainter, pose: PetPose) -> None:
-        """头部 + 耳朵（头部整体随 ``head_tilt`` 旋转）。"""
+        def tf(lx: float, ly: float) -> tuple[float, float]:
+            return (
+                base_x + lx * cos_a - ly * sin_a,
+                base_y + lx * sin_a + ly * cos_a,
+            )
 
-        painter.save()
-        try:
-            self._head_transform(painter, pose)
+        p_left = tf(-_GEO_EAR_HALF_W, 0.0)
+        p_tip = tf(0.0, -_GEO_EAR_LEN)
+        p_right = tf(_GEO_EAR_HALF_W, 0.0)
 
-            # 耳朵（在头后）
-            painter.setPen(self._outline)
-            for side in (-1.0, 1.0):
-                angle = pose.ear_l_angle if side < 0 else pose.ear_r_angle
-                tilt = pose.ear_l_tilt if side < 0 else pose.ear_r_tilt
-                self._draw_ear(painter, side, angle, tilt)
-
-            # 头
-            painter.setBrush(self._brush_cream)
-            painter.setPen(self._outline)
-            painter.drawEllipse(QRectF(
-                -_GEO_HEAD_RX, -_GEO_HEAD_RY,
-                _GEO_HEAD_RX * 2.0, _GEO_HEAD_RY * 2.0,
-            ))
-
-            # 头顶浅焦糖花纹
-            painter.setPen(Qt.PenStyle.NoPen)
-            patch = QColor(C.COLORS["caramel"])
-            patch.setAlphaF(0.55)
-            painter.setBrush(QBrush(patch))
-            painter.drawEllipse(QRectF(-13.0, -_GEO_HEAD_RY + 3.0, 26.0, 16.0))
-        finally:
-            painter.restore()
-
-    def _draw_ear(self, painter: QPainter, side: float, angle: float, tilt: float) -> None:
-        """绘制单只耳朵（三角 + 内侧浅焦糖）。"""
-
-        painter.save()
-        try:
-            base_x = side * _GEO_EAR_X
-            painter.translate(base_x, _GEO_EAR_BASE_Y)
-            painter.rotate(angle + side * tilt)
-
-            outer = QPainterPath()
-            outer.moveTo(-_GEO_EAR_HALF_W, 0.0)
-            outer.lineTo(0.0, _GEO_EAR_TIP_Y - _GEO_EAR_BASE_Y)
-            outer.lineTo(_GEO_EAR_HALF_W, 0.0)
-            outer.closeSubpath()
-
-            painter.setBrush(self._brush_cream)
-            painter.setPen(self._outline)
-            painter.drawPath(outer)
-
-            inner = QPainterPath()
-            inner.moveTo(-_GEO_EAR_HALF_W * 0.5, -3.0)
-            inner.lineTo(0.0, (_GEO_EAR_TIP_Y - _GEO_EAR_BASE_Y) + 6.0)
-            inner.lineTo(_GEO_EAR_HALF_W * 0.5, -3.0)
-            inner.closeSubpath()
-            painter.setBrush(self._brush_caramel)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawPath(inner)
-        finally:
-            painter.restore()
+        path = QPainterPath()
+        path.moveTo(p_left[0], p_left[1])
+        path.lineTo(p_tip[0], p_tip[1])
+        path.lineTo(p_right[0], p_right[1])
+        path.closeSubpath()
+        return path
 
     def _draw_keyboard(self, painter: QPainter, pose: PetPose) -> None:
-        """迷你键盘：底座（圆角矩形）+ 两排键帽。
+        """透视键盘：**整块斜放**的四边形（上下边同向倾斜 + 键帽同角剪切 + 前缘厚度）。
+
+        做法：把绘制坐标系平移到键盘中心并整体 ``rotate(_GEO_KEYBOARD_TILT)``，
+        于是键面的上下边**朝同一方向倾斜**（像一张斜放在桌面上的板子，而非"正梯形"）。
+        键帽在"键面空间"里排布，再按同一侧边斜率做横向 warp → 键帽呈**平行四边形**。
 
         * **常驻不隐藏**：任何状态（含睡觉 / 拖拽）都绘制。
-        * **键帽下沉**：被敲击一侧的键帽随 ``arm_*_press`` 下沉，形成落点反馈；
-          左端键受左手按压、右端键受右手按压（按列位置线性加权），中列受两指共同影响。
-        * 配色全部取自 ``C.COLORS``（cream 底座 / caramel 键帽 / warm_brown 描边）。
+        * **键帽下沉**：被敲击一侧的键帽随 ``arm_*_press`` 下沉（刚性平移），
+          左端键受左手按压、右端键受右手按压（按列线性加权）。
+        * **厚度**：前缘（近边）向下一段深色侧面 + 一圈黑描边 → 立体板子感。
         """
 
-        left = _GEO_KEYBOARD_CX - _GEO_KEYBOARD_W / 2.0
-        base = QRectF(left, _GEO_KEYBOARD_Y, _GEO_KEYBOARD_W, _GEO_KEYBOARD_H)
-        painter.setPen(self._outline)
-        painter.setBrush(self._brush_cream)
-        painter.drawRoundedRect(base, _GEO_KEYBOARD_RADIUS, _GEO_KEYBOARD_RADIUS)
+        top_y = _GEO_KEYBOARD_TOP_Y
+        bot_y = _GEO_KEYBOARD_BOTTOM_Y
+        top_hw = _GEO_KEYBOARD_TOP_HALF_W
+        bot_hw = _GEO_KEYBOARD_BOTTOM_HALF_W
+        thick = _GEO_KEYBOARD_THICK
 
-        painter.setPen(self._outline_thin)
-        painter.setBrush(self._brush_caramel)
-        col_span = max(1, _GEO_KEY_COLS - 1)
-        for row in range(_GEO_KEY_ROWS):
-            key_y = _GEO_KEY_ROW0_Y + row * (_GEO_KEY_H + _GEO_KEY_ROW_GAP)
-            for col in range(_GEO_KEY_COLS):
-                key_x = _GEO_KEY_X0 + col * (_GEO_KEY_W + _GEO_KEY_GAP)
-                # 越靠左越受左手影响、越靠右越受右手影响
-                weight_l = (_GEO_KEY_COLS - 1 - col) / col_span
-                weight_r = col / col_span
-                sink = (
-                    pose.arm_l_press * weight_l + pose.arm_r_press * weight_r
-                ) * _GEO_KEY_SINK_PX
-                # 键帽**整体刚性下沉**（不压缩高度）：top 与 bottom 位移一致，
-                # 保证「键帽下沉量」等于设计值，且键帽不会因压缩而视觉消失。
-                rect = QRectF(key_x, key_y + sink, _GEO_KEY_W, _GEO_KEY_H)
-                painter.drawRoundedRect(rect, _GEO_KEY_RADIUS, _GEO_KEY_RADIUS)
+        painter.save()
+        try:
+            painter.translate(_GEO_KEYBOARD_CX, _GEO_KEYBOARD_CY)
+            painter.rotate(_GEO_KEYBOARD_TILT)
+
+            top_face = QPolygonF([
+                QPointF(-top_hw, top_y), QPointF(top_hw, top_y),
+                QPointF(bot_hw, bot_y), QPointF(-bot_hw, bot_y),
+            ])
+            front_face = QPolygonF([
+                QPointF(-bot_hw, bot_y), QPointF(bot_hw, bot_y),
+                QPointF(bot_hw, bot_y + thick), QPointF(-bot_hw, bot_y + thick),
+            ])
+
+            # 键面（浅一档的深灰）+ 外圈黑描边
+            painter.setPen(self._outline)
+            painter.setBrush(self._brush_mouse)
+            painter.drawPolygon(top_face)
+            painter.drawPolygon(front_face)
+
+            # 前缘厚度（更深的侧面，体现板子厚度）
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(self._brush_ink)
+            painter.drawPolygon(front_face)
+
+            # 键面与前缘的受光高光分界线
+            painter.setPen(self._mouse_hi_pen)
+            painter.drawLine(QPointF(-bot_hw, bot_y), QPointF(bot_hw, bot_y))
+
+            # 键帽：在"键面空间"排布，再按同一侧边斜率 warp 成平行四边形
+            rows = _GEO_KEY_ROWS
+            cols = _GEO_KEY_COLS
+            col_span = max(1, cols - 1)
+            margin = 4.5
+            span = max(1.0, 2.0 * top_hw - 2.0 * margin)
+            step = span / cols
+            painter.setPen(self._outline_thin)
+            for row in range(rows):
+                fy = (row + 1.0) / (rows + 1.0)
+                row_cy = top_y + (bot_y - top_y) * (0.30 + 0.62 * fy)
+                key_scale = 0.82 + 0.40 * fy           # 近大远小
+                key_w = step * 0.76
+                key_h = 5.0 * key_scale
+                for col in range(cols):
+                    key_cx = -top_hw + margin + step * (col + 0.5)
+                    # 越靠左越受左手影响、越靠右越受右手影响
+                    weight_l = (cols - 1 - col) / col_span
+                    weight_r = col / col_span
+                    sink = (
+                        pose.arm_l_press * weight_l + pose.arm_r_press * weight_r
+                    ) * _GEO_KEY_SINK_PX
+                    x0 = key_cx - key_w / 2.0
+                    x1 = key_cx + key_w / 2.0
+                    y0 = row_cy - key_h / 2.0 + sink
+                    y1 = row_cy + key_h / 2.0 + sink
+                    poly = QPolygonF([
+                        self._kb_warp(x0, y0, top_y, bot_y, top_hw, bot_hw),
+                        self._kb_warp(x1, y0, top_y, bot_y, top_hw, bot_hw),
+                        self._kb_warp(x1, y1, top_y, bot_y, top_hw, bot_hw),
+                        self._kb_warp(x0, y1, top_y, bot_y, top_hw, bot_hw),
+                    ])
+                    key_color = QColor(self._sample_gradient(col / col_span))
+                    painter.setBrush(QBrush(key_color))
+                    painter.drawPolygon(poly)
+        finally:
+            painter.restore()
+
+    @staticmethod
+    def _kb_warp(
+        x: float, y: float,
+        top_y: float, bot_y: float, top_hw: float, bot_hw: float,
+    ) -> QPointF:
+        """把"键面空间"的点映射到梯形键面：横向按该行的半宽线性放大。
+
+        ``y`` 越靠近近边（``bot_y``），横向放大越多 → 键帽侧边随之倾斜，
+        与键面左右边界斜率一致（平行四边形键帽）。
+        """
+
+        t = (y - top_y) / max(1e-6, bot_y - top_y)
+        half = top_hw + (bot_hw - top_hw) * t
+        return QPointF(x * half / top_hw, y)
+
+    @staticmethod
+    def _sample_gradient(frac: float) -> str:
+        """按 ``frac``（0→1）在彩虹渐变停靠点间取色，用于键帽轮换。"""
+
+        stops = C.BODY_GRADIENT_STOPS
+        f = min(1.0, max(0.0, frac))
+        for i in range(len(stops) - 1):
+            p0, c0 = stops[i]
+            p1, c1 = stops[i + 1]
+            if f <= p1:
+                span = max(1e-6, p1 - p0)
+                t = (f - p0) / span
+                a, b = QColor(c0), QColor(c1)
+                return QColor(
+                    int(round(a.red() + (b.red() - a.red()) * t)),
+                    int(round(a.green() + (b.green() - a.green()) * t)),
+                    int(round(a.blue() + (b.blue() - a.blue()) * t)),
+                ).name()
+        return stops[-1][1]
+
+    def _draw_mouse(self, painter: QPainter, pose: PetPose) -> None:
+        """左下角鼠标：深灰椭圆仓 + 顶部滚轮 + 分割线 + 墨黑描边。"""
+
+        painter.save()
+        try:
+            painter.translate(_GEO_MOUSE_CX, _GEO_MOUSE_CY)
+            painter.rotate(_GEO_MOUSE_TILT)
+            rx, ry = _GEO_MOUSE_RX, _GEO_MOUSE_RY
+
+            painter.setPen(self._outline)
+            painter.setBrush(self._brush_mouse)
+            painter.drawEllipse(QRectF(-rx, -ry, rx * 2.0, ry * 2.0))
+
+            # 顶部滚轮
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(QColor(C.COLORS["mouse_hi"])))
+            painter.drawEllipse(QRectF(-1.6, -ry + 2.2, 3.2, 5.0))
+
+            # 分割线
+            painter.setPen(self._mouse_hi_pen)
+            painter.drawLine(QPointF(-rx + 3.0, -ry * 0.35), QPointF(-1.6, -ry * 0.35))
+            painter.drawLine(QPointF(1.6, -ry * 0.35), QPointF(rx - 3.0, -ry * 0.35))
+        finally:
+            painter.restore()
 
     def _draw_arms(self, painter: QPainter, pose: PetPose) -> None:
-        """双手（前臂 + 手掌 + 三指）：搭在键盘上敲击 / 被拎起时下垂。
+        """两条短粗前肢 + 圆润爪子：搭在键盘上敲击 / 被拎起时外摆下垂。
 
-        左右手交替由 ``arm_l_*`` / ``arm_r_*`` 通道驱动；``arm_dangle`` 为被拎起
+        左右交替由 ``arm_l_*`` / ``arm_r_*`` 通道驱动；``arm_dangle`` 为被拎起
         时的整体外摆旋转。
         """
 
@@ -608,9 +766,9 @@ class PetRenderer:
             (-1.0, _GEO_HAND_L_X, pose.arm_l_press, pose.arm_l_lift, pose.finger_l_curl),
             (1.0, _GEO_HAND_R_X, pose.arm_r_press, pose.arm_r_lift, pose.finger_r_curl),
         ):
-            self._draw_hand(painter, side, hand_x, press, lift, curl, pose.arm_dangle)
+            self._draw_paw(painter, side, hand_x, press, lift, curl, pose.arm_dangle)
 
-    def _draw_hand(
+    def _draw_paw(
         self,
         painter: QPainter,
         side: float,
@@ -620,15 +778,15 @@ class PetRenderer:
         curl: float,
         dangle: float,
     ) -> None:
-        """绘制单手：前臂（肩→腕）+ 手掌 + 三根可弯曲手指。
+        """绘制单条前肢：前臂（肩→腕）+ 圆润爪 + 2 个小趾凸。
 
         Args:
             painter: 目标绘制器。
-            side: ``-1`` 左手 / ``+1`` 右手。
-            hand_x: 手掌中心横坐标（逻辑画布）。
-            press: 落指量 0→1（掌心下移）。
-            lift: 抬腕量 0→1（掌心上移、手指微伸）。
-            curl: 手指弯曲量 0→1（手指缩短，模拟屈指落键）。
+            side: ``-1`` 左 / ``+1`` 右。
+            hand_x: 爪子中心横坐标（逻辑画布）。
+            press: 落指量 0→1（爪子下移）。
+            lift: 抬腕量 0→1（爪子上移）。
+            curl: 屈指量 0→1（爪子收紧变扁、趾凸上收，模拟屈指落键）。
             dangle: 被拎起外摆量 0→1（绕肩点旋转）。
         """
 
@@ -637,58 +795,47 @@ class PetRenderer:
             painter.translate(hand_x, _GEO_HAND_SHOULDER_Y)
             painter.rotate(side * dangle * _GEO_DANGLE_DEG)
 
-            palm_cy = (
+            paw_cy = (
                 _GEO_HAND_Y - lift * _GEO_HAND_LIFT_PX + press * _GEO_HAND_PRESS_PX
             ) - _GEO_HAND_SHOULDER_Y
-            palm_top = palm_cy - _GEO_HAND_PALM_H / 2.0
-            palm_bottom = palm_cy + _GEO_HAND_PALM_H / 2.0
+            # 屈指（curl）：爪子**底面与高度固定**（只微收窄宽度 + 上收趾凸），
+            # 保证「落指下压」的像素幅度不被屈指通道污染。
+            c = max(0.0, min(1.0, curl))
+            paw_w = _GEO_PAW_W * (1.0 - 0.12 * c)
+            paw_bottom = paw_cy + _GEO_PAW_H / 2.0
+            paw_top = paw_cy - _GEO_PAW_H / 2.0
 
-            # 前臂：暖棕粗描边 + 奶油白内芯（两笔叠画得到描边效果）
+            # 前臂：墨黑粗描边 + 白芯（两笔叠画得到描边效果）
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(self._forearm_outline)
-            painter.drawLine(QPointF(0.0, 0.0), QPointF(0.0, palm_top))
+            painter.drawLine(QPointF(0.0, 0.0), QPointF(0.0, paw_top + 2.0))
             painter.setPen(self._forearm_fill)
-            painter.drawLine(QPointF(0.0, 0.0), QPointF(0.0, palm_top))
+            painter.drawLine(QPointF(0.0, 0.0), QPointF(0.0, paw_top + 2.0))
 
-            # 手指（先画，部分被手掌覆盖，露出朝下的指尖）
-            finger_len = (
-                _GEO_FINGER_LEN
-                * (1.0 - _GEO_FINGER_CURL_SHRINK * curl)
-                * (1.0 + _GEO_FINGER_LIFT_STRETCH * lift)
-            )
-            painter.setPen(self._outline_thin)
-            painter.setBrush(self._brush_cream)
-            for slot in (-1.0, 0.0, 1.0):
-                fx = slot * _GEO_FINGER_DX - _GEO_FINGER_W / 2.0
-                painter.drawRoundedRect(
-                    QRectF(fx, palm_bottom - 1.5, _GEO_FINGER_W, finger_len),
-                    _GEO_FINGER_RADIUS,
-                    _GEO_FINGER_RADIUS,
-                )
-
-            # 手掌（覆盖手指根部）
+            # 爪子（圆润白爪 + 墨黑描边）
+            paw_radius = min(paw_w, _GEO_PAW_H) / 2.0
             painter.setPen(self._outline)
-            painter.setBrush(self._brush_cream)
+            painter.setBrush(self._brush_white)
             painter.drawRoundedRect(
-                QRectF(
-                    -_GEO_HAND_PALM_W / 2.0,
-                    palm_top,
-                    _GEO_HAND_PALM_W,
-                    _GEO_HAND_PALM_H,
-                ),
-                _GEO_HAND_PALM_RADIUS,
-                _GEO_HAND_PALM_RADIUS,
+                QRectF(-paw_w / 2.0, paw_top, paw_w, _GEO_PAW_H),
+                paw_radius,
+                paw_radius,
             )
 
-            # 掌垫（蜜桃粉，保留猫爪辨识度；同时作为幅度的可视测量锚点）
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(self._brush_peach)
-            painter.drawEllipse(QRectF(-5.5, palm_top + 6.0, 11.0, 5.5))
+            # 两个小趾凸（表现圆润的脚趾；屈指时上收，像抓住键盘）
+            toe_y = paw_bottom - _GEO_TOE_R - 1.0 - c * 4.0
+            for slot in (-1.0, 1.0):
+                painter.drawEllipse(QRectF(
+                    slot * _GEO_TOE_DX - _GEO_TOE_R,
+                    toe_y,
+                    _GEO_TOE_R * 2.0,
+                    _GEO_TOE_R * 2.0,
+                ))
         finally:
             painter.restore()
 
     def _draw_face(self, painter: QPainter, pose: PetPose) -> None:
-        """面部：眼睛 / 鼻 / 嘴 / 腮红 / 泪点。"""
+        """面部：眼睛 / ω 嘴 / 腮红 / 泪点（头身融合，脸绘于团子主体之上）。"""
 
         painter.save()
         try:
@@ -696,7 +843,7 @@ class PetRenderer:
 
             # 腮红（在眼睛下方两侧）
             if pose.blush_alpha > 0.01:
-                blush = QColor(C.COLORS["peach"])
+                blush = QColor(C.COLORS["blush"])
                 blush.setAlphaF(min(1.0, max(0.0, pose.blush_alpha)))
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.setBrush(QBrush(blush))
@@ -712,16 +859,6 @@ class PetRenderer:
             for side, openness in ((-1.0, pose.eye_open_l), (1.0, pose.eye_open_r)):
                 self._draw_eye(painter, side, openness, pose)
 
-            # 鼻子
-            nose = QPainterPath()
-            nose.moveTo(0.0, _GEO_NOSE_DY - 2.5)
-            nose.lineTo(-4.0, _GEO_NOSE_DY + 2.0)
-            nose.lineTo(4.0, _GEO_NOSE_DY + 2.0)
-            nose.closeSubpath()
-            painter.setPen(self._outline_thin)
-            painter.setBrush(self._brush_peach)
-            painter.drawPath(nose)
-
             # 嘴
             self._draw_mouth(painter, pose)
 
@@ -731,8 +868,8 @@ class PetRenderer:
                 tear.setAlphaF(min(1.0, pose.tear_alpha))
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.setBrush(QBrush(tear))
-                painter.drawEllipse(QRectF(-_GEO_EYE_DX - 3.0, 5.0, 5.0, 6.5))
-                painter.drawEllipse(QRectF(_GEO_EYE_DX - 2.0, 5.0, 5.0, 6.5))
+                painter.drawEllipse(QRectF(-_GEO_EYE_DX - 3.0, _GEO_EYE_DY + 6.0, 5.0, 6.5))
+                painter.drawEllipse(QRectF(_GEO_EYE_DX - 2.0, _GEO_EYE_DY + 6.0, 5.0, 6.5))
         finally:
             painter.restore()
 
@@ -743,98 +880,98 @@ class PetRenderer:
         openness: float,
         pose: PetPose,
     ) -> None:
-        """绘制单只眼睛：睁眼（椭圆瞳孔）/ 眯眼（弯月弧线）。"""
+        """单只眼睛：近黑实心椭圆（含白高光）/ 闭眼或笑眼弧线。"""
 
-        cx = side * _GEO_EYE_DX
-        cy = _GEO_EYE_DY
+        cx = side * _GEO_EYE_DX + pose.look_x * 0.45
+        cy = _GEO_EYE_DY + pose.look_y * 0.45
         openness = max(0.0, min(1.4, openness))
         curve = pose.eye_curve
 
-        # 弯月眯眼：眼睑弧线（eye_curve 越大越眯；openness 很小时也画弧）
-        if openness < 0.18 or curve > 0.55:
+        if openness < 0.18 or curve > 0.6:
+            # 弧线眼（闭眼 / 笑眼 ⌒ / 委屈 ⌣）
+            if curve >= 0.0:
+                h = 3.6 + 5.2 * max(0.0, curve)
+            else:
+                h = -(3.0 + 5.2 * (-curve))
             arc = QPainterPath()
-            arc.moveTo(cx - _GEO_EYE_R, cy)
-            # curve 正 → 向上笑弧 ⌒；负 → 向下委屈弧
-            arc.quadTo(cx, cy - 9.0 * (0.6 + max(0.0, curve)), cx + _GEO_EYE_R, cy)
-            painter.setPen(QPen(QColor(C.COLORS["dark_brown"]), _STROKE_W_THIN + 0.6))
+            arc.moveTo(cx - _GEO_EYE_RX, cy)
+            arc.quadTo(cx, cy - h, cx + _GEO_EYE_RX, cy)
+            painter.setPen(self._outline_thin)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawPath(arc)
             return
 
-        ry = _GEO_EYE_R * openness
-        painter.setPen(self._outline_thin)
-        painter.setBrush(self._brush_dark)
-        painter.drawEllipse(QRectF(cx - _GEO_EYE_R, cy - ry, _GEO_EYE_R * 2.0, ry * 2.0))
-
-        # 高光（pupil_dilate 放大高光）
-        hl_r = 1.6 + pose.pupil_dilate * 1.4
+        ry = _GEO_EYE_RY * openness
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(QColor(C.COLORS["white"])))
+        painter.setBrush(self._brush_ink)
+        painter.drawEllipse(QRectF(cx - _GEO_EYE_RX, cy - ry, _GEO_EYE_RX * 2.0, ry * 2.0))
+
+        # 白高光（pupil_dilate 放大高光；look_x/look_y 驱动其游移）
+        hl_r = 1.5 + pose.pupil_dilate * 1.5
+        painter.setBrush(self._brush_white)
         painter.drawEllipse(QRectF(
-            cx - _GEO_EYE_R * 0.35 + pose.look_x * 0.15,
-            cy - ry * 0.45 + pose.look_y * 0.15,
+            cx - _GEO_EYE_RX * 0.35 + pose.look_x * 0.5,
+            cy - ry * 0.45 + pose.look_y * 0.5,
             hl_r * 2.0,
             hl_r * 2.0,
         ))
 
     def _draw_mouth(self, painter: QPainter, pose: PetPose) -> None:
-        """绘制嘴型：笑弧 / 波浪 / 张开○（可含舌头）。"""
+        """嘴型：ω 形小弯嘴 / 委屈下弯弧 / 张开小圆（可含舌头）。"""
 
         cy = _GEO_MOUTH_DY
-        painter.setPen(QPen(QColor(C.COLORS["warm_brown"]), _STROKE_W_THIN))
+        painter.setPen(self._mouth_pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
 
         if pose.mouth_open > 0.12:
             # 张开嘴（呵欠 / 兴奋 / 惊讶 / 犯困小圆嘴）
-            rx = 6.0 + 7.0 * pose.mouth_open
-            ry = 5.0 + 10.0 * pose.mouth_open
-            painter.setBrush(self._brush_dark)
-            painter.drawEllipse(QRectF(-rx, cy - ry * 0.2, rx * 2.0, ry * 2.0 * 0.9))
+            rx = 4.5 + 5.5 * pose.mouth_open
+            ry = 4.0 + 7.5 * pose.mouth_open
+            painter.setBrush(self._brush_ink)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QRectF(-rx, cy - ry * 0.35, rx * 2.0, ry * 2.0))
             if pose.tongue_show > 0.1:
-                tongue = QColor(C.COLORS["peach"])
-                painter.setPen(Qt.PenStyle.NoPen)
+                tongue = QColor(C.COLORS["blush"])
                 painter.setBrush(QBrush(tongue))
                 painter.drawEllipse(QRectF(
-                    -rx * 0.5, cy + ry * 0.1,
+                    -rx * 0.5, cy + ry * 0.15,
                     rx * 1.0, ry * 0.85 * pose.tongue_show,
                 ))
             return
 
         curve = pose.mouth_curve
-        if abs(curve) < 0.12:
-            # 平坦短线
-            painter.drawLine(QPointF(-6.0, cy), QPointF(6.0, cy))
-            return
-
-        if curve < 0.0:
-            # 波浪委屈嘴
+        w = 5.5
+        if curve < -0.2:
+            # 委屈下弯弧 ⌢
             path = QPainterPath()
-            path.moveTo(-9.0, cy)
-            path.cubicTo(-4.5, cy + 4.0 * (-curve), -1.5, cy - 4.0 * (-curve), 0.0, cy)
-            path.cubicTo(1.5, cy + 4.0 * (-curve), 4.5, cy - 4.0 * (-curve), 9.0, cy)
+            path.moveTo(-w, cy + 1.5)
+            path.quadTo(0.0, cy - 3.5 * (-curve) - 1.0, w, cy + 1.5)
             painter.drawPath(path)
             return
 
-        # 上扬笑弧
-        arc = QPainterPath()
-        arc.moveTo(-9.0, cy - 1.5 * curve)
-        arc.quadTo(0.0, cy + 6.5 * curve, 9.0, cy - 1.5 * curve)
-        painter.drawPath(arc)
+        # ω 形小弯嘴（中性 / 开心）：两段下弯汇于中央小峰
+        dip = 2.4 + 2.2 * max(0.0, curve)
+        rise = 0.8 + 1.6 * max(0.0, curve)
+        path = QPainterPath()
+        path.moveTo(-w, cy - rise * 0.3)
+        path.quadTo(-w * 0.5, cy + dip, 0.0, cy - rise)
+        path.quadTo(w * 0.5, cy + dip, w, cy - rise * 0.3)
+        painter.drawPath(path)
 
     def _draw_zzz(self, painter: QPainter, pose: PetPose) -> None:
         """睡觉头顶的 ZZZ（FR-09 / PRD §4.5）。"""
 
         if pose.zzz_alpha <= 0.01:
             return
-        color = QColor(C.COLORS["warm_brown"])
+        color = QColor(C.COLORS["ink"])
         color.setAlphaF(min(1.0, max(0.0, pose.zzz_alpha)))
         painter.setPen(QPen(color, 2.4))
         font = painter.font()
         font.setPointSize(11)
         font.setBold(True)
         painter.setFont(font)
-        base_x = _GEO_HEAD_CX + _GEO_HEAD_RX * 0.7
-        base_y = _GEO_HEAD_CY - _GEO_HEAD_RY * 0.9
+        base_x = _GEO_BODY_CX + _GEO_BODY_RX * 0.72
+        base_y = _GEO_BODY_CY - _GEO_BODY_RY - 6.0 + pose.body_y
         painter.drawText(QPointF(base_x, base_y), "Z")
         painter.drawText(QPointF(base_x + 10.0, base_y - 10.0), "z")
         painter.drawText(QPointF(base_x + 18.0, base_y - 19.0), "z")
@@ -843,11 +980,11 @@ class PetRenderer:
     # 辅助
     # ------------------------------------------------------------------ #
     def _head_transform(self, painter: QPainter, pose: PetPose) -> None:
-        """把绘制坐标系移动到头部中心并施加倾斜旋转。"""
+        """把绘制坐标系移动到脸部中心并施加倾斜旋转。"""
 
         painter.translate(
-            _GEO_HEAD_CX + pose.look_x * 0.3,
-            _GEO_HEAD_CY + pose.head_y + pose.body_y * 0.35,
+            _GEO_BODY_CX + pose.look_x * 0.3,
+            _GEO_BODY_CY + pose.body_y + pose.head_y,
         )
         painter.rotate(pose.head_tilt)
 

@@ -190,19 +190,38 @@ def test_expression_count_matches_prd() -> None:
 
 
 def test_color_palette_matches_prd() -> None:
+    """重构后配色（视觉基准：参考图「柔和全息彩虹 + 粗黑描边」）。
+
+    旧版奶油/焦糖暖调配色已被参考图风格取代；保留气泡相关键不变。
+    """
+
     expected = {
-        "cream": "#FFF4E6",
-        "caramel": "#F2C79A",
-        "warm_brown": "#8B6B4F",
-        "peach": "#F7B8A8",
-        "dark_brown": "#5A4033",
-        "white": "#FFFFFF",
+        "ink": "#141414",         # 近黑 主体粗描边 / 眼睛 / 嘴
+        "blush": "#FFB3C7",       # 柔和粉 腮红
+        "white": "#FFFFFF",       # 纯白 高光 / 前爪
+        "mouse_body": "#3A3A3A",  # 深灰 鼠标 / 键盘底座
+        "mouse_hi": "#8A8A8A",    # 中灰 鼠标分割线 / 滚轮
         "bubble_bg": "#FFFDF8",
         "bubble_text": "#7A5A42",
         "glow_yellow": "#FFD08A",
         "glow_blue": "#B9D4E8",
+        "warm_brown": "#8B6B4F",  # 兼容保留：ui.bubble 描边仍引用
     }
     assert C.COLORS == expected
+
+
+def test_body_gradient_and_outline_defined() -> None:
+    """新增的柔和全息彩虹渐变与粗黑描边常量存在且取值合理。"""
+
+    stops = C.BODY_GRADIENT_STOPS
+    assert len(stops) >= 4, "彩虹渐变停靠点过少"
+    positions = [p for p, _ in stops]
+    assert positions == sorted(positions), "渐变停靠点必须单调递增"
+    assert positions[0] == 0.0 and positions[-1] == 1.0, "渐变须覆盖 0→1"
+    for _pos, hexv in stops:
+        assert hexv.startswith("#") and len(hexv) == 7, f"非法色值：{hexv}"
+    # 粗黑描边：明显厚于细线，体现参考图的厚重卡通风
+    assert C.OUTLINE_W >= 3.0, f"主体描边过细（{C.OUTLINE_W}）"
 
 
 def test_no_pure_black_outline_in_palette() -> None:

@@ -1,14 +1,18 @@
-"""手部可见性 & 裁剪回归测试 —— 守护「双手敲迷你键盘」在 **1x 真实尺寸**下真的看得见。
+"""手部可见性 & 裁剪回归测试 —— 守护「前爪搭在透视键盘上敲击」在 **1x 真实尺寸**下真的看得见。
 
-本轮重构把手掌从 14×11 放大到 20×14、手指 4×7 → 6×10，手掌中心下移到 y=148，
-并新增迷你键盘。手的包围盒极易算窄，且 1x 是用户实际看到的尺寸（窗口 160×180）。
+本轮视觉重构（参考图：圆球团子猫 + 柔和全息彩虹 + 粗黑描边）后，旧的「蜜桃粉掌垫 /
+浅焦糖键帽」判色法完全失效（这些颜色已从调色板移除）。本文件改用与**新画法**对应的
+等价强度判据：
+
+* 前爪为**近白圆润爪**（唯一近白前景）→ 用近白像素的底部 y 定位爪子；
+* 键帽为**彩虹粉彩方块**（唯一高饱和亮色前景）→ 用粉彩像素的底部 y 定位键盘底排。
 
 覆盖：
-* B. 实际渲染非透明像素包围盒 ⊆ ``pet_rect()``（8 表情 + 落指峰值 + 抬腕峰值
-     + 拖拽 + 悬停 × 3 档缩放）—— 重点补测**此前未被覆盖的抬腕峰值帧**；
+* B. 实际渲染非透明像素包围盒 ⊆ ``pet_rect()``（8 表情 + 落指/抬腕峰值 + 拖拽 × 3 缩放）；
 * 光晕阈值边界（睡觉/兴奋回退整窗）；
 * C. 1x 下 8 表情非透明像素数、渲染哈希两两不同；
-* C. 1x 下手掌下方存在 **3 个相互分离**的手指色块，并给出每根手指像素宽度。
+* C. 1x 下**前爪可见**，且**落指下移 / 抬腕上移**幅度达标；
+* C. 1x 下**键帽被按压发生可测下沉**。
 
 .. note::
    本文件不修改任何源码，仅通过 QImage 离屏渲染做像素级验证。
@@ -26,7 +30,13 @@ from PySide6.QtGui import QImage, QPainter
 from desktop_pet.core import constants as C
 from desktop_pet.core.constants import Expression
 from desktop_pet.core.pet_model import PetModel, PetPose
-from desktop_pet.ui.pet_renderer import PetRenderer
+from desktop_pet.ui.pet_renderer import (
+    _GEO_HAND_LIFT_PX,
+    _GEO_HAND_PRESS_PX,
+    _GEO_KEY_RIGHT_BAND,
+    _GEO_PAW_W,
+    PetRenderer,
+)
 from desktop_pet.ui.pet_window import PetWindow
 
 _SCALES = (0.8, 1.0, 1.2)
@@ -202,106 +212,150 @@ def test_all_eight_expressions_distinct_and_nonblank_at_1x(capsys) -> None:
     assert len(set(hashes.values())) == len(hashes), "1x 下存在渲染完全相同的表情"
 
 
-# --- 像素颜色分类（ARGB32 小端：byte0=B,1=G,2=R,3=A）--- #
-_PALETTE = {
-    "cream": (230, 244, 255),      # #FFF4E6 → B,G,R
-    "caramel": (154, 199, 242),    # #F2C79A
-    "warm_brown": (79, 107, 139),  # #8B6B4F
-    "peach": (168, 184, 247),      # #F7B8A8
-    "dark_brown": (51, 64, 90),    # #5A4033
-}
+# --- 像素颜色判据（ARGB32 小端：byte0=B,1=G,2=R,3=A；离屏底色为全透明）--- #
+def _is_white(data: bytes, stride: int, x: int, y: int) -> bool:
+    """近白前爪 / 眼睛高光（唯一近白前景元素）。"""
 
-
-def _classify(data: bytes, stride: int, x: int, y: int) -> str:
     o = y * stride + x * 4
     if data[o + 3] == 0:
-        return "transparent"
+        return False
     b, g, r = data[o], data[o + 1], data[o + 2]
-    best = min(_PALETTE, key=lambda k: (r - _PALETTE[k][2]) ** 2
-               + (g - _PALETTE[k][1]) ** 2 + (b - _PALETTE[k][0]) ** 2)
+    return r > 232 and g > 232 and b > 232
+
+
+def _is_pastel_key(data: bytes, stride: int, x: int, y: int) -> bool:
+    """彩虹粉彩键帽：非透明、非近白、亮且有色彩（深灰键座 / 黑描边 / 灰抗锯齿被排除）。"""
+
+    o = y * stride + x * 4
+    if data[o + 3] == 0:
+        return False
+    b, g, r = data[o], data[o + 1], data[o + 2]
+    if r > 232 and g > 232 and b > 232:
+        return False
+    return min(r, g, b) > 100 and (max(r, g, b) - min(r, g, b)) > 45
+
+
+def _max_y(image: QImage, predicate, x0: int, x1: int, y0: int, y1: int) -> int | None:
+    stride = image.bytesPerLine()
+    data = bytes(image.constBits())
+    best: int | None = None
+    for y in range(y0, min(y1, image.height())):
+        for x in range(x0, min(x1, image.width())):
+            if predicate(data, stride, x, y):
+                best = y if best is None else max(best, y)
     return best
 
 
-def _cream_runs(data: bytes, stride: int, y: int, x0: int, x1: int) -> list[tuple[int, int]]:
-    """返回该行 ``[x0, x1)`` 内宽度 ≥2 的 cream 连续段 ``(start, width)``。"""
-
-    runs: list[tuple[int, int]] = []
-    x = x0
-    while x < x1:
-        if _classify(data, stride, x, y) == "cream":
-            start = x
-            while x < x1 and _classify(data, stride, x, y) == "cream":
-                x += 1
-            width = x - start
-            if width >= 2:
-                runs.append((start, width))
-        else:
-            x += 1
-    return runs
+def _count(image: QImage, predicate, x0: int, x1: int, y0: int, y1: int) -> int:
+    stride = image.bytesPerLine()
+    data = bytes(image.constBits())
+    n = 0
+    for y in range(y0, min(y1, image.height())):
+        for x in range(x0, min(x1, image.width())):
+            if predicate(data, stride, x, y):
+                n += 1
+    return n
 
 
-def _finger_rows(image: QImage, hand_x: float) -> tuple[int, list[list[tuple[int, int]]]]:
-    """在给定手掌中心附近扫描，返回“恰好 3 段 cream”的行数与这些行的段列表。"""
+# 前爪带宽（左/右）与纵向扫描带，以及键帽扫面（右端键带取自渲染常量，避免几何漂移）
+_PAW_L = (50, 74)
+_PAW_R = (88, 112)
+_PAW_BAND = (100, 152)
+_KEY_RIGHT = (int(_GEO_KEY_RIGHT_BAND[0]), int(_GEO_KEY_RIGHT_BAND[1]))
+_KEY_BAND = (120, 174)
+
+# QA 加固（非放水）：
+#   「带内近白计数 >= 40」会被**前臂白芯**单独满足 —— 前臂白芯本就落在扫描带内
+#   （≈84px，其圆头端还下探到 y≈130），即使整只爪子消失该用例仍会通过
+#   （已用「爪子消失」变异体实测：带内近白仍有 174px > 40）。
+#   爪子（``_GEO_PAW_W``=21）的白芯 ≈17px，明显**宽于**前臂白芯（``_GEO_FOREARM_W``=12px）。
+#   故加固判据 = 带内**单行最长连续近白游程** >= 14px（正常态实测 16px；变异体 12px）。
+_PAW_MIN_RUN_PX = 14
+
+
+def _max_white_run(image: QImage, x0: int, x1: int, y0: int, y1: int) -> int:
+    """扫描带内**单行最长连续近白游程**（反映「爪子比前臂宽」这一可视特征）。"""
 
     stride = image.bytesPerLine()
     data = bytes(image.constBits())
-    x0, x1 = int(hand_x - 16), int(hand_x + 16)
-    good_rows: list[list[tuple[int, int]]] = []
-    good_y: list[int] = []
-    for y in range(int(C.BASE_H * 0.80), int(C.BASE_H) + 1):
-        if y >= image.height():
-            break
-        runs = _cream_runs(data, stride, y, x0, x1)
-        if len(runs) == 3 and all(2 <= w <= 7 for _, w in runs):
-            good_rows.append(runs)
-            good_y.append(y)
-    if not good_y:
-        return 0, []
-    # 返回中间一行作为代表
-    mid = good_rows[len(good_rows) // 2]
-    return len(good_y), mid
+    best = 0
+    for y in range(y0, min(y1, image.height())):
+        run = 0
+        for x in range(x0, min(x1, image.width())):
+            if _is_white(data, stride, x, y):
+                run += 1
+                if run > best:
+                    best = run
+            else:
+                run = 0
+    return best
 
 
-def test_three_separated_fingers_visible_at_1x(capsys) -> None:
-    """1x 下每只手的手掌下方必须存在 **3 个相互分离** 的 cream 手指色块。
-
-    手指宽 6px，1x 下应为明显竖条（不能被 outline 粘连成一片）。同时给出每根手指
-    的像素宽度与中心间距（应≈``_GEO_FINGER_DX``=6）。
-    """
+def test_paws_visible_at_1x(capsys) -> None:
+    """1x 下左右前爪（近白圆润爪）都必须可见，且**爪子明显宽于前臂**（防前臂白芯蒙混）。"""
 
     renderer = PetRenderer()
-    pose = _happy()  # 无 curl → 手指完全伸展
-    image = _render(renderer, pose, 1.0)
-
-    for label, hand_x in (("left", 56.0), ("right", 104.0)):
-        n_rows, runs = _finger_rows(image, hand_x)
+    image = _render(renderer, _happy(), 1.0)
+    for label, band in (("left", _PAW_L), ("right", _PAW_R)):
+        n = _count(image, _is_white, band[0], band[1], _PAW_BAND[0], _PAW_BAND[1])
+        run = _max_white_run(image, band[0], band[1], _PAW_BAND[0], _PAW_BAND[1])
         with capsys.disabled():
-            print(f"\n[1x] {label} 手: 检测到 {n_rows} 行含 3 段分离手指色块")
-            if runs:
-                centers = [s + w / 2.0 for s, w in runs]
-                print(f"     代表行 runs={runs}  中心={centers}  "
-                      f"间距={[round(b - a, 1) for a, b in zip(centers, centers[1:])]}  "
-                      f"宽度={[w for _, w in runs]}")
-        assert n_rows >= 2, f"{label} 手在 1x 下未检出 3 段分离手指（检出 {n_rows} 行）"
-        assert len(runs) == 3, f"{label} 手代表行手指数 != 3：{runs}"
-        widths = [w for _, w in runs]
-        assert all(2 <= w <= 7 for w in widths), f"{label} 手指宽度异常：{widths}"
-        centers = [s + w / 2.0 for s, w in runs]
-        gaps = [b - a for a, b in zip(centers, centers[1:])]
-        assert all(4.5 <= g <= 7.5 for g in gaps), f"{label} 手指中心间距异常：{gaps}"
+            print(f"\n[1x] {label} 前爪: 近白像素={n} 单行最长游程={run}px")
+        assert n >= 40, f"{label} 前爪在 1x 下不可见（{n} 像素）"
+        assert run >= _PAW_MIN_RUN_PX, (
+            f"{label} 爪子宽度不足（最长游程 {run}px < {_PAW_MIN_RUN_PX}），"
+            f"疑似爪子消失、仅剩前臂白芯（宽 12px）"
+        )
 
 
-def test_fingers_remain_visible_when_curled_at_1x() -> None:
-    """落指（curl=1）时手指缩短，但仍必须可见（不得消失）。"""
+def test_press_moves_paw_down_at_1x(capsys) -> None:
+    """落指（press=1）时前爪底部必须下移 ≥8px（几何常量 ``_GEO_HAND_PRESS_PX``）。"""
 
     renderer = PetRenderer()
-    pose = replace(_happy(), arm_l_press=1.0, finger_l_curl=1.0)
-    image = _render(renderer, pose, 1.0)
-    # 落指时掌心中线下移 9px，扫描更宽的 y 带
-    stride = image.bytesPerLine()
-    data = bytes(image.constBits())
-    max_runs = 0
-    for y in range(int(C.BASE_H * 0.80), image.height()):
-        runs = _cream_runs(data, stride, y, 40, 72)
-        max_runs = max(max_runs, len(runs))
-    assert max_runs >= 3, f"落指态下左手手指不可见（最多 {max_runs} 段）"
+    idle = _render(renderer, _happy(), 1.0)
+    press = _render(renderer, replace(_happy(), arm_l_press=1.0), 1.0)
+    idle_y = _max_y(idle, _is_white, _PAW_L[0], _PAW_L[1], _PAW_BAND[0], _PAW_BAND[1])
+    press_y = _max_y(press, _is_white, _PAW_L[0], _PAW_L[1], _PAW_BAND[0], _PAW_BAND[1])
+    assert idle_y is not None and press_y is not None, "前爪不可见，无法测量"
+    dy = press_y - idle_y
+    with capsys.disabled():
+        print(f"\n[1x] 落指前爪底 y: idle={idle_y} press={press_y}  下移={dy}px")
+    assert dy >= 8, f"落指下移仅 {dy}px（< 8 不可见）"
+    assert abs(dy - _GEO_HAND_PRESS_PX) <= 2.0, (
+        f"落指下移 {dy}px 与渲染常量 {_GEO_HAND_PRESS_PX}px 不符"
+    )
+
+
+def test_lift_raises_paw_at_1x(capsys) -> None:
+    """抬腕（lift=1）时前爪底部必须上移 ≥12px（几何常量 ``_GEO_HAND_LIFT_PX``）。"""
+
+    renderer = PetRenderer()
+    idle = _render(renderer, _happy(), 1.0)
+    lift = _render(renderer, replace(_happy(), arm_l_lift=1.0), 1.0)
+    idle_y = _max_y(idle, _is_white, _PAW_L[0], _PAW_L[1], _PAW_BAND[0], _PAW_BAND[1])
+    lift_y = _max_y(lift, _is_white, _PAW_L[0], _PAW_L[1], _PAW_BAND[0], _PAW_BAND[1])
+    assert idle_y is not None and lift_y is not None, "前爪不可见，无法测量"
+    dy = idle_y - lift_y
+    with capsys.disabled():
+        print(f"\n[1x] 抬腕前爪底 y: idle={idle_y} lift={lift_y}  上移={dy}px")
+    assert dy >= 12, f"抬腕上移仅 {dy}px（< 12 不可见）"
+    assert abs(dy - _GEO_HAND_LIFT_PX) <= 2.0, (
+        f"抬腕上移 {dy}px 与渲染常量 {_GEO_HAND_LIFT_PX}px 不符"
+    )
+
+
+def test_keycaps_sink_when_pressed_at_1x(capsys) -> None:
+    """右手落指（arm_r_press=1）时，右半键盘粉彩键帽底部必须下沉 ≥3px。"""
+
+    renderer = PetRenderer()
+    idle = _render(renderer, _happy(), 1.0)
+    press = _render(renderer, replace(_happy(), arm_r_press=1.0), 1.0)
+    idle_y = _max_y(idle, _is_pastel_key, _KEY_RIGHT[0], _KEY_RIGHT[1],
+                    _KEY_BAND[0], _KEY_BAND[1])
+    press_y = _max_y(press, _is_pastel_key, _KEY_RIGHT[0], _KEY_RIGHT[1],
+                     _KEY_BAND[0], _KEY_BAND[1])
+    assert idle_y is not None and press_y is not None, "键帽不可检出"
+    dy = press_y - idle_y
+    with capsys.disabled():
+        print(f"\n[1x] 右键盘键帽底 y: idle={idle_y} press={press_y}  下沉={dy}px")
+    assert dy >= 3, f"键帽下沉仅 {dy}px（< 3 不可见）"

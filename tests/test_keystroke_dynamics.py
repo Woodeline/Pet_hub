@@ -23,7 +23,9 @@
 * 时间常量在 30fps 下的帧数覆盖与 FR-02 首帧响应。
 
 .. note::
-   本文件**只读** :mod:`desktop_pet.core.pet_model`，不 import 任何 Qt。
+   本文件**只读业务逻辑** :mod:`desktop_pet.core.pet_model`；为把姿态通道折算为
+   实际像素，额外 import :mod:`desktop_pet.ui.pet_renderer` 的 ``_GEO_HAND_*_PX``
+   渲染常量（避免把像素幅度硬编码进测试）。
 """
 
 from __future__ import annotations
@@ -35,6 +37,12 @@ import pytest
 from desktop_pet.core import constants as C
 from desktop_pet.core.constants import Expression
 from desktop_pet.core.pet_model import PetModel
+
+# 幅度折算：**从渲染常量读取**，避免几何调整后测试仍按旧硬编码像素值判断。
+from desktop_pet.ui.pet_renderer import (
+    _GEO_HAND_LIFT_PX as _LIFT_PX,
+    _GEO_HAND_PRESS_PX as _PRESS_PX,
+)
 
 _FPS = 30.0
 _DT = 1.0 / _FPS
@@ -349,7 +357,7 @@ def test_fr02_first_frame_response_within_100ms(dt_ms: int) -> None:
     model.press_arm()
     model.update(dt_ms / 1000.0, 0.0)
     pose = model.pose()
-    disp_px = max(pose.arm_l_press, pose.arm_r_press) * 9.0
+    disp_px = max(pose.arm_l_press, pose.arm_r_press) * _PRESS_PX
     assert disp_px > 1.0, f"dt={dt_ms}ms 首帧位移仅 {disp_px:.2f}px，反馈不可见"
 
 
@@ -358,7 +366,7 @@ def test_high_freq_lift_visible_across_rates(capsys) -> None:
 
     抬腕现由**非活动侧**承担，且在「落指阶段」即升到位，因此即便敲击间隔
     < ``PRESS_DOWN_S``（8/s=0.125s、10/s=0.1s ≥ ``PRESS_DOWN_S`` 的 0.14s）时，
-    抬腕依然升起。验收：``max(arm_l_lift, arm_r_lift) * 13.5px`` 在
+    抬腕依然升起。验收：``max(arm_l_lift, arm_r_lift) * _GEO_HAND_LIFT_PX`` 在
     4 / 6 / 8 / 10 次每秒四档均 ≥ 4px。
 
     .. note::
@@ -383,9 +391,9 @@ def test_high_freq_lift_visible_across_rates(capsys) -> None:
     with capsys.disabled():
         print("\n[keystroke] 抬腕峰值 vs 敲击速率:")
         for rate, lift in table:
-            print(f"    {rate:>2}/s -> max_lift={lift:.3f} ({lift * 13.5:.1f}px)")
+            print(f"    {rate:>2}/s -> max_lift={lift:.3f} ({lift * _LIFT_PX:.1f}px)")
 
     by_rate = dict(table)
     for rate in (4, 6, 8, 10):
-        disp_px = by_rate[rate] * 13.5
+        disp_px = by_rate[rate] * _LIFT_PX
         assert disp_px >= 4.0, f"{rate}/s 时抬腕仅 {disp_px:.2f}px（< 4px 不可见）"
