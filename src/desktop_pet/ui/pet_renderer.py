@@ -142,6 +142,58 @@ _STROKE_W_THIN: Final[float] = C.OUTLINE_W * 0.62
 _BOUNDS_PAD_PX: Final[float] = 2.5
 
 
+#: 逃离位移的边界余量（逻辑像素）。
+#: 脊线只是中心线，**轮廓会超出脊线**（尾尖圆帽半径 ``W1/2`` + 描边半宽 + 抗锯齿），
+#: 因此约束脊线时必须把这些余量一起算进去，否则尾尖仍会被窗口左沿切掉。
+_FLEE_EDGE_MARGIN: Final[float] = _GEO_TAIL_W1 / 2.0 + _STROKE_W / 2.0 + 1.0
+
+
+def _flee_axis_limits(
+    points: list[tuple[float, float]], weights: tuple[float, ...],
+) -> tuple[float, float, float, float]:
+    """位移的逐轴上限 ``(最多左, 最多右, 最多上, 最多下)``，均为非负值。
+
+    逐轴限幅（而不是整体等比缩放）是刻意的：尾巴本来就贴着窗口左沿，整体缩放会把
+    "往左下躲"整个缩没；逐轴只吃掉被挡住的那一维，自由的维度照样让开。
+    """
+
+    lo = _FLEE_EDGE_MARGIN
+    hi_x = C.BASE_W - _FLEE_EDGE_MARGIN
+    hi_y = C.BASE_H - _FLEE_EDGE_MARGIN
+    left = right = up = down = float("inf")
+    for (px, py), w in zip(points, weights):
+        if w <= 1e-9:
+            continue
+        left = min(left, (px - lo) / w)
+        right = min(right, (hi_x - px) / w)
+        up = min(up, (py - lo) / w)
+        down = min(down, (hi_y - py) / w)
+    return (
+        max(0.0, left), max(0.0, right), max(0.0, up), max(0.0, down),
+    )
+
+
+def _apply_flee(
+    points: list[tuple[float, float]], dx: float, dy: float,
+) -> list[tuple[float, float]]:
+    """把尾巴的「逃离位移」按沿脊线的权重叠加到脊线上。
+
+    权重由 :func:`motion.ramp_weights` 给出：根部恒为 0（尾巴永远长在身体上），
+    越靠尾尖越大 —— 于是整条尾巴"甩身躲开"，而根部交界处保持贴合。
+    位移量按 :func:`_flee_axis_limits` 逐轴限幅，保证轮廓不越出画布。
+    """
+
+    if abs(dx) <= 1e-6 and abs(dy) <= 1e-6:
+        return points
+    weights = motion.ramp_weights(len(points), C.TAIL_EVADE_RAMP_P)
+    left, right, up, down = _flee_axis_limits(points, weights)
+    dx = motion.clamp(dx, -left, right)
+    dy = motion.clamp(dy, -up, down)
+    return [
+        (p[0] + dx * w, p[1] + dy * w) for p, w in zip(points, weights)
+    ]
+
+
 class PetRenderer:
     """把 :class:`~desktop_pet.core.pet_model.PetPose` 参数渲染为矢量团子猫。"""
 
@@ -532,7 +584,9 @@ class PetRenderer:
     # 尾巴：几何生成（绘制 / 脏区 / 交互共用同一条脊线）
     # ------------------------------------------------------------------ #
     @staticmethod
-    def tail_spine(pose: PetPose) -> list[tuple[float, float]]:
+    def tail_spine(
+        pose: PetPose, *, apply_flee: bool = True,
+    ) -> list[tuple[float, float]]:
         """返回尾巴**中心线**在逻辑画布（160×180）下的采样点。
 
         脊线由「方向角自 ``_GEO_TAIL_THETA0`` 平滑转到 ``+SWEEP``」逐段积分得到
@@ -547,6 +601,9 @@ class PetRenderer:
 
         Args:
             pose: 当前姿态。
+            apply_flee: 是否叠加 ``pose.tail_flee_*``（避让位移）。光标亲近度采样
+                必须传 ``False`` —— 否则「位移 → 离光标更远 → 位移变小 → 又靠近」
+                会形成自激回路，尾巴在临界距离附近持续抖动。
 
         Returns:
             ``_GEO_TAIL_SPINE_N + 1`` 个画布坐标点（根 → 尖）。
@@ -575,7 +632,8 @@ class PetRenderer:
             )
             local_x += math.cos(angle) * step
             local_y += math.sin(angle) * step
-        return points
+
+        return _apply_flee(points, pose.tail_flee_x, pose.tail_flee_y) if apply_flee else points
 
     @staticmethod
     def _tail_width_at(t: float) -> float:

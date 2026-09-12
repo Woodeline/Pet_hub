@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import random
 from dataclasses import dataclass, fields
 from typing import Final, Optional
@@ -56,6 +57,11 @@ class PetPose:
     finger_r_curl: float = 0.0
     tail_angle: float = 0.0
     tail_curve: float = 0.0
+    #: 尾巴"逃离"位移（逻辑像素，已含强度）：根部固定、越靠尾尖位移越大。
+    #: 由 :meth:`PetModel.set_tail_evade` 写入，渲染器按
+    #: ``motion.ramp_weights`` 分配的权重施加到脊线上。
+    tail_flee_x: float = 0.0
+    tail_flee_y: float = 0.0
     blush_alpha: float = 0.0
     glow_alpha: float = 0.0
     tear_alpha: float = 0.0
@@ -94,9 +100,9 @@ class PetModel:
         self._dragging: bool = False
         self._hovering: bool = False
 
-        # 尾巴避让（鼠标靠近 / 触碰尾巴）：目标强度、光标所在侧、当前平滑值
+        # 尾巴避让（鼠标靠近 / 触碰尾巴）：目标强度、逃离方向（单位向量）、当前平滑值
         self._tail_evade_target: float = 0.0
-        self._tail_evade_side: float = 0.0
+        self._tail_evade_dir: tuple[float, float] = (0.0, 0.0)
         self._tail_evade: float = 0.0
 
         # 临时动作（插队打断）
@@ -150,17 +156,18 @@ class PetModel:
 
         self._hovering = bool(active)
 
-    def set_tail_evade(self, amount: float, side: float) -> None:
+    def set_tail_evade(self, amount: float, dir_x: float, dir_y: float) -> None:
         """设置尾巴**避让**目标（鼠标靠近 / 触碰尾巴时的反应）。
 
-        由 UI 层按「光标到尾巴中心线的距离」每帧写入（见 ``motion.tail_evade_amount``
-        与 ``ui.pet_window.PetWindow``）。实际姿态在本模型内做**非对称平滑**：
+        由 UI 层按「光标到尾巴中心线的距离」与「该往哪躲」每帧写入
+        （见 ``motion.tail_evade_amount`` / ``motion.flee_direction`` 与
+        ``ui.pet_window.PetWindow``）。实际强度在本模型内做**非对称平滑**：
         逼近快、回落慢 → 得到"惊觉后缓缓放松"的余韵，而不是硬切。
 
         Args:
             amount: 避让强度 ``0→1``（``0`` = 无反应）。
-            side: 光标位于尾巴前进方向的哪一侧（``+1`` / ``-1`` / ``0``）；
-                尾巴朝**反方向**摆开。
+            dir_x: 逃跑方向单位向量 x 分量（由 ``motion.flee_direction`` 给出）。
+            dir_y: 逃跑方向单位向量 y 分量。
         """
 
         if self._dragging:
@@ -168,12 +175,16 @@ class PetModel:
             self._tail_evade_target = 0.0
             return
         self._tail_evade_target = motion.clamp(amount, 0.0, 1.0)
-        self._tail_evade_side = motion.clamp(side, -1.0, 1.0)
+        # 方向在强度衰减期间必须**保持住**：否则回落到 0 的最后一帧方向会被写成
+        # (0,0)，尾巴会瞬移回原位而不是平滑收回。
+        norm = math.hypot(dir_x, dir_y)
+        if norm > 1e-9:
+            self._tail_evade_dir = (dir_x / norm, dir_y / norm)
 
-    def tail_evade(self) -> tuple[float, float]:
-        """返回当前尾巴避让状态 ``(强度, 侧别)``（供测试与调试观察）。"""
+    def tail_evade(self) -> tuple[float, tuple[float, float]]:
+        """返回当前尾巴避让状态 ``(强度, 逃跑方向单位向量)``（供测试与调试观察）。"""
 
-        return self._tail_evade, self._tail_evade_side
+        return self._tail_evade, self._tail_evade_dir
 
     def is_dragging(self) -> bool:
         """是否处于被拎起（拖拽）状态。
@@ -317,15 +328,13 @@ class PetModel:
                 amp *= 0.25
             target.tail_angle += motion.tail_angle(now, period, amp)
 
-        # 尾巴避让（鼠标靠近 / 触碰）：向光标**反侧**摆开，并轻微上收（警觉地一缩）。
+        # 尾巴避让（鼠标靠近 / 触碰）：沿"远离光标"的方向整体让开。
+        # 只写入位移向量，具体分配（根部 0 → 尾尖最大）由渲染器按脊线权重完成。
         # 叠加在基础摆动之上 → 得到「常态慢摆 + 受扰快速躲闪」两层动态。
         if self._tail_evade > 1e-4:
-            target.tail_angle -= (
-                self._tail_evade_side * C.TAIL_EVADE_ANGLE_DEG * self._tail_evade
-            )
-            target.tail_curve = motion.clamp(
-                target.tail_curve + C.TAIL_EVADE_CURL * self._tail_evade, 0.0, 1.0
-            )
+            reach = C.TAIL_EVADE_MAX_PX * self._tail_evade
+            target.tail_flee_x = self._tail_evade_dir[0] * reach
+            target.tail_flee_y = self._tail_evade_dir[1] * reach
 
         # 耳朵偶发抖动（FR-13）——仅在非睡觉态明显
         if self._effective_expression() != Expression.SLEEPING:

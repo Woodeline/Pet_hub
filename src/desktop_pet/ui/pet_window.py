@@ -268,7 +268,7 @@ class PetWindow(QWidget):
 
         try:
             if not self.isVisible():
-                self._model.set_tail_evade(0.0, 0.0)
+                self._model.set_tail_evade(0.0, 0.0, 0.0)
                 return
 
             scale = self._scale if self._scale else 1.0
@@ -276,12 +276,17 @@ class PetWindow(QWidget):
             px = local.x() / scale
             py = local.y() / scale
 
-            spine = PetRenderer.tail_spine(self._model.pose())
-            distance, side = motion.polyline_proximity(px, py, spine)
+            # 基准必须是"无避让"的脊线：含位移的姿态会让 位移→距离变大→强度变小→
+            # 位移收回→距离又变小 形成自激回路，尾巴在临界距离上持续抖动。
+            spine = PetRenderer.tail_spine(self._model.pose(), apply_flee=False)
+            distance, _side = motion.polyline_proximity(px, py, spine)
             amount = motion.tail_evade_amount(
                 distance, C.TAIL_EVADE_NEAR_PX, C.TAIL_EVADE_FAR_PX
             )
-            self._model.set_tail_evade(amount, side)
+            dir_x, dir_y = motion.flee_direction(
+                px, py, spine, lift=C.TAIL_EVADE_LIFT
+            )
+            self._model.set_tail_evade(amount, dir_x, dir_y)
         except Exception:  # noqa: BLE001 —— 交互采样失败不影响动画
             logger.debug("尾巴亲近度采样失败（已忽略）", exc_info=True)
 

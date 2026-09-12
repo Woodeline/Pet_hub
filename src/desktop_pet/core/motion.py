@@ -218,25 +218,20 @@ def point_segment_distance(
     return math.hypot(px - (ax + dx * t), py - (ay + dy * t))
 
 
-def polyline_proximity(
+def _nearest_segment(
     px: float, py: float, pts: Sequence[tuple[float, float]],
-) -> tuple[float, float]:
-    """点 ``P`` 到折线的 ``(最短距离, 有符号侧别)``。
+) -> tuple[float, tuple[float, float], tuple[float, float]]:
+    """点 ``P`` 到折线的最近线段：``(距离, 最近点, 线段方向)``。
 
-    侧别取自「最近线段方向 × (P - 最近点)」的叉积符号，因此**与折线朝向绑定**：
-
-    * 画布坐标（``y`` 向下）中，若折线沿 ``+x`` 前进，则 ``+1`` 表示 ``P`` 在其
-      **下方**（``y`` 较大侧），``-1`` 表示上方；折线掉头时符号随之翻转。
-    * 点恰好落在折线上、或折线不足两点时返回 ``0.0``。
-
-    调用方据此让尾巴朝**反侧**摆开（见 :func:`tail_evade_amount`）。
+    折线不足两点时返回 ``(0.0, (px, py), (0.0, 0.0))``。
     """
 
     if len(pts) < 2:
-        return 0.0, 0.0
+        return 0.0, (px, py), (0.0, 0.0)
 
     best_distance = float("inf")
-    best_side = 0.0
+    best_point = (pts[0][0], pts[0][1])
+    best_dir = (0.0, 0.0)
     for i in range(len(pts) - 1):
         ax, ay = pts[i]
         bx, by = pts[i + 1]
@@ -250,13 +245,105 @@ def polyline_proximity(
         distance = math.hypot(px - cx, py - cy)
         if distance < best_distance:
             best_distance = distance
-            cross = dx * (py - cy) - dy * (px - cx)
-            # 用最小分辨率判断退化，避免浮点噪声把"恰好在线上"判成某一侧
-            if abs(cross) <= 1e-9:
-                best_side = 0.0
-            else:
-                best_side = 1.0 if cross > 0.0 else -1.0
-    return best_distance, best_side
+            best_point = (cx, cy)
+            best_dir = (dx, dy)
+    return best_distance, best_point, best_dir
+
+
+def polyline_proximity(
+    px: float, py: float, pts: Sequence[tuple[float, float]],
+) -> tuple[float, float]:
+    """点 ``P`` 到折线的 ``(最短距离, 有符号侧别)``。
+
+    侧别取自「最近线段方向 × (P - 最近点)」的叉积符号，因此**与折线朝向绑定**：
+
+    * 画布坐标（``y`` 向下）中，若折线沿 ``+x`` 前进，则 ``+1`` 表示 ``P`` 在其
+      **下方**（``y`` 较大侧），``-1`` 表示上方；折线掉头时符号随之翻转。
+    * 点恰好落在折线上、或折线不足两点时返回 ``0.0``。
+
+    注意：本函数只回答"离多近、在哪一侧"。**该往哪躲**由
+    :func:`flee_direction` 决定（对弯曲的尾巴，靠侧别再取反是错的 —— 见其文档）。
+    """
+
+    if len(pts) < 2:
+        return 0.0, 0.0
+
+    distance, (cx, cy), (dx, dy) = _nearest_segment(px, py, pts)
+    cross = dx * (py - cy) - dy * (px - cx)
+    # 用最小分辨率判断退化，避免浮点噪声把"恰好在线上"判成某一侧
+    if abs(cross) <= 1e-9:
+        return distance, 0.0
+    return distance, (1.0 if cross > 0.0 else -1.0)
+
+
+def polyline_centroid(pts: Sequence[tuple[float, float]]) -> tuple[float, float]:
+    """折线所有采样点的算术平均（形状重心，用作"尾巴在哪边"的代表点）。"""
+
+    if not pts:
+        return 0.0, 0.0
+    return (
+        sum(p[0] for p in pts) / len(pts),
+        sum(p[1] for p in pts) / len(pts),
+    )
+
+
+def flee_direction(
+    px: float, py: float, pts: Sequence[tuple[float, float]], lift: float = 0.0,
+) -> tuple[float, float]:
+    """光标 ``P`` 处，尾巴应当**逃离**的单位方向。
+
+    取「光标 → 折线重心」的单位向量，再按需叠加一个**向上偏置** ``lift``。
+
+    为什么不用"最近点侧别取反"：尾巴是**弯曲**的，整条绕根部旋转只能让各点沿切线
+    移动；光标落在径向或斜上方时，切线方向与"远离"方向几乎垂直甚至相反，尾巴会
+    越躲越近（实测 5 个方位里 4 个 Δ 为负）。沿「光标指向尾巴」的反方向整体让开，则
+    对任意方位都至少不会靠近，且形状不乱。
+
+    为什么要上翘偏置：纯粹水平逃开时，若尾巴已经把画面左沿顶住（本宠物尾巴就贴边），
+    水平方向无路可退，反应会退化成"完全不动"。猫受惊时尾巴本就会**上翘**，加一点
+    向上分量既更像猫，又在垂直方向留出空间。偏置只在光标**不在尾巴上方**时施加
+    （此时向上必然也是远离），光标在上方时保持纯向下逃离，不会自相矛盾。
+
+    Args:
+        px: 光标 x（逻辑画布坐标）。
+        py: 光标 y。
+        pts: 折线采样点（根 → 尖）。
+        lift: 向上偏置量（``0`` = 不加）。典型值 0.3~0.4。
+
+    Returns:
+        ``(ux, uy)`` 单位向量；折线不足两点或光标与重心重合时返回 ``(0.0, 0.0)``。
+    """
+
+    if len(pts) < 2:
+        return 0.0, 0.0
+    cx, cy = polyline_centroid(pts)
+    vx, vy = cx - px, cy - py
+    norm = math.hypot(vx, vy)
+    if norm <= 1e-9:
+        return 0.0, 0.0
+    ux, uy = vx / norm, vy / norm
+
+    if lift > 0.0 and uy <= 0.0:
+        # uy <= 0 → 光标与尾巴重心齐平或更低 → 向上一定也是远离
+        lx, ly = ux, uy - lift
+        lifted = math.hypot(lx, ly)
+        if lifted > 1e-9:
+            return lx / lifted, ly / lifted
+    return ux, uy
+
+
+def ramp_weights(n: int, power: float = 2.0) -> tuple[float, ...]:
+    """``n`` 个采样点的 ``0 → 1`` 单调递增权重（``w_k = (k / (n-1)) ** power``）。
+
+    用于把尾巴的**位移按沿脊线的位置分配**：根部（``k = 0``）权重恒为 ``0``，
+    尾巴因此始终"长在"身体上；越靠尾尖让开得越多。
+    权重本身光滑单调，叠加到光滑脊线上不会引入折点。
+    """
+
+    if n <= 1:
+        return (0.0,)
+    last = float(n - 1)
+    return tuple((k / last) ** power for k in range(n))
 
 
 def tail_evade_amount(distance: float, near: float, far: float) -> float:
@@ -368,6 +455,9 @@ __all__ = [
     "random_interval",
     "point_segment_distance",
     "polyline_proximity",
+    "polyline_centroid",
+    "flee_direction",
+    "ramp_weights",
     "tail_evade_amount",
     "clamp_to_screens",
 ]

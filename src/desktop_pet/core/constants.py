@@ -192,13 +192,18 @@ LOOK_AROUND_AMPLITUDE_PX: Final[float] = 3.0  # 左右张望瞳孔偏移幅度
 # 7b. 尾巴「避让」交互（鼠标靠近 / 触碰尾巴时的反应，FR-13 扩展）
 # --------------------------------------------------------------------------- #
 # 语义：光标与尾巴中心线的距离 → 避让强度 0→1（`NEAR_PX` 内为满强度，`FAR_PX` 外为 0）。
-# 尾巴向光标的**反侧**摆开 `TAIL_EVADE_ANGLE_DEG × 强度`，同时轻微上收
-# `TAIL_EVADE_CURL × 强度`（"警觉地一缩"）。
+# 尾巴沿「远离光标」的方向整体让开 `TAIL_EVADE_MAX_PX × 强度`：根部权重恒为 0
+# （永远长在身体上），越靠尾尖让得越多（权重 1）。
+#
+# 为什么不做"绕根部转一个角度"：尾巴是弯的，刚性旋转下各点只能沿切线移动，
+# 光标落在径向或斜上方时会越躲越近（实测 5 个方位里 4 个 Δ 为负）。沿
+# 「光标 → 尾巴重心」的反方向位移，则任意方位都至少不会靠近，形状也不乱。
 # 逼近用快系数、回落用慢系数（非对称）→ 产生「惊觉后缓缓放松」的余韵。
 TAIL_EVADE_NEAR_PX: Final[float] = 9.0     # 判定为「碰到尾巴」的距离（逻辑像素）
 TAIL_EVADE_FAR_PX: Final[float] = 40.0     # 超出该距离完全无反应
-TAIL_EVADE_ANGLE_DEG: Final[float] = 30.0  # 最大侧向摆开角（度）
-TAIL_EVADE_CURL: Final[float] = 0.42       # 最大上收量（叠加到 tail_curve）
+TAIL_EVADE_MAX_PX: Final[float] = 16.0     # 尾尖最大让开距离（逻辑像素）
+TAIL_EVADE_RAMP_P: Final[float] = 2.0      # 位移沿脊线的分配指数（越大 → 越集中在尾尖）
+TAIL_EVADE_LIFT: Final[float] = 0.35       # 逃离方向的上翘偏置（只在光标不在上方时施加）
 TAIL_EVADE_ATTACK_K: Final[float] = 16.0   # 避让响应平滑系数（快）
 TAIL_EVADE_RELEASE_K: Final[float] = 4.2   # 避让回落平滑系数（慢）
 
