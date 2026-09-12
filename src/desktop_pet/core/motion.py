@@ -78,6 +78,17 @@ def ease_in_out(t: float) -> float:
     return -(math.cos(math.pi * tt) - 1.0) / 2.0
 
 
+def smoothstep(t: float) -> float:
+    """三次平滑阶跃 ``3t²-2t³``：两端一阶导为 0，用于「缓起缓止」的过渡。
+
+    与 :func:`ease_in_out` 的区别：``smoothstep`` 是多项式、值域严格 ``[0,1]``、
+    ``t<=0 → 0`` / ``t>=1 → 1``，适合做**参数归一化**（如尾巴转向量沿脊线的分布）。
+    """
+
+    tt = clamp(t, 0.0, 1.0)
+    return tt * tt * (3.0 - 2.0 * tt)
+
+
 def ease_out_cubic(t: float) -> float:
     """三次缓出。"""
 
@@ -192,6 +203,80 @@ def random_interval(lo: float, hi: float, rng: random.Random | None = None) -> f
 
 
 # --------------------------------------------------------------------------- #
+# 点 / 折线几何（供「鼠标靠近尾巴」的亲近度判定；纯计算，无 Qt 依赖）
+# --------------------------------------------------------------------------- #
+def point_segment_distance(
+    px: float, py: float, ax: float, ay: float, bx: float, by: float,
+) -> float:
+    """点 ``P`` 到线段 ``AB`` 的最短距离（``AB`` 退化为点时取到该点的距离）。"""
+
+    dx, dy = bx - ax, by - ay
+    denom = dx * dx + dy * dy
+    if denom <= 1e-12:
+        return math.hypot(px - ax, py - ay)
+    t = clamp(((px - ax) * dx + (py - ay) * dy) / denom, 0.0, 1.0)
+    return math.hypot(px - (ax + dx * t), py - (ay + dy * t))
+
+
+def polyline_proximity(
+    px: float, py: float, pts: Sequence[tuple[float, float]],
+) -> tuple[float, float]:
+    """点 ``P`` 到折线的 ``(最短距离, 有符号侧别)``。
+
+    侧别取自「最近线段方向 × (P - 最近点)」的叉积符号，因此**与折线朝向绑定**：
+
+    * 画布坐标（``y`` 向下）中，若折线沿 ``+x`` 前进，则 ``+1`` 表示 ``P`` 在其
+      **下方**（``y`` 较大侧），``-1`` 表示上方；折线掉头时符号随之翻转。
+    * 点恰好落在折线上、或折线不足两点时返回 ``0.0``。
+
+    调用方据此让尾巴朝**反侧**摆开（见 :func:`tail_evade_amount`）。
+    """
+
+    if len(pts) < 2:
+        return 0.0, 0.0
+
+    best_distance = float("inf")
+    best_side = 0.0
+    for i in range(len(pts) - 1):
+        ax, ay = pts[i]
+        bx, by = pts[i + 1]
+        dx, dy = bx - ax, by - ay
+        denom = dx * dx + dy * dy
+        if denom <= 1e-12:
+            t = 0.0
+        else:
+            t = clamp(((px - ax) * dx + (py - ay) * dy) / denom, 0.0, 1.0)
+        cx, cy = ax + dx * t, ay + dy * t
+        distance = math.hypot(px - cx, py - cy)
+        if distance < best_distance:
+            best_distance = distance
+            cross = dx * (py - cy) - dy * (px - cx)
+            # 用最小分辨率判断退化，避免浮点噪声把"恰好在线上"判成某一侧
+            if abs(cross) <= 1e-9:
+                best_side = 0.0
+            else:
+                best_side = 1.0 if cross > 0.0 else -1.0
+    return best_distance, best_side
+
+
+def tail_evade_amount(distance: float, near: float, far: float) -> float:
+    """光标到尾巴的距离 → 避让强度 ``[0, 1]``。
+
+    * ``distance <= near`` → ``1.0``（视为碰到尾巴）
+    * ``distance >= far``  → ``0.0``（完全无反应）
+    * 其间用 :func:`smoothstep` 反向平滑过渡（无硬边跳变）
+    """
+
+    if far <= near:
+        return 1.0 if distance <= near else 0.0
+    if distance <= near:
+        return 1.0
+    if distance >= far:
+        return 0.0
+    return 1.0 - smoothstep((distance - near) / (far - near))
+
+
+# --------------------------------------------------------------------------- #
 # 多显示器 / 屏幕越界钳制（FR-21 / FR-36）
 # --------------------------------------------------------------------------- #
 def _intersection_area(
@@ -270,6 +355,7 @@ __all__ = [
     "cycle_phase",
     "exponential_smoothing_t",
     "ease_in_out",
+    "smoothstep",
     "ease_out_cubic",
     "ease_out_back",
     "ease_out_bounce",
@@ -280,5 +366,8 @@ __all__ = [
     "blink_curve",
     "look_around_offset",
     "random_interval",
+    "point_segment_distance",
+    "polyline_proximity",
+    "tail_evade_amount",
     "clamp_to_screens",
 ]

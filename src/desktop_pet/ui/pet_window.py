@@ -17,10 +17,11 @@ import logging
 import time
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QContextMenuEvent, QMouseEvent, QPaintEvent, QPainter
+from PySide6.QtGui import QContextMenuEvent, QCursor, QMouseEvent, QPaintEvent, QPainter
 from PySide6.QtWidgets import QMenu, QWidget
 
 from desktop_pet.core import constants as C
+from desktop_pet.core import motion
 from desktop_pet.core.constants import Gesture
 from desktop_pet.core.pet_model import PetModel
 from desktop_pet.ui.pet_renderer import PetRenderer
@@ -253,9 +254,41 @@ class PetWindow(QWidget):
         self._model.set_hover(True)
         self.gesture_triggered.emit(int(Gesture.HOVER))
 
-    def _on_frame(self) -> None:
-        """定时器节拍：向 Controller 发出帧信号（由其推进模型与状态机）。"""
+    def _update_tail_evade(self) -> None:
+        """按**全局光标**与尾巴中心线的亲近度，写入尾巴避让目标（FR-13 扩展）。
 
+        职责边界：
+
+        * 尾巴几何（脊线）来自 :meth:`PetRenderer.tail_spine` —— 与绘制共用同一条线；
+        * 距离→强度的映射与侧别判定在 :mod:`desktop_pet.core.motion`（纯计算、可单测）；
+        * 本方法只做「全局屏幕坐标 → 逻辑画布坐标」的换算与调用。
+
+        任何异常都只记 debug 日志：交互采样绝不能拖垮帧循环。
+        """
+
+        try:
+            if not self.isVisible():
+                self._model.set_tail_evade(0.0, 0.0)
+                return
+
+            scale = self._scale if self._scale else 1.0
+            local = self.mapFromGlobal(QCursor.pos())
+            px = local.x() / scale
+            py = local.y() / scale
+
+            spine = PetRenderer.tail_spine(self._model.pose())
+            distance, side = motion.polyline_proximity(px, py, spine)
+            amount = motion.tail_evade_amount(
+                distance, C.TAIL_EVADE_NEAR_PX, C.TAIL_EVADE_FAR_PX
+            )
+            self._model.set_tail_evade(amount, side)
+        except Exception:  # noqa: BLE001 —— 交互采样失败不影响动画
+            logger.debug("尾巴亲近度采样失败（已忽略）", exc_info=True)
+
+    def _on_frame(self) -> None:
+        """定时器节拍：采样光标 → 更新尾巴避让 → 向 Controller 发出帧信号。"""
+
+        self._update_tail_evade()
         self.frame_tick.emit(time.monotonic())
 
 

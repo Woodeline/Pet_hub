@@ -94,6 +94,11 @@ class PetModel:
         self._dragging: bool = False
         self._hovering: bool = False
 
+        # 尾巴避让（鼠标靠近 / 触碰尾巴）：目标强度、光标所在侧、当前平滑值
+        self._tail_evade_target: float = 0.0
+        self._tail_evade_side: float = 0.0
+        self._tail_evade: float = 0.0
+
         # 临时动作（插队打断）
         self._temp_action_until: float = 0.0
         self._temp_expression: Optional[Expression] = None
@@ -144,6 +149,31 @@ class PetModel:
         """设置悬停抚摸状态（FR-28，眯眼 + 腮红加深）。"""
 
         self._hovering = bool(active)
+
+    def set_tail_evade(self, amount: float, side: float) -> None:
+        """设置尾巴**避让**目标（鼠标靠近 / 触碰尾巴时的反应）。
+
+        由 UI 层按「光标到尾巴中心线的距离」每帧写入（见 ``motion.tail_evade_amount``
+        与 ``ui.pet_window.PetWindow``）。实际姿态在本模型内做**非对称平滑**：
+        逼近快、回落慢 → 得到"惊觉后缓缓放松"的余韵，而不是硬切。
+
+        Args:
+            amount: 避让强度 ``0→1``（``0`` = 无反应）。
+            side: 光标位于尾巴前进方向的哪一侧（``+1`` / ``-1`` / ``0``）；
+                尾巴朝**反方向**摆开。
+        """
+
+        if self._dragging:
+            # 被拎起时尾巴本就整体外摆，再叠加避让会互相打架
+            self._tail_evade_target = 0.0
+            return
+        self._tail_evade_target = motion.clamp(amount, 0.0, 1.0)
+        self._tail_evade_side = motion.clamp(side, -1.0, 1.0)
+
+    def tail_evade(self) -> tuple[float, float]:
+        """返回当前尾巴避让状态 ``(强度, 侧别)``（供测试与调试观察）。"""
+
+        return self._tail_evade, self._tail_evade_side
 
     def is_dragging(self) -> bool:
         """是否处于被拎起（拖拽）状态。
@@ -260,6 +290,15 @@ class PetModel:
         if self._click_timer > 0.0:
             self._click_timer = max(0.0, self._click_timer - dt)
 
+        # 尾巴避让：非对称平滑（逼近快 / 回落慢），帧率无关
+        evade_rate = (
+            C.TAIL_EVADE_ATTACK_K
+            if self._tail_evade_target > self._tail_evade
+            else C.TAIL_EVADE_RELEASE_K
+        )
+        step = motion.exponential_smoothing_t(evade_rate, dt)
+        self._tail_evade += (self._tail_evade_target - self._tail_evade) * step
+
     def _apply_life_signs(self, target: PetPose, now: float) -> None:
         """在目标姿态上叠加呼吸 / 尾巴摆动 / 耳朵抖动 / 眨眼 / 张望。"""
 
@@ -277,6 +316,16 @@ class PetModel:
             if self._effective_expression() == Expression.SLEEPING:
                 amp *= 0.25
             target.tail_angle += motion.tail_angle(now, period, amp)
+
+        # 尾巴避让（鼠标靠近 / 触碰）：向光标**反侧**摆开，并轻微上收（警觉地一缩）。
+        # 叠加在基础摆动之上 → 得到「常态慢摆 + 受扰快速躲闪」两层动态。
+        if self._tail_evade > 1e-4:
+            target.tail_angle -= (
+                self._tail_evade_side * C.TAIL_EVADE_ANGLE_DEG * self._tail_evade
+            )
+            target.tail_curve = motion.clamp(
+                target.tail_curve + C.TAIL_EVADE_CURL * self._tail_evade, 0.0, 1.0
+            )
 
         # 耳朵偶发抖动（FR-13）——仅在非睡觉态明显
         if self._effective_expression() != Expression.SLEEPING:

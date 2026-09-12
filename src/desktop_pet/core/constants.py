@@ -188,6 +188,20 @@ TAIL_AMPLITUDE_DEG: Final[float] = 14.0  # 尾巴基础摆幅（度）
 EAR_TWITCH_AMPLITUDE_DEG: Final[float] = 8.0  # 耳朵抖动幅度（度）
 LOOK_AROUND_AMPLITUDE_PX: Final[float] = 3.0  # 左右张望瞳孔偏移幅度
 
+# --------------------------------------------------------------------------- #
+# 7b. 尾巴「避让」交互（鼠标靠近 / 触碰尾巴时的反应，FR-13 扩展）
+# --------------------------------------------------------------------------- #
+# 语义：光标与尾巴中心线的距离 → 避让强度 0→1（`NEAR_PX` 内为满强度，`FAR_PX` 外为 0）。
+# 尾巴向光标的**反侧**摆开 `TAIL_EVADE_ANGLE_DEG × 强度`，同时轻微上收
+# `TAIL_EVADE_CURL × 强度`（"警觉地一缩"）。
+# 逼近用快系数、回落用慢系数（非对称）→ 产生「惊觉后缓缓放松」的余韵。
+TAIL_EVADE_NEAR_PX: Final[float] = 9.0     # 判定为「碰到尾巴」的距离（逻辑像素）
+TAIL_EVADE_FAR_PX: Final[float] = 40.0     # 超出该距离完全无反应
+TAIL_EVADE_ANGLE_DEG: Final[float] = 30.0  # 最大侧向摆开角（度）
+TAIL_EVADE_CURL: Final[float] = 0.42       # 最大上收量（叠加到 tail_curve）
+TAIL_EVADE_ATTACK_K: Final[float] = 16.0   # 避让响应平滑系数（快）
+TAIL_EVADE_RELEASE_K: Final[float] = 4.2   # 避让回落平滑系数（慢）
+
 # 气泡时序（PRD §4.3）
 BUBBLE_FADE_IN_S: Final[float] = 0.2
 BUBBLE_FADE_OUT_S: Final[float] = 0.3

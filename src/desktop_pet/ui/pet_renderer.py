@@ -38,6 +38,7 @@ from PySide6.QtGui import (
 )
 
 from desktop_pet.core import constants as C
+from desktop_pet.core import motion
 from desktop_pet.core.pet_model import PetPose
 
 # --------------------------------------------------------------------------- #
@@ -108,13 +109,30 @@ _GEO_MOUSE_RX: Final[float] = 13.5
 _GEO_MOUSE_RY: Final[float] = 11.0
 _GEO_MOUSE_TILT: Final[float] = -16.0
 
-# 尾巴（从团子左下轮廓内部伸出、渐细的**粗壮实心弧**）
-_GEO_TAIL_X: Final[float] = 46.0              # 根部落在团子轮廓**内部**（被身体压住）
-_GEO_TAIL_Y: Final[float] = 90.0
-_GEO_TAIL_LEN: Final[float] = 32.0
-_GEO_TAIL_W0: Final[float] = 16.0             # 根部粗度（接近主体描边量级）
-_GEO_TAIL_W1: Final[float] = 6.5              # 尾尖粗度
-_GEO_TAIL_CURVE_K: Final[float] = 26.0        # 弧度系数（越大越饱满）
+# 尾巴 —— 根部落在团子**左中部轮廓内部**（被主体压住），再向左上方扫出一条饱满的弧。
+#
+# 形状由三件事共同决定（见 `tail_spine` / `_tail_outline`）：
+#   1. **角度积分脊线**：出射方向角 `_GEO_TAIL_THETA0` 沿脊线平滑转向 `+SWEEP`，
+#      曲率连续、无折点；
+#   2. **宽度剖面**：`w(t) = W1 + (W0-W1)*(1-t^P)`，根部饱满、中段保持、末段才收；
+#   3. **圆头尾尖**：末端用半圆帽收口（不做平切），避免"香肠断头"感。
+#   根部 x 取 52：在所有表情下，**轮廓路径 + 描边**的最左余量约 3.8px（最坏情况
+#   是 EXCITED）。这是刻意留的余量——根部再左移或脊线再拉长，尾尖就会被窗口左沿切掉。
+#   改这两个参数前，务必先用 ``_opt/tail_probe.py`` 重新扫参，别凭手感挪。
+_GEO_TAIL_X: Final[float] = 52.0          # 根部 x（落在身体轮廓内部，被主体遮挡）
+_GEO_TAIL_Y: Final[float] = 92.0          # 根部 y
+_GEO_TAIL_LEN: Final[float] = 40.0        # 脊线长度（随 tail_curve 略增）
+_GEO_TAIL_THETA0: Final[float] = 153.0    # 出射方向角（度，画布坐标 y 向下）
+#   153° ≈ 根部椭圆（半径 48/45）在该点的**外法线**方向（左下 27°）——
+#   沿法线出射可让尾巴轮廓与身体轮廓大致正交相交，交界处不出现凹口（"皱褶"）。
+_GEO_TAIL_SWEEP0: Final[float] = 50.0     # tail_curve=0 时的全程转向量（度，向上扫）
+_GEO_TAIL_SWEEP1: Final[float] = 70.0     # tail_curve=1 时的全程转向量（度）
+_GEO_TAIL_W0: Final[float] = 17.5         # 根部宽度（饱满）
+_GEO_TAIL_W1: Final[float] = 6.2          # 尾尖宽度（仍有厚度，收在圆帽里）
+_GEO_TAIL_TAPER_P: Final[float] = 2.2     # 宽度剖面指数（越大 → 越晚收细）
+_GEO_TAIL_GRAD_BIAS: Final[float] = 0.17  # 尾尖相对根部在渐变场上的暖向偏移
+_GEO_TAIL_SPINE_N: Final[int] = 20        # 脊线采样段数（决定外缘平滑度）
+_GEO_TAIL_CAP_SEGMENTS: Final[int] = 8    # 尾尖圆帽分段数
 
 # 描边
 _STROKE_W: Final[float] = C.OUTLINE_W         # 主体厚描边
@@ -309,18 +327,11 @@ class PetRenderer:
         add(_GEO_MOUSE_CX + mx0, _GEO_MOUSE_CY + my0,
             _GEO_MOUSE_CX + mx1, _GEO_MOUSE_CY + my1)
 
-        # --- 尾巴（对应 _draw_tail，含描边半宽与尾尖圆）---
-        tox = _GEO_TAIL_X + pose.look_x * 0.15
-        toy = _GEO_TAIL_Y + pose.body_y
-        length = _GEO_TAIL_LEN * (0.85 + 0.35 * pose.tail_curve)
-        curve = _GEO_TAIL_CURVE_K * (0.4 + pose.tail_curve)
+        # --- 尾巴（包围盒直接由 _tail_spine 现算，避免手写盒与绘制脱节）---
+        # 每个脊线采样点按「最大半宽 + 描边」外扩 → 保守覆盖整条尾巴（含圆帽）。
         tail_pad = _GEO_TAIL_W0 / 2.0 + _STROKE_W
-        tx0, ty0, tx1, ty1 = rotate(
-            -(length + 10.0) - tail_pad, -6.0 - tail_pad,
-            tail_pad, curve + tail_pad,
-            pose.tail_angle,
-        )
-        add(tox + tx0, toy + ty0, tox + tx1, toy + ty1)
+        for tx, ty in PetRenderer.tail_spine(pose):
+            add(tx - tail_pad, ty - tail_pad, tx + tail_pad, ty + tail_pad)
 
         # --- 合并 + 反锯齿外扩 + 钳制到逻辑画布 ---
         bx0 = max(0.0, min(b[0] for b in boxes) - _BOUNDS_PAD_PX)
@@ -427,39 +438,44 @@ class PetRenderer:
         return gradient
 
     @staticmethod
-    def _bezier(
-        p0: tuple[float, float],
-        p1: tuple[float, float],
-        p2: tuple[float, float],
-        p3: tuple[float, float],
-        n: int,
-    ) -> list[tuple[float, float]]:
-        """采样三次贝塞尔曲线，返回 ``n+1`` 个点。"""
+    def _body_gradient_axis(pose: PetPose) -> tuple[float, float, float, float]:
+        """身体渐变轴的两端点 ``(x0, y0, x1, y1)``（画布坐标）。
 
-        pts: list[tuple[float, float]] = []
-        for i in range(n + 1):
-            t = i / n
-            mt = 1.0 - t
-            x = (
-                mt * mt * mt * p0[0]
-                + 3.0 * mt * mt * t * p1[0]
-                + 3.0 * mt * t * t * p2[0]
-                + t * t * t * p3[0]
-            )
-            y = (
-                mt * mt * mt * p0[1]
-                + 3.0 * mt * mt * t * p1[1]
-                + 3.0 * mt * t * t * p2[1]
-                + t * t * t * p3[1]
-            )
-            pts.append((x, y))
-        return pts
+        :meth:`_draw_body` 与尾巴取色（:meth:`_tail_gradient_field`）**共用**本方法，
+        因此尾巴根部颜色与身体在该处的颜色必然一致（交界零色差）。
+        """
+
+        squish = 1.0 - pose.body_squash
+        cx = _GEO_BODY_CX
+        cy = _GEO_BODY_CY + pose.body_y
+        ry = _GEO_BODY_RY * max(0.55, squish)
+        rx = _GEO_BODY_RX * (1.0 + pose.body_squash * 0.35)
+        return cx - rx, cy - ry, cx + rx, cy + ry
+
+    @classmethod
+    def _tail_gradient_field(cls, pose: PetPose, x: float, y: float) -> float:
+        """身体渐变场在画布点 ``(x, y)`` 处的归一化参数 ``[0, 1]``。
+
+        用于按**位置**取色：尾巴根部直接取该值，即可与身体底色无缝衔接。
+        """
+
+        x0, y0, x1, y1 = cls._body_gradient_axis(pose)
+        vx, vy = x1 - x0, y1 - y0
+        denom = vx * vx + vy * vy or 1.0
+        return ((x - x0) * vx + (y - y0) * vy) / denom
 
     @staticmethod
     def _tapered_path(
         pts: list[tuple[float, float]], w0: float, w1: float
     ) -> QPainterPath:
-        """把中心线 ``pts`` 扩展为**由粗到细**的填充路径（尾巴）。"""
+        """把中心线 ``pts`` 扩展为**由粗到细**的填充路径（等宽锥形轮廓）。
+
+        .. note::
+           这是**宽度线性**收细 + **平切端点**的实现。尾巴已改用
+           :meth:`_tail_outline`（非线性剖面 + 圆头尾尖 + 平滑轮廓）——后者在
+           粗描边下没有多边形棱角，也不会有"香肠断头"感。保留本方法供其它
+           需要朴素锥形的场合复用。
+        """
 
         n = len(pts) - 1
         left: list[tuple[float, float]] = []
@@ -512,38 +528,149 @@ class PetRenderer:
         painter.setBrush(QBrush(gradient))
         painter.drawEllipse(QRectF(cx - radius, cy - radius, radius * 2.0, radius * 2.0))
 
+    # ------------------------------------------------------------------ #
+    # 尾巴：几何生成（绘制 / 脏区 / 交互共用同一条脊线）
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def tail_spine(pose: PetPose) -> list[tuple[float, float]]:
+        """返回尾巴**中心线**在逻辑画布（160×180）下的采样点。
+
+        脊线由「方向角自 ``_GEO_TAIL_THETA0`` 平滑转到 ``+SWEEP``」逐段积分得到
+        （曲率连续、无折点），再施加根部位移与 ``pose.tail_angle`` 整体旋转，
+        与 :meth:`_draw_tail` 的绘制空间完全一致。
+
+        本方法是尾巴几何的**唯一来源**：
+
+        * :meth:`_draw_tail` 据此生成轮廓；
+        * :meth:`_local_bounds` 据此计算脏区包围盒；
+        * ``PetWindow`` 据此计算光标与尾巴的亲近度（鼠标交互）。
+
+        Args:
+            pose: 当前姿态。
+
+        Returns:
+            ``_GEO_TAIL_SPINE_N + 1`` 个画布坐标点（根 → 尖）。
+        """
+
+        curve = motion.clamp(pose.tail_curve, 0.0, 1.0)
+        length = _GEO_TAIL_LEN * (0.85 + 0.35 * curve)
+        sweep = _GEO_TAIL_SWEEP0 + (_GEO_TAIL_SWEEP1 - _GEO_TAIL_SWEEP0) * curve
+
+        ox = _GEO_TAIL_X + pose.look_x * 0.15
+        oy = _GEO_TAIL_Y + pose.body_y
+        rot = math.radians(pose.tail_angle)
+        cos_r, sin_r = math.cos(rot), math.sin(rot)
+
+        points: list[tuple[float, float]] = []
+        local_x = local_y = 0.0
+        step = length / _GEO_TAIL_SPINE_N
+        for i in range(_GEO_TAIL_SPINE_N + 1):
+            points.append(
+                (ox + local_x * cos_r - local_y * sin_r,
+                 oy + local_x * sin_r + local_y * cos_r)
+            )
+            angle = math.radians(
+                _GEO_TAIL_THETA0
+                + sweep * motion.smoothstep(i / _GEO_TAIL_SPINE_N)
+            )
+            local_x += math.cos(angle) * step
+            local_y += math.sin(angle) * step
+        return points
+
+    @staticmethod
+    def _tail_width_at(t: float) -> float:
+        """尾巴宽度剖面（``t`` 为沿脊线的归一化位置）。
+
+        ``w(t) = W1 + (W0 - W1) * (1 - t^P)``：根部饱满、中段保持、**末段才收细**。
+        原先的线性 taper 会让整条尾巴显得单薄（像一片刀片）。
+        """
+
+        return _GEO_TAIL_W1 + (_GEO_TAIL_W0 - _GEO_TAIL_W1) * (
+            1.0 - motion.clamp(t, 0.0, 1.0) ** _GEO_TAIL_TAPER_P
+        )
+
+    @staticmethod
+    def _smooth_closed_path(points: list[tuple[float, float]]) -> QPainterPath:
+        """用「过相邻中点的二次贝塞尔」把点列连成**平滑闭合路径**。
+
+        相比逐点 ``lineTo``，粗描边下外缘不会出现多边形棱角。
+        """
+
+        path = QPainterPath()
+        n = len(points)
+        path.moveTo(
+            (points[0][0] + points[-1][0]) / 2.0,
+            (points[0][1] + points[-1][1]) / 2.0,
+        )
+        for i in range(n):
+            px, py = points[i]
+            qx, qy = points[(i + 1) % n]
+            path.quadTo(px, py, (px + qx) / 2.0, (py + qy) / 2.0)
+        path.closeSubpath()
+        return path
+
+    @classmethod
+    def _tail_outline(cls, spine: list[tuple[float, float]]) -> QPainterPath:
+        """把中心线扩成**平滑闭合轮廓**（左右包络 + 圆头尾尖）。
+
+        尾尖用半圆帽收口而非平切，消除"香肠断头"的僵硬感。
+        """
+
+        n = len(spine) - 1
+        left: list[tuple[float, float]] = []
+        right: list[tuple[float, float]] = []
+
+        for i, (x, y) in enumerate(spine):
+            if i == 0:
+                dx, dy = spine[1][0] - x, spine[1][1] - y
+            elif i == n:
+                dx, dy = x - spine[i - 1][0], y - spine[i - 1][1]
+            else:
+                dx, dy = (
+                    spine[i + 1][0] - spine[i - 1][0],
+                    spine[i + 1][1] - spine[i - 1][1],
+                )
+            seg = math.hypot(dx, dy) or 1.0
+            nx, ny = -dy / seg, dx / seg
+            half = cls._tail_width_at(i / n) / 2.0
+            left.append((x + nx * half, y + ny * half))
+            right.append((x - nx * half, y - ny * half))
+
+        points = left[:]
+        # 圆头尾尖：以末端点为圆心，从左包络半圆扫到右包络
+        tip_x, tip_y = spine[-1]
+        radius = cls._tail_width_at(1.0) / 2.0
+        dx, dy = spine[-1][0] - spine[-2][0], spine[-1][1] - spine[-2][1]
+        seg = math.hypot(dx, dy) or 1.0
+        base_angle = math.atan2(dy / seg, dx / seg)
+        for k in range(1, _GEO_TAIL_CAP_SEGMENTS):
+            angle = base_angle - math.pi / 2.0 + math.pi * (k / _GEO_TAIL_CAP_SEGMENTS)
+            points.append(
+                (tip_x + math.cos(angle) * radius, tip_y + math.sin(angle) * radius)
+            )
+        points.extend(reversed(right))
+        return cls._smooth_closed_path(points)
+
     def _draw_tail(self, painter: QPainter, pose: PetPose) -> None:
-        """尾巴：从团子左侧伸出、逐渐变细的粗弧；随 ``tail_angle`` / ``tail_curve`` 变化。"""
+        """尾巴：从团子左中部伸出、向左上扫出的**饱满渐细弧**。
 
-        painter.save()
-        try:
-            ox = _GEO_TAIL_X + pose.look_x * 0.15
-            oy = _GEO_TAIL_Y + pose.body_y
-            painter.translate(ox, oy)
-            painter.rotate(pose.tail_angle)
+        颜色按身体渐变场取色 —— 根部与身体在该点的颜色**完全相同**（交界无色差），
+        沿脊线向暖端偏移 ``_GEO_TAIL_GRAD_BIAS``，形成「越往尾尖越亮暖」的过渡。
+        """
 
-            length = _GEO_TAIL_LEN * (0.85 + 0.35 * pose.tail_curve)
-            curve = _GEO_TAIL_CURVE_K * (0.4 + pose.tail_curve)
-            spine = self._bezier(
-                (0.0, 0.0),
-                (-length * 0.32, curve * 0.10),
-                (-length * 0.80, curve * 0.50),
-                (-length, curve),
-                12,
-            )
-            path = self._tapered_path(spine, _GEO_TAIL_W0, _GEO_TAIL_W1)
+        spine = self.tail_spine(pose)
+        path = self._tail_outline(spine)
 
-            # 暖色尾巴：取彩虹渐变的中段（奶油黄 → 暖橙），贴近参考图的暖调尾巴
-            gradient = QLinearGradient(
-                QPointF(-length, curve), QPointF(0.0, 0.0)
-            )
-            gradient.setColorAt(0.0, QColor(self._sample_gradient(0.12)))
-            gradient.setColorAt(1.0, QColor(self._sample_gradient(0.62)))
-            painter.setPen(self._outline)
-            painter.setBrush(QBrush(gradient))
-            painter.drawPath(path)
-        finally:
-            painter.restore()
+        frac = self._tail_gradient_field(pose, spine[0][0], spine[0][1])
+        gradient = QLinearGradient(QPointF(*spine[0]), QPointF(*spine[-1]))
+        gradient.setColorAt(
+            0.0, QColor(self._sample_gradient(frac - _GEO_TAIL_GRAD_BIAS))
+        )
+        gradient.setColorAt(1.0, QColor(self._sample_gradient(frac)))
+
+        painter.setPen(self._outline)
+        painter.setBrush(QBrush(gradient))
+        painter.drawPath(path)
 
     def _draw_body(self, painter: QPainter, pose: PetPose) -> None:
         """团子主体：头身融合的圆球（含耳朵、后肢），填充柔和全息彩虹渐变。"""
@@ -555,9 +682,7 @@ class PetRenderer:
         rx = _GEO_BODY_RX * (1.0 + pose.body_squash * 0.35)
 
         body_rect = QRectF(cx - rx, cy - ry, rx * 2.0, ry * 2.0)
-        gradient = self._body_gradient(
-            cx - rx, cy - ry, cx + rx, cy + ry,
-        )
+        gradient = self._body_gradient(*self._body_gradient_axis(pose))
 
         # 轮廓 = 圆球 ∪ 两只三角耳（并集保证"头身融合"、无接缝）
         silhouette = QPainterPath()
