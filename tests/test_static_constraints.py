@@ -90,6 +90,9 @@ def test_core_imports_without_loading_qt(project_root: Path) -> None:
         "import desktop_pet.core.motion\n"
         "import desktop_pet.core.mood_state_machine\n"
         "import desktop_pet.core.pet_model\n"
+        "import desktop_pet.core.paths\n"
+        "import desktop_pet.core.vocabulary\n"
+        "import desktop_pet.core.vocab_store\n"
         "loaded = [m for m in sys.modules if m.startswith('PySide6')]\n"
         "assert not loaded, 'core 导入过程加载了 Qt: %r' % loaded\n"
         "print('CORE_IS_QT_FREE')\n"
@@ -206,6 +209,12 @@ def test_color_palette_matches_prd() -> None:
         "glow_yellow": "#FFD08A",
         "glow_blue": "#B9D4E8",
         "warm_brown": "#8B6B4F",  # 兼容保留：ui.bubble 描边仍引用
+        # —— 日语学习新增（设计 §7.4）——
+        "bubble_sub_text": "#9C8570",    # 假名次级文字
+        "bubble_faint_text": "#B7A99A",  # 释义最淡文字
+        "vocab_bg": "#FFFDF8",           # 生词本底色
+        "vocab_text": "#5A4636",         # 生词本正文
+        "vocab_level_tag": "#7A9E7E",    # 等级标签色
     }
     assert C.COLORS == expected
 

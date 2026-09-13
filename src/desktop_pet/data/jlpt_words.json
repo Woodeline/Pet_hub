@@ -1,0 +1,4505 @@
+{
+  "version": 1,
+  "words": [
+    {
+      "id": "n5-0001",
+      "level": "N5",
+      "word": "私",
+      "kana": "わたし",
+      "romaji": "watashi",
+      "translation": "我",
+      "meaning": "第一人称代词，通用/正式说法"
+    },
+    {
+      "id": "n5-0002",
+      "level": "N5",
+      "word": "あなた",
+      "kana": "あなた",
+      "romaji": "anata",
+      "translation": "你",
+      "meaning": "第二人称代词，礼貌说法"
+    },
+    {
+      "id": "n5-0003",
+      "level": "N5",
+      "word": "人",
+      "kana": "ひと",
+      "romaji": "hito",
+      "translation": "人",
+      "meaning": "名词，指人或他人"
+    },
+    {
+      "id": "n5-0004",
+      "level": "N5",
+      "word": "男",
+      "kana": "おとこ",
+      "romaji": "otoko",
+      "translation": "男人",
+      "meaning": "名词，成年男性"
+    },
+    {
+      "id": "n5-0005",
+      "level": "N5",
+      "word": "女",
+      "kana": "おんな",
+      "romaji": "onna",
+      "translation": "女人",
+      "meaning": "名词，成年女性"
+    },
+    {
+      "id": "n5-0006",
+      "level": "N5",
+      "word": "子供",
+      "kana": "こども",
+      "romaji": "kodomo",
+      "translation": "孩子",
+      "meaning": "名词，对儿童的通称"
+    },
+    {
+      "id": "n5-0007",
+      "level": "N5",
+      "word": "友達",
+      "kana": "ともだち",
+      "romaji": "tomodachi",
+      "translation": "朋友",
+      "meaning": "名词，关系亲近的人"
+    },
+    {
+      "id": "n5-0008",
+      "level": "N5",
+      "word": "先生",
+      "kana": "せんせい",
+      "romaji": "sensei",
+      "translation": "老师",
+      "meaning": "名词，也用于称呼医生/律师"
+    },
+    {
+      "id": "n5-0009",
+      "level": "N5",
+      "word": "学生",
+      "kana": "がくせい",
+      "romaji": "gakusei",
+      "translation": "学生",
+      "meaning": "名词，在学校学习的人"
+    },
+    {
+      "id": "n5-0010",
+      "level": "N5",
+      "word": "学校",
+      "kana": "がっこう",
+      "romaji": "gakkou",
+      "translation": "学校",
+      "meaning": "名词，学习场所"
+    },
+    {
+      "id": "n5-0011",
+      "level": "N5",
+      "word": "会社",
+      "kana": "かいしゃ",
+      "romaji": "kaisha",
+      "translation": "公司",
+      "meaning": "名词，企业"
+    },
+    {
+      "id": "n5-0012",
+      "level": "N5",
+      "word": "家",
+      "kana": "いえ",
+      "romaji": "ie",
+      "translation": "家",
+      "meaning": "名词，住宅"
+    },
+    {
+      "id": "n5-0013",
+      "level": "N5",
+      "word": "部屋",
+      "kana": "へや",
+      "romaji": "heya",
+      "translation": "房间",
+      "meaning": "名词，屋子"
+    },
+    {
+      "id": "n5-0014",
+      "level": "N5",
+      "word": "電話",
+      "kana": "でんわ",
+      "romaji": "denwa",
+      "translation": "电话",
+      "meaning": "名词，也作サ变动词「打电话」"
+    },
+    {
+      "id": "n5-0015",
+      "level": "N5",
+      "word": "名前",
+      "kana": "なまえ",
+      "romaji": "namae",
+      "translation": "名字",
+      "meaning": "名词，人的称呼"
+    },
+    {
+      "id": "n5-0016",
+      "level": "N5",
+      "word": "国",
+      "kana": "くに",
+      "romaji": "kuni",
+      "translation": "国家",
+      "meaning": "名词，国土/祖国"
+    },
+    {
+      "id": "n5-0017",
+      "level": "N5",
+      "word": "日本",
+      "kana": "にほん",
+      "romaji": "nihon",
+      "translation": "日本",
+      "meaning": "专有名词，国名"
+    },
+    {
+      "id": "n5-0018",
+      "level": "N5",
+      "word": "本",
+      "kana": "ほん",
+      "romaji": "hon",
+      "translation": "书",
+      "meaning": "名词，书籍"
+    },
+    {
+      "id": "n5-0019",
+      "level": "N5",
+      "word": "水",
+      "kana": "みず",
+      "romaji": "mizu",
+      "translation": "水",
+      "meaning": "名词，饮用水"
+    },
+    {
+      "id": "n5-0020",
+      "level": "N5",
+      "word": "お茶",
+      "kana": "おちゃ",
+      "romaji": "ocha",
+      "translation": "茶",
+      "meaning": "名词，茶水"
+    },
+    {
+      "id": "n5-0021",
+      "level": "N5",
+      "word": "ご飯",
+      "kana": "ごはん",
+      "romaji": "gohan",
+      "translation": "米饭",
+      "meaning": "名词，也指一顿饭"
+    },
+    {
+      "id": "n5-0022",
+      "level": "N5",
+      "word": "朝",
+      "kana": "あさ",
+      "romaji": "asa",
+      "translation": "早上",
+      "meaning": "名词，早晨"
+    },
+    {
+      "id": "n5-0023",
+      "level": "N5",
+      "word": "昼",
+      "kana": "ひる",
+      "romaji": "hiru",
+      "translation": "中午",
+      "meaning": "名词，白天/正午"
+    },
+    {
+      "id": "n5-0024",
+      "level": "N5",
+      "word": "夜",
+      "kana": "よる",
+      "romaji": "yoru",
+      "translation": "夜晚",
+      "meaning": "名词，夜里"
+    },
+    {
+      "id": "n5-0025",
+      "level": "N5",
+      "word": "今日",
+      "kana": "きょう",
+      "romaji": "kyou",
+      "translation": "今天",
+      "meaning": "名词，当天"
+    },
+    {
+      "id": "n5-0026",
+      "level": "N5",
+      "word": "明日",
+      "kana": "あした",
+      "romaji": "ashita",
+      "translation": "明天",
+      "meaning": "名词，第二天"
+    },
+    {
+      "id": "n5-0027",
+      "level": "N5",
+      "word": "昨日",
+      "kana": "きのう",
+      "romaji": "kinou",
+      "translation": "昨天",
+      "meaning": "名词，前一天"
+    },
+    {
+      "id": "n5-0028",
+      "level": "N5",
+      "word": "毎日",
+      "kana": "まいにち",
+      "romaji": "mainichi",
+      "translation": "每天",
+      "meaning": "名词/副词，天天"
+    },
+    {
+      "id": "n5-0029",
+      "level": "N5",
+      "word": "時間",
+      "kana": "じかん",
+      "romaji": "jikan",
+      "translation": "时间",
+      "meaning": "名词，也指小时"
+    },
+    {
+      "id": "n5-0030",
+      "level": "N5",
+      "word": "今",
+      "kana": "いま",
+      "romaji": "ima",
+      "translation": "现在",
+      "meaning": "名词，此刻"
+    },
+    {
+      "id": "n5-0031",
+      "level": "N5",
+      "word": "天気",
+      "kana": "てんき",
+      "romaji": "tenki",
+      "translation": "天气",
+      "meaning": "名词，气象"
+    },
+    {
+      "id": "n5-0032",
+      "level": "N5",
+      "word": "雨",
+      "kana": "あめ",
+      "romaji": "ame",
+      "translation": "雨",
+      "meaning": "名词，降雨"
+    },
+    {
+      "id": "n5-0033",
+      "level": "N5",
+      "word": "空",
+      "kana": "そら",
+      "romaji": "sora",
+      "translation": "天空",
+      "meaning": "名词，天空/天气"
+    },
+    {
+      "id": "n5-0034",
+      "level": "N5",
+      "word": "花",
+      "kana": "はな",
+      "romaji": "hana",
+      "translation": "花",
+      "meaning": "名词，花朵"
+    },
+    {
+      "id": "n5-0035",
+      "level": "N5",
+      "word": "山",
+      "kana": "やま",
+      "romaji": "yama",
+      "translation": "山",
+      "meaning": "名词，山岳"
+    },
+    {
+      "id": "n5-0036",
+      "level": "N5",
+      "word": "川",
+      "kana": "かわ",
+      "romaji": "kawa",
+      "translation": "河",
+      "meaning": "名词，河流"
+    },
+    {
+      "id": "n5-0037",
+      "level": "N5",
+      "word": "海",
+      "kana": "うみ",
+      "romaji": "umi",
+      "translation": "海",
+      "meaning": "名词，大海"
+    },
+    {
+      "id": "n5-0038",
+      "level": "N5",
+      "word": "犬",
+      "kana": "いぬ",
+      "romaji": "inu",
+      "translation": "狗",
+      "meaning": "名词，家犬"
+    },
+    {
+      "id": "n5-0039",
+      "level": "N5",
+      "word": "猫",
+      "kana": "ねこ",
+      "romaji": "neko",
+      "translation": "猫",
+      "meaning": "名词，家猫"
+    },
+    {
+      "id": "n5-0040",
+      "level": "N5",
+      "word": "車",
+      "kana": "くるま",
+      "romaji": "kuruma",
+      "translation": "车",
+      "meaning": "名词，汽车"
+    },
+    {
+      "id": "n5-0041",
+      "level": "N5",
+      "word": "自転車",
+      "kana": "じてんしゃ",
+      "romaji": "jitensha",
+      "translation": "自行车",
+      "meaning": "名词，脚踏车"
+    },
+    {
+      "id": "n5-0042",
+      "level": "N5",
+      "word": "電車",
+      "kana": "でんしゃ",
+      "romaji": "densha",
+      "translation": "电车",
+      "meaning": "名词，电力列车"
+    },
+    {
+      "id": "n5-0043",
+      "level": "N5",
+      "word": "駅",
+      "kana": "えき",
+      "romaji": "eki",
+      "translation": "车站",
+      "meaning": "名词，火车站"
+    },
+    {
+      "id": "n5-0044",
+      "level": "N5",
+      "word": "店",
+      "kana": "みせ",
+      "romaji": "mise",
+      "translation": "商店",
+      "meaning": "名词，店铺"
+    },
+    {
+      "id": "n5-0045",
+      "level": "N5",
+      "word": "お金",
+      "kana": "おかね",
+      "romaji": "okane",
+      "translation": "钱",
+      "meaning": "名词，金钱"
+    },
+    {
+      "id": "n5-0046",
+      "level": "N5",
+      "word": "食べる",
+      "kana": "たべる",
+      "romaji": "taberu",
+      "translation": "吃",
+      "meaning": "动词（一段），进食"
+    },
+    {
+      "id": "n5-0047",
+      "level": "N5",
+      "word": "飲む",
+      "kana": "のむ",
+      "romaji": "nomu",
+      "translation": "喝",
+      "meaning": "动词（五段），饮用"
+    },
+    {
+      "id": "n5-0048",
+      "level": "N5",
+      "word": "見る",
+      "kana": "みる",
+      "romaji": "miru",
+      "translation": "看",
+      "meaning": "动词（一段），观看"
+    },
+    {
+      "id": "n5-0049",
+      "level": "N5",
+      "word": "聞く",
+      "kana": "きく",
+      "romaji": "kiku",
+      "translation": "听",
+      "meaning": "动词（五段），听/询问"
+    },
+    {
+      "id": "n5-0050",
+      "level": "N5",
+      "word": "話す",
+      "kana": "はなす",
+      "romaji": "hanasu",
+      "translation": "说话",
+      "meaning": "动词（五段），交谈"
+    },
+    {
+      "id": "n5-0051",
+      "level": "N5",
+      "word": "読む",
+      "kana": "よむ",
+      "romaji": "yomu",
+      "translation": "读",
+      "meaning": "动词（五段），阅读"
+    },
+    {
+      "id": "n5-0052",
+      "level": "N5",
+      "word": "書く",
+      "kana": "かく",
+      "romaji": "kaku",
+      "translation": "写",
+      "meaning": "动词（五段），书写"
+    },
+    {
+      "id": "n5-0053",
+      "level": "N5",
+      "word": "行く",
+      "kana": "いく",
+      "romaji": "iku",
+      "translation": "去",
+      "meaning": "动词（五段），前往"
+    },
+    {
+      "id": "n5-0054",
+      "level": "N5",
+      "word": "来る",
+      "kana": "くる",
+      "romaji": "kuru",
+      "translation": "来",
+      "meaning": "动词（カ变），到来"
+    },
+    {
+      "id": "n5-0055",
+      "level": "N5",
+      "word": "帰る",
+      "kana": "かえる",
+      "romaji": "kaeru",
+      "translation": "回去",
+      "meaning": "动词（五段），返回"
+    },
+    {
+      "id": "n5-0056",
+      "level": "N5",
+      "word": "買う",
+      "kana": "かう",
+      "romaji": "kau",
+      "translation": "买",
+      "meaning": "动词（五段），购买"
+    },
+    {
+      "id": "n5-0057",
+      "level": "N5",
+      "word": "する",
+      "kana": "する",
+      "romaji": "suru",
+      "translation": "做",
+      "meaning": "动词（サ变），进行"
+    },
+    {
+      "id": "n5-0058",
+      "level": "N5",
+      "word": "寝る",
+      "kana": "ねる",
+      "romaji": "neru",
+      "translation": "睡觉",
+      "meaning": "动词（一段），就寝"
+    },
+    {
+      "id": "n5-0059",
+      "level": "N5",
+      "word": "起きる",
+      "kana": "おきる",
+      "romaji": "okiru",
+      "translation": "起床",
+      "meaning": "动词（一段），起来"
+    },
+    {
+      "id": "n5-0060",
+      "level": "N5",
+      "word": "働く",
+      "kana": "はたらく",
+      "romaji": "hataraku",
+      "translation": "工作",
+      "meaning": "动词（五段），劳动"
+    },
+    {
+      "id": "n5-0061",
+      "level": "N5",
+      "word": "勉強",
+      "kana": "べんきょう",
+      "romaji": "benkyou",
+      "translation": "学习",
+      "meaning": "名词/サ变动词，用功"
+    },
+    {
+      "id": "n5-0062",
+      "level": "N5",
+      "word": "大きい",
+      "kana": "おおきい",
+      "romaji": "ookii",
+      "translation": "大的",
+      "meaning": "形容词，尺寸大"
+    },
+    {
+      "id": "n5-0063",
+      "level": "N5",
+      "word": "小さい",
+      "kana": "ちいさい",
+      "romaji": "chiisai",
+      "translation": "小的",
+      "meaning": "形容词，尺寸小"
+    },
+    {
+      "id": "n5-0064",
+      "level": "N5",
+      "word": "高い",
+      "kana": "たかい",
+      "romaji": "takai",
+      "translation": "高的/贵的",
+      "meaning": "形容词，高度或价格高"
+    },
+    {
+      "id": "n5-0065",
+      "level": "N5",
+      "word": "安い",
+      "kana": "やすい",
+      "romaji": "yasui",
+      "translation": "便宜的",
+      "meaning": "形容词，价格低"
+    },
+    {
+      "id": "n5-0066",
+      "level": "N5",
+      "word": "新しい",
+      "kana": "あたらしい",
+      "romaji": "atarashii",
+      "translation": "新的",
+      "meaning": "形容词，崭新"
+    },
+    {
+      "id": "n5-0067",
+      "level": "N5",
+      "word": "古い",
+      "kana": "ふるい",
+      "romaji": "furui",
+      "translation": "旧的",
+      "meaning": "形容词，陈旧"
+    },
+    {
+      "id": "n5-0068",
+      "level": "N5",
+      "word": "いい",
+      "kana": "いい",
+      "romaji": "ii",
+      "translation": "好的",
+      "meaning": "形容词，良好"
+    },
+    {
+      "id": "n5-0069",
+      "level": "N5",
+      "word": "悪い",
+      "kana": "わるい",
+      "romaji": "warui",
+      "translation": "坏的",
+      "meaning": "形容词，不好"
+    },
+    {
+      "id": "n5-0070",
+      "level": "N5",
+      "word": "暑い",
+      "kana": "あつい",
+      "romaji": "atsui",
+      "translation": "热的",
+      "meaning": "形容词，天气炎热"
+    },
+    {
+      "id": "n5-0071",
+      "level": "N5",
+      "word": "寒い",
+      "kana": "さむい",
+      "romaji": "samui",
+      "translation": "冷的",
+      "meaning": "形容词，天气寒冷"
+    },
+    {
+      "id": "n5-0072",
+      "level": "N5",
+      "word": "面白い",
+      "kana": "おもしろい",
+      "romaji": "omoshiroi",
+      "translation": "有趣的",
+      "meaning": "形容词，好玩"
+    },
+    {
+      "id": "n5-0073",
+      "level": "N5",
+      "word": "楽しい",
+      "kana": "たのしい",
+      "romaji": "tanoshii",
+      "translation": "快乐的",
+      "meaning": "形容词，愉快"
+    },
+    {
+      "id": "n5-0074",
+      "level": "N5",
+      "word": "美味しい",
+      "kana": "おいしい",
+      "romaji": "oishii",
+      "translation": "好吃的",
+      "meaning": "形容词，味道好"
+    },
+    {
+      "id": "n5-0075",
+      "level": "N5",
+      "word": "忙しい",
+      "kana": "いそがしい",
+      "romaji": "isogashii",
+      "translation": "忙碌的",
+      "meaning": "形容词，事情多"
+    },
+    {
+      "id": "n5-0076",
+      "level": "N5",
+      "word": "静か",
+      "kana": "しずか",
+      "romaji": "shizuka",
+      "translation": "安静",
+      "meaning": "形容动词，寂静"
+    },
+    {
+      "id": "n5-0077",
+      "level": "N5",
+      "word": "便利",
+      "kana": "べんり",
+      "romaji": "benri",
+      "translation": "方便",
+      "meaning": "形容动词，便利"
+    },
+    {
+      "id": "n5-0078",
+      "level": "N5",
+      "word": "好き",
+      "kana": "すき",
+      "romaji": "suki",
+      "translation": "喜欢",
+      "meaning": "形容动词，中意"
+    },
+    {
+      "id": "n5-0079",
+      "level": "N5",
+      "word": "一つ",
+      "kana": "ひとつ",
+      "romaji": "hitotsu",
+      "translation": "一个",
+      "meaning": "名词/量词，计数一"
+    },
+    {
+      "id": "n5-0080",
+      "level": "N5",
+      "word": "二つ",
+      "kana": "ふたつ",
+      "romaji": "futatsu",
+      "translation": "两个",
+      "meaning": "名词/量词，计数二"
+    },
+    {
+      "id": "n5-0081",
+      "level": "N5",
+      "word": "三つ",
+      "kana": "みっつ",
+      "romaji": "mittsu",
+      "translation": "三个",
+      "meaning": "名词/量词，计数三"
+    },
+    {
+      "id": "n5-0082",
+      "level": "N5",
+      "word": "何",
+      "kana": "なに",
+      "romaji": "nani",
+      "translation": "什么",
+      "meaning": "疑问词，询问事物"
+    },
+    {
+      "id": "n5-0083",
+      "level": "N5",
+      "word": "誰",
+      "kana": "だれ",
+      "romaji": "dare",
+      "translation": "谁",
+      "meaning": "疑问词，询问人"
+    },
+    {
+      "id": "n5-0084",
+      "level": "N5",
+      "word": "どこ",
+      "kana": "どこ",
+      "romaji": "doko",
+      "translation": "哪里",
+      "meaning": "疑问词，询问地点"
+    },
+    {
+      "id": "n5-0085",
+      "level": "N5",
+      "word": "いつ",
+      "kana": "いつ",
+      "romaji": "itsu",
+      "translation": "什么时候",
+      "meaning": "疑问词，询问时间"
+    },
+    {
+      "id": "n5-0086",
+      "level": "N5",
+      "word": "とても",
+      "kana": "とても",
+      "romaji": "totemo",
+      "translation": "非常",
+      "meaning": "副词，程度高"
+    },
+    {
+      "id": "n5-0087",
+      "level": "N5",
+      "word": "ちょっと",
+      "kana": "ちょっと",
+      "romaji": "chotto",
+      "translation": "稍微",
+      "meaning": "副词，少量/一会儿"
+    },
+    {
+      "id": "n5-0088",
+      "level": "N5",
+      "word": "また",
+      "kana": "また",
+      "romaji": "mata",
+      "translation": "又、再",
+      "meaning": "副词，再次"
+    },
+    {
+      "id": "n5-0089",
+      "level": "N5",
+      "word": "今朝",
+      "kana": "けさ",
+      "romaji": "kesa",
+      "translation": "今天早上",
+      "meaning": "名词，今天早晨"
+    },
+    {
+      "id": "n5-0090",
+      "level": "N5",
+      "word": "晩",
+      "kana": "ばん",
+      "romaji": "ban",
+      "translation": "晚上",
+      "meaning": "名词，夜晚"
+    },
+    {
+      "id": "n5-0091",
+      "level": "N5",
+      "word": "出口",
+      "kana": "でぐち",
+      "romaji": "deguchi",
+      "translation": "出口",
+      "meaning": "名词，出去的口"
+    },
+    {
+      "id": "n5-0092",
+      "level": "N5",
+      "word": "入口",
+      "kana": "いりぐち",
+      "romaji": "iriguchi",
+      "translation": "入口",
+      "meaning": "名词，进入的口"
+    },
+    {
+      "id": "n5-0093",
+      "level": "N5",
+      "word": "右",
+      "kana": "みぎ",
+      "romaji": "migi",
+      "translation": "右",
+      "meaning": "名词，右侧"
+    },
+    {
+      "id": "n5-0094",
+      "level": "N5",
+      "word": "左",
+      "kana": "ひだり",
+      "romaji": "hidari",
+      "translation": "左",
+      "meaning": "名词，左侧"
+    },
+    {
+      "id": "n5-0095",
+      "level": "N5",
+      "word": "前",
+      "kana": "まえ",
+      "romaji": "mae",
+      "translation": "前面",
+      "meaning": "名词，前方"
+    },
+    {
+      "id": "n5-0096",
+      "level": "N5",
+      "word": "後ろ",
+      "kana": "うしろ",
+      "romaji": "ushiro",
+      "translation": "后面",
+      "meaning": "名词，后方"
+    },
+    {
+      "id": "n5-0097",
+      "level": "N5",
+      "word": "上",
+      "kana": "うえ",
+      "romaji": "ue",
+      "translation": "上面",
+      "meaning": "名词，上方"
+    },
+    {
+      "id": "n5-0098",
+      "level": "N5",
+      "word": "下",
+      "kana": "した",
+      "romaji": "shita",
+      "translation": "下面",
+      "meaning": "名词，下方"
+    },
+    {
+      "id": "n5-0099",
+      "level": "N5",
+      "word": "中",
+      "kana": "なか",
+      "romaji": "naka",
+      "translation": "里面",
+      "meaning": "名词，内部"
+    },
+    {
+      "id": "n5-0100",
+      "level": "N5",
+      "word": "外",
+      "kana": "そと",
+      "romaji": "soto",
+      "translation": "外面",
+      "meaning": "名词，外部"
+    },
+    {
+      "id": "n4-0001",
+      "level": "N4",
+      "word": "会う",
+      "kana": "あう",
+      "romaji": "au",
+      "translation": "见面",
+      "meaning": "动词（五段），碰面"
+    },
+    {
+      "id": "n4-0002",
+      "level": "N4",
+      "word": "開く",
+      "kana": "あく",
+      "romaji": "aku",
+      "translation": "开",
+      "meaning": "动词（五段），自动词，打开"
+    },
+    {
+      "id": "n4-0003",
+      "level": "N4",
+      "word": "上げる",
+      "kana": "あげる",
+      "romaji": "ageru",
+      "translation": "给、举起",
+      "meaning": "动词（一段），抬起/给予"
+    },
+    {
+      "id": "n4-0004",
+      "level": "N4",
+      "word": "遊ぶ",
+      "kana": "あそぶ",
+      "romaji": "asobu",
+      "translation": "玩",
+      "meaning": "动词（五段），游玩"
+    },
+    {
+      "id": "n4-0005",
+      "level": "N4",
+      "word": "集まる",
+      "kana": "あつまる",
+      "romaji": "atsumaru",
+      "translation": "聚集",
+      "meaning": "动词（五段），集合"
+    },
+    {
+      "id": "n4-0006",
+      "level": "N4",
+      "word": "安心",
+      "kana": "あんしん",
+      "romaji": "anshin",
+      "translation": "安心",
+      "meaning": "名词/サ变动词，放心"
+    },
+    {
+      "id": "n4-0007",
+      "level": "N4",
+      "word": "案内",
+      "kana": "あんない",
+      "romaji": "annai",
+      "translation": "引导",
+      "meaning": "名词/サ变动词，导游"
+    },
+    {
+      "id": "n4-0008",
+      "level": "N4",
+      "word": "以下",
+      "kana": "いか",
+      "romaji": "ika",
+      "translation": "以下",
+      "meaning": "名词，低于某标准"
+    },
+    {
+      "id": "n4-0009",
+      "level": "N4",
+      "word": "意見",
+      "kana": "いけん",
+      "romaji": "iken",
+      "translation": "意见",
+      "meaning": "名词，看法"
+    },
+    {
+      "id": "n4-0010",
+      "level": "N4",
+      "word": "石",
+      "kana": "いし",
+      "romaji": "ishi",
+      "translation": "石头",
+      "meaning": "名词，石块"
+    },
+    {
+      "id": "n4-0011",
+      "level": "N4",
+      "word": "急ぐ",
+      "kana": "いそぐ",
+      "romaji": "isogu",
+      "translation": "赶紧",
+      "meaning": "动词（五段），匆忙"
+    },
+    {
+      "id": "n4-0012",
+      "level": "N4",
+      "word": "一緒",
+      "kana": "いっしょ",
+      "romaji": "issho",
+      "translation": "一起",
+      "meaning": "名词/副词，同在一起"
+    },
+    {
+      "id": "n4-0013",
+      "level": "N4",
+      "word": "糸",
+      "kana": "いと",
+      "romaji": "ito",
+      "translation": "线",
+      "meaning": "名词，丝线"
+    },
+    {
+      "id": "n4-0014",
+      "level": "N4",
+      "word": "以内",
+      "kana": "いない",
+      "romaji": "inai",
+      "translation": "以内",
+      "meaning": "名词，范围内"
+    },
+    {
+      "id": "n4-0015",
+      "level": "N4",
+      "word": "田舎",
+      "kana": "いなか",
+      "romaji": "inaka",
+      "translation": "乡下",
+      "meaning": "名词，农村"
+    },
+    {
+      "id": "n4-0016",
+      "level": "N4",
+      "word": "祈る",
+      "kana": "いのる",
+      "romaji": "inoru",
+      "translation": "祈祷",
+      "meaning": "动词（五段），祝愿"
+    },
+    {
+      "id": "n4-0017",
+      "level": "N4",
+      "word": "植える",
+      "kana": "うえる",
+      "romaji": "ueru",
+      "translation": "种植",
+      "meaning": "动词（一段），栽种"
+    },
+    {
+      "id": "n4-0018",
+      "level": "N4",
+      "word": "受ける",
+      "kana": "うける",
+      "romaji": "ukeru",
+      "translation": "接受",
+      "meaning": "动词（一段），承受/参加"
+    },
+    {
+      "id": "n4-0019",
+      "level": "N4",
+      "word": "動く",
+      "kana": "うごく",
+      "romaji": "ugoku",
+      "translation": "动",
+      "meaning": "动词（五段），移动"
+    },
+    {
+      "id": "n4-0020",
+      "level": "N4",
+      "word": "嘘",
+      "kana": "うそ",
+      "romaji": "uso",
+      "translation": "谎话",
+      "meaning": "名词，假话"
+    },
+    {
+      "id": "n4-0021",
+      "level": "N4",
+      "word": "打つ",
+      "kana": "うつ",
+      "romaji": "utsu",
+      "translation": "打",
+      "meaning": "动词（五段），敲打"
+    },
+    {
+      "id": "n4-0022",
+      "level": "N4",
+      "word": "写す",
+      "kana": "うつす",
+      "romaji": "utsusu",
+      "translation": "抄写、拍",
+      "meaning": "动词（五段），复制/拍照"
+    },
+    {
+      "id": "n4-0023",
+      "level": "N4",
+      "word": "移る",
+      "kana": "うつる",
+      "romaji": "utsuru",
+      "translation": "移动",
+      "meaning": "动词（五段），迁移"
+    },
+    {
+      "id": "n4-0024",
+      "level": "N4",
+      "word": "腕",
+      "kana": "うで",
+      "romaji": "ude",
+      "translation": "手臂",
+      "meaning": "名词，胳膊"
+    },
+    {
+      "id": "n4-0025",
+      "level": "N4",
+      "word": "裏",
+      "kana": "うら",
+      "romaji": "ura",
+      "translation": "背面",
+      "meaning": "名词，反面"
+    },
+    {
+      "id": "n4-0026",
+      "level": "N4",
+      "word": "売る",
+      "kana": "うる",
+      "romaji": "uru",
+      "translation": "卖",
+      "meaning": "动词（五段），出售"
+    },
+    {
+      "id": "n4-0027",
+      "level": "N4",
+      "word": "選ぶ",
+      "kana": "えらぶ",
+      "romaji": "erabu",
+      "translation": "选择",
+      "meaning": "动词（五段），挑选"
+    },
+    {
+      "id": "n4-0028",
+      "level": "N4",
+      "word": "遠慮",
+      "kana": "えんりょ",
+      "romaji": "enryo",
+      "translation": "客气",
+      "meaning": "名词/サ变动词，谦让"
+    },
+    {
+      "id": "n4-0029",
+      "level": "N4",
+      "word": "お祝い",
+      "kana": "おいわい",
+      "romaji": "oiwai",
+      "translation": "祝贺",
+      "meaning": "名词，庆贺"
+    },
+    {
+      "id": "n4-0030",
+      "level": "N4",
+      "word": "大きさ",
+      "kana": "おおきさ",
+      "romaji": "ookisa",
+      "translation": "大小",
+      "meaning": "名词，尺寸"
+    },
+    {
+      "id": "n4-0031",
+      "level": "N4",
+      "word": "お菓子",
+      "kana": "おかし",
+      "romaji": "okashi",
+      "translation": "点心",
+      "meaning": "名词，零食"
+    },
+    {
+      "id": "n4-0032",
+      "level": "N4",
+      "word": "お金持ち",
+      "kana": "おかねもち",
+      "romaji": "okanemochi",
+      "translation": "有钱人",
+      "meaning": "名词，富人"
+    },
+    {
+      "id": "n4-0033",
+      "level": "N4",
+      "word": "億",
+      "kana": "おく",
+      "romaji": "oku",
+      "translation": "亿",
+      "meaning": "数词，一万万"
+    },
+    {
+      "id": "n4-0034",
+      "level": "N4",
+      "word": "送る",
+      "kana": "おくる",
+      "romaji": "okuru",
+      "translation": "寄、送",
+      "meaning": "动词（五段），发送"
+    },
+    {
+      "id": "n4-0035",
+      "level": "N4",
+      "word": "遅れる",
+      "kana": "おくれる",
+      "romaji": "okureru",
+      "translation": "迟到",
+      "meaning": "动词（一段），延误"
+    },
+    {
+      "id": "n4-0036",
+      "level": "N4",
+      "word": "起こす",
+      "kana": "おこす",
+      "romaji": "okosu",
+      "translation": "叫醒",
+      "meaning": "动词（五段），扶起/引起"
+    },
+    {
+      "id": "n4-0037",
+      "level": "N4",
+      "word": "行う",
+      "kana": "おこなう",
+      "romaji": "okonau",
+      "translation": "进行",
+      "meaning": "动词（五段），举行"
+    },
+    {
+      "id": "n4-0038",
+      "level": "N4",
+      "word": "怒る",
+      "kana": "おこる",
+      "romaji": "okoru",
+      "translation": "生气",
+      "meaning": "动词（五段），发怒"
+    },
+    {
+      "id": "n4-0039",
+      "level": "N4",
+      "word": "押す",
+      "kana": "おす",
+      "romaji": "osu",
+      "translation": "推、按",
+      "meaning": "动词（五段），按动"
+    },
+    {
+      "id": "n4-0040",
+      "level": "N4",
+      "word": "落ちる",
+      "kana": "おちる",
+      "romaji": "ochiru",
+      "translation": "掉落",
+      "meaning": "动词（一段），跌落"
+    },
+    {
+      "id": "n4-0041",
+      "level": "N4",
+      "word": "夫",
+      "kana": "おっと",
+      "romaji": "otto",
+      "translation": "丈夫",
+      "meaning": "名词，男主人"
+    },
+    {
+      "id": "n4-0042",
+      "level": "N4",
+      "word": "音",
+      "kana": "おと",
+      "romaji": "oto",
+      "translation": "声音",
+      "meaning": "名词，响声"
+    },
+    {
+      "id": "n4-0043",
+      "level": "N4",
+      "word": "落とす",
+      "kana": "おとす",
+      "romaji": "otosu",
+      "translation": "弄掉",
+      "meaning": "动词（五段），使掉落"
+    },
+    {
+      "id": "n4-0044",
+      "level": "N4",
+      "word": "踊る",
+      "kana": "おどる",
+      "romaji": "odoru",
+      "translation": "跳舞",
+      "meaning": "动词（五段），舞蹈"
+    },
+    {
+      "id": "n4-0045",
+      "level": "N4",
+      "word": "驚く",
+      "kana": "おどろく",
+      "romaji": "odoroku",
+      "translation": "吃惊",
+      "meaning": "动词（五段），惊讶"
+    },
+    {
+      "id": "n4-0046",
+      "level": "N4",
+      "word": "同じ",
+      "kana": "おなじ",
+      "romaji": "onaji",
+      "translation": "相同",
+      "meaning": "形容动词，一样"
+    },
+    {
+      "id": "n4-0047",
+      "level": "N4",
+      "word": "お腹",
+      "kana": "おなか",
+      "romaji": "onaka",
+      "translation": "肚子",
+      "meaning": "名词，腹部"
+    },
+    {
+      "id": "n4-0048",
+      "level": "N4",
+      "word": "お願い",
+      "kana": "おねがい",
+      "romaji": "onegai",
+      "translation": "请求",
+      "meaning": "名词，拜托"
+    },
+    {
+      "id": "n4-0049",
+      "level": "N4",
+      "word": "おばさん",
+      "kana": "おばさん",
+      "romaji": "obasan",
+      "translation": "阿姨",
+      "meaning": "名词，伯母/婶婶"
+    },
+    {
+      "id": "n4-0050",
+      "level": "N4",
+      "word": "お祭り",
+      "kana": "おまつり",
+      "romaji": "omatsuri",
+      "translation": "祭典",
+      "meaning": "名词，节日庙会"
+    },
+    {
+      "id": "n4-0051",
+      "level": "N4",
+      "word": "思い出す",
+      "kana": "おもいだす",
+      "romaji": "omoidasu",
+      "translation": "想起",
+      "meaning": "动词（五段），回忆起"
+    },
+    {
+      "id": "n4-0052",
+      "level": "N4",
+      "word": "思う",
+      "kana": "おもう",
+      "romaji": "omou",
+      "translation": "想、认为",
+      "meaning": "动词（五段），思索"
+    },
+    {
+      "id": "n4-0053",
+      "level": "N4",
+      "word": "泳ぐ",
+      "kana": "およぐ",
+      "romaji": "oyogu",
+      "translation": "游泳",
+      "meaning": "动词（五段），游水"
+    },
+    {
+      "id": "n4-0054",
+      "level": "N4",
+      "word": "降りる",
+      "kana": "おりる",
+      "romaji": "oriru",
+      "translation": "下车",
+      "meaning": "动词（一段），下来"
+    },
+    {
+      "id": "n4-0055",
+      "level": "N4",
+      "word": "折る",
+      "kana": "おる",
+      "romaji": "oru",
+      "translation": "折断",
+      "meaning": "动词（五段），弄折"
+    },
+    {
+      "id": "n4-0056",
+      "level": "N4",
+      "word": "終わる",
+      "kana": "おわる",
+      "romaji": "owaru",
+      "translation": "结束",
+      "meaning": "动词（五段），完结"
+    },
+    {
+      "id": "n4-0057",
+      "level": "N4",
+      "word": "音楽",
+      "kana": "おんがく",
+      "romaji": "ongaku",
+      "translation": "音乐",
+      "meaning": "名词，乐曲"
+    },
+    {
+      "id": "n4-0058",
+      "level": "N4",
+      "word": "女の子",
+      "kana": "おんなのこ",
+      "romaji": "onnanoko",
+      "translation": "女孩",
+      "meaning": "名词，小姑娘"
+    },
+    {
+      "id": "n4-0059",
+      "level": "N4",
+      "word": "外国",
+      "kana": "がいこく",
+      "romaji": "gaikoku",
+      "translation": "外国",
+      "meaning": "名词，异国"
+    },
+    {
+      "id": "n4-0060",
+      "level": "N4",
+      "word": "外国人",
+      "kana": "がいこくじん",
+      "romaji": "gaikokujin",
+      "translation": "外国人",
+      "meaning": "名词，外籍人士"
+    },
+    {
+      "id": "n4-0061",
+      "level": "N4",
+      "word": "会議",
+      "kana": "かいぎ",
+      "romaji": "kaigi",
+      "translation": "会议",
+      "meaning": "名词，集会"
+    },
+    {
+      "id": "n4-0062",
+      "level": "N4",
+      "word": "外交",
+      "kana": "がいこう",
+      "romaji": "gaikou",
+      "translation": "外交",
+      "meaning": "名词，国际交涉"
+    },
+    {
+      "id": "n4-0063",
+      "level": "N4",
+      "word": "階段",
+      "kana": "かいだん",
+      "romaji": "kaidan",
+      "translation": "楼梯",
+      "meaning": "名词，台阶"
+    },
+    {
+      "id": "n4-0064",
+      "level": "N4",
+      "word": "買い物",
+      "kana": "かいもの",
+      "romaji": "kaimono",
+      "translation": "购物",
+      "meaning": "名词/サ变动词，买东西"
+    },
+    {
+      "id": "n4-0065",
+      "level": "N4",
+      "word": "返す",
+      "kana": "かえす",
+      "romaji": "kaesu",
+      "translation": "归还",
+      "meaning": "动词（五段），退还"
+    },
+    {
+      "id": "n4-0066",
+      "level": "N4",
+      "word": "変える",
+      "kana": "かえる",
+      "romaji": "kaeru",
+      "translation": "改变",
+      "meaning": "动词（一段），变更"
+    },
+    {
+      "id": "n4-0067",
+      "level": "N4",
+      "word": "科学",
+      "kana": "かがく",
+      "romaji": "kagaku",
+      "translation": "科学",
+      "meaning": "名词，学问"
+    },
+    {
+      "id": "n4-0068",
+      "level": "N4",
+      "word": "鏡",
+      "kana": "かがみ",
+      "romaji": "kagami",
+      "translation": "镜子",
+      "meaning": "名词，反射镜面"
+    },
+    {
+      "id": "n4-0069",
+      "level": "N4",
+      "word": "掛ける",
+      "kana": "かける",
+      "romaji": "kakeru",
+      "translation": "挂、打（电话）",
+      "meaning": "动词（一段），悬挂/拨打"
+    },
+    {
+      "id": "n4-0070",
+      "level": "N4",
+      "word": "飾る",
+      "kana": "かざる",
+      "romaji": "kazaru",
+      "translation": "装饰",
+      "meaning": "动词（五段），点缀"
+    },
+    {
+      "id": "n4-0071",
+      "level": "N4",
+      "word": "風",
+      "kana": "かぜ",
+      "romaji": "kaze",
+      "translation": "风",
+      "meaning": "名词，气流"
+    },
+    {
+      "id": "n4-0072",
+      "level": "N4",
+      "word": "家族",
+      "kana": "かぞく",
+      "romaji": "kazoku",
+      "translation": "家人",
+      "meaning": "名词，家庭"
+    },
+    {
+      "id": "n4-0073",
+      "level": "N4",
+      "word": "形",
+      "kana": "かたち",
+      "romaji": "katachi",
+      "translation": "形状",
+      "meaning": "名词，样子"
+    },
+    {
+      "id": "n4-0074",
+      "level": "N4",
+      "word": "片付ける",
+      "kana": "かたづける",
+      "romaji": "katadzukeru",
+      "translation": "收拾",
+      "meaning": "动词（一段），整理"
+    },
+    {
+      "id": "n4-0075",
+      "level": "N4",
+      "word": "勝つ",
+      "kana": "かつ",
+      "romaji": "katsu",
+      "translation": "获胜",
+      "meaning": "动词（五段），取胜"
+    },
+    {
+      "id": "n4-0076",
+      "level": "N4",
+      "word": "活動",
+      "kana": "かつどう",
+      "romaji": "katsudou",
+      "translation": "活动",
+      "meaning": "名词/サ变动词，行动"
+    },
+    {
+      "id": "n4-0077",
+      "level": "N4",
+      "word": "悲しい",
+      "kana": "かなしい",
+      "romaji": "kanashii",
+      "translation": "悲伤的",
+      "meaning": "形容词，难过"
+    },
+    {
+      "id": "n4-0078",
+      "level": "N4",
+      "word": "必ず",
+      "kana": "かならず",
+      "romaji": "kanarazu",
+      "translation": "一定",
+      "meaning": "副词，务必"
+    },
+    {
+      "id": "n4-0079",
+      "level": "N4",
+      "word": "壁",
+      "kana": "かべ",
+      "romaji": "kabe",
+      "translation": "墙壁",
+      "meaning": "名词，墙面"
+    },
+    {
+      "id": "n4-0080",
+      "level": "N4",
+      "word": "髪",
+      "kana": "かみ",
+      "romaji": "kami",
+      "translation": "头发",
+      "meaning": "名词，毛发"
+    },
+    {
+      "id": "n4-0081",
+      "level": "N4",
+      "word": "通う",
+      "kana": "かよう",
+      "romaji": "kayou",
+      "translation": "通勤/上学",
+      "meaning": "动词（五段），往返"
+    },
+    {
+      "id": "n4-0082",
+      "level": "N4",
+      "word": "体",
+      "kana": "からだ",
+      "romaji": "karada",
+      "translation": "身体",
+      "meaning": "名词，躯体"
+    },
+    {
+      "id": "n4-0083",
+      "level": "N4",
+      "word": "借りる",
+      "kana": "かりる",
+      "romaji": "kariru",
+      "translation": "借入",
+      "meaning": "动词（一段），借用"
+    },
+    {
+      "id": "n4-0084",
+      "level": "N4",
+      "word": "軽い",
+      "kana": "かるい",
+      "romaji": "karui",
+      "translation": "轻的",
+      "meaning": "形容词，重量小"
+    },
+    {
+      "id": "n4-0085",
+      "level": "N4",
+      "word": "側",
+      "kana": "がわ",
+      "romaji": "gawa",
+      "translation": "侧",
+      "meaning": "名词，旁边"
+    },
+    {
+      "id": "n4-0086",
+      "level": "N4",
+      "word": "変わる",
+      "kana": "かわる",
+      "romaji": "kawaru",
+      "translation": "变化",
+      "meaning": "动词（五段），改变"
+    },
+    {
+      "id": "n4-0087",
+      "level": "N4",
+      "word": "考える",
+      "kana": "かんがえる",
+      "romaji": "kangaeru",
+      "translation": "思考",
+      "meaning": "动词（一段），思索"
+    },
+    {
+      "id": "n4-0088",
+      "level": "N4",
+      "word": "関係",
+      "kana": "かんけい",
+      "romaji": "kankei",
+      "translation": "关系",
+      "meaning": "名词，关联"
+    },
+    {
+      "id": "n4-0089",
+      "level": "N4",
+      "word": "簡単",
+      "kana": "かんたん",
+      "romaji": "kantan",
+      "translation": "简单",
+      "meaning": "形容动词，容易"
+    },
+    {
+      "id": "n4-0090",
+      "level": "N4",
+      "word": "頑張る",
+      "kana": "がんばる",
+      "romaji": "ganbaru",
+      "translation": "努力",
+      "meaning": "动词（五段），加油"
+    },
+    {
+      "id": "n4-0091",
+      "level": "N4",
+      "word": "気",
+      "kana": "き",
+      "romaji": "ki",
+      "translation": "气、心情",
+      "meaning": "名词，心神/精神"
+    },
+    {
+      "id": "n4-0092",
+      "level": "N4",
+      "word": "機会",
+      "kana": "きかい",
+      "romaji": "kikai",
+      "translation": "机会",
+      "meaning": "名词，时机"
+    },
+    {
+      "id": "n4-0093",
+      "level": "N4",
+      "word": "危険",
+      "kana": "きけん",
+      "romaji": "kiken",
+      "translation": "危险",
+      "meaning": "名词/形容动词，不安全"
+    },
+    {
+      "id": "n4-0094",
+      "level": "N4",
+      "word": "聞こえる",
+      "kana": "きこえる",
+      "romaji": "kikoeru",
+      "translation": "听得见",
+      "meaning": "动词（一段），能听见"
+    },
+    {
+      "id": "n4-0095",
+      "level": "N4",
+      "word": "汽車",
+      "kana": "きしゃ",
+      "romaji": "kisha",
+      "translation": "火车",
+      "meaning": "名词，蒸汽机车"
+    },
+    {
+      "id": "n4-0096",
+      "level": "N4",
+      "word": "技術",
+      "kana": "ぎじゅつ",
+      "romaji": "gijutsu",
+      "translation": "技术",
+      "meaning": "名词，技能"
+    },
+    {
+      "id": "n4-0097",
+      "level": "N4",
+      "word": "季節",
+      "kana": "きせつ",
+      "romaji": "kisetsu",
+      "translation": "季节",
+      "meaning": "名词，时令"
+    },
+    {
+      "id": "n4-0098",
+      "level": "N4",
+      "word": "規則",
+      "kana": "きそく",
+      "romaji": "kisoku",
+      "translation": "规则",
+      "meaning": "名词，规定"
+    },
+    {
+      "id": "n4-0099",
+      "level": "N4",
+      "word": "急行",
+      "kana": "きゅうこう",
+      "romaji": "kyuukou",
+      "translation": "快车",
+      "meaning": "名词，快速列车"
+    },
+    {
+      "id": "n4-0100",
+      "level": "N4",
+      "word": "教育",
+      "kana": "きょういく",
+      "romaji": "kyouiku",
+      "translation": "教育",
+      "meaning": "名词/サ变动词，培育"
+    },
+    {
+      "id": "n3-0001",
+      "level": "N3",
+      "word": "挨拶",
+      "kana": "あいさつ",
+      "romaji": "aisatsu",
+      "translation": "寒暄",
+      "meaning": "名词/サ变动词，问候"
+    },
+    {
+      "id": "n3-0002",
+      "level": "N3",
+      "word": "相手",
+      "kana": "あいて",
+      "romaji": "aite",
+      "translation": "对方",
+      "meaning": "名词，对手/伙伴"
+    },
+    {
+      "id": "n3-0003",
+      "level": "N3",
+      "word": "赤ちゃん",
+      "kana": "あかちゃん",
+      "romaji": "akachan",
+      "translation": "婴儿",
+      "meaning": "名词，宝宝"
+    },
+    {
+      "id": "n3-0004",
+      "level": "N3",
+      "word": "上がる",
+      "kana": "あがる",
+      "romaji": "agaru",
+      "translation": "上升",
+      "meaning": "动词（五段），提高"
+    },
+    {
+      "id": "n3-0005",
+      "level": "N3",
+      "word": "空く",
+      "kana": "あく",
+      "romaji": "aku",
+      "translation": "空",
+      "meaning": "动词（五段），腾出"
+    },
+    {
+      "id": "n3-0006",
+      "level": "N3",
+      "word": "味",
+      "kana": "あじ",
+      "romaji": "aji",
+      "translation": "味道",
+      "meaning": "名词，滋味"
+    },
+    {
+      "id": "n3-0007",
+      "level": "N3",
+      "word": "預ける",
+      "kana": "あずける",
+      "romaji": "azukeru",
+      "translation": "寄存",
+      "meaning": "动词（一段），托付"
+    },
+    {
+      "id": "n3-0008",
+      "level": "N3",
+      "word": "与える",
+      "kana": "あたえる",
+      "romaji": "ataeru",
+      "translation": "给予",
+      "meaning": "动词（一段），授予"
+    },
+    {
+      "id": "n3-0009",
+      "level": "N3",
+      "word": "辺り",
+      "kana": "あたり",
+      "romaji": "atari",
+      "translation": "附近",
+      "meaning": "名词，周围"
+    },
+    {
+      "id": "n3-0010",
+      "level": "N3",
+      "word": "当たる",
+      "kana": "あたる",
+      "romaji": "ataru",
+      "translation": "命中",
+      "meaning": "动词（五段），碰上/中"
+    },
+    {
+      "id": "n3-0011",
+      "level": "N3",
+      "word": "扱う",
+      "kana": "あつかう",
+      "romaji": "atsukau",
+      "translation": "处理",
+      "meaning": "动词（五段），对待"
+    },
+    {
+      "id": "n3-0012",
+      "level": "N3",
+      "word": "集める",
+      "kana": "あつめる",
+      "romaji": "atsumeru",
+      "translation": "收集",
+      "meaning": "动词（一段），汇集"
+    },
+    {
+      "id": "n3-0013",
+      "level": "N3",
+      "word": "謝る",
+      "kana": "あやまる",
+      "romaji": "ayamaru",
+      "translation": "道歉",
+      "meaning": "动词（五段），赔不是"
+    },
+    {
+      "id": "n3-0014",
+      "level": "N3",
+      "word": "案",
+      "kana": "あん",
+      "romaji": "an",
+      "translation": "方案",
+      "meaning": "名词，主意"
+    },
+    {
+      "id": "n3-0015",
+      "level": "N3",
+      "word": "生きる",
+      "kana": "いきる",
+      "romaji": "ikiru",
+      "translation": "活",
+      "meaning": "动词（一段），生存"
+    },
+    {
+      "id": "n3-0016",
+      "level": "N3",
+      "word": "勢い",
+      "kana": "いきおい",
+      "romaji": "ikioi",
+      "translation": "气势",
+      "meaning": "名词，劲头"
+    },
+    {
+      "id": "n3-0017",
+      "level": "N3",
+      "word": "泉",
+      "kana": "いずみ",
+      "romaji": "izumi",
+      "translation": "泉水",
+      "meaning": "名词，涌泉"
+    },
+    {
+      "id": "n3-0018",
+      "level": "N3",
+      "word": "頂く",
+      "kana": "いただく",
+      "romaji": "itadaku",
+      "translation": "领受",
+      "meaning": "动词（五段），领受/吃（谦语）"
+    },
+    {
+      "id": "n3-0019",
+      "level": "N3",
+      "word": "異動",
+      "kana": "いどう",
+      "romaji": "idou",
+      "translation": "调动",
+      "meaning": "名词/サ变动词，人事调动"
+    },
+    {
+      "id": "n3-0020",
+      "level": "N3",
+      "word": "致す",
+      "kana": "いたす",
+      "romaji": "itasu",
+      "translation": "做",
+      "meaning": "动词（五段），做（自谦）"
+    },
+    {
+      "id": "n3-0021",
+      "level": "N3",
+      "word": "一度",
+      "kana": "いちど",
+      "romaji": "ichido",
+      "translation": "一次",
+      "meaning": "名词/副词，一回"
+    },
+    {
+      "id": "n3-0022",
+      "level": "N3",
+      "word": "一生懸命",
+      "kana": "いっしょうけんめい",
+      "romaji": "isshoukenmei",
+      "translation": "拼命",
+      "meaning": "形容动词/副词，竭尽全力"
+    },
+    {
+      "id": "n3-0023",
+      "level": "N3",
+      "word": "稲",
+      "kana": "いね",
+      "romaji": "ine",
+      "translation": "稻子",
+      "meaning": "名词，水稻"
+    },
+    {
+      "id": "n3-0024",
+      "level": "N3",
+      "word": "祝う",
+      "kana": "いわう",
+      "romaji": "iwau",
+      "translation": "庆祝",
+      "meaning": "动词（五段），祝贺"
+    },
+    {
+      "id": "n3-0025",
+      "level": "N3",
+      "word": "伺う",
+      "kana": "うかがう",
+      "romaji": "ukagau",
+      "translation": "拜访",
+      "meaning": "动词（五段），拜访/请教（谦语）"
+    },
+    {
+      "id": "n3-0026",
+      "level": "N3",
+      "word": "浮かぶ",
+      "kana": "うかぶ",
+      "romaji": "ukabu",
+      "translation": "浮现",
+      "meaning": "动词（五段），漂浮"
+    },
+    {
+      "id": "n3-0027",
+      "level": "N3",
+      "word": "受かる",
+      "kana": "うかる",
+      "romaji": "ukaru",
+      "translation": "考上",
+      "meaning": "动词（五段），合格"
+    },
+    {
+      "id": "n3-0028",
+      "level": "N3",
+      "word": "動かす",
+      "kana": "うごかす",
+      "romaji": "ugokasu",
+      "translation": "移动",
+      "meaning": "动词（五段），挪动"
+    },
+    {
+      "id": "n3-0029",
+      "level": "N3",
+      "word": "兎",
+      "kana": "うさぎ",
+      "romaji": "usagi",
+      "translation": "兔子",
+      "meaning": "名词，兔"
+    },
+    {
+      "id": "n3-0030",
+      "level": "N3",
+      "word": "失う",
+      "kana": "うしなう",
+      "romaji": "ushinau",
+      "translation": "失去",
+      "meaning": "动词（五段），丧失"
+    },
+    {
+      "id": "n3-0031",
+      "level": "N3",
+      "word": "疑う",
+      "kana": "うたがう",
+      "romaji": "utagau",
+      "translation": "怀疑",
+      "meaning": "动词（五段），猜疑"
+    },
+    {
+      "id": "n3-0032",
+      "level": "N3",
+      "word": "内",
+      "kana": "うち",
+      "romaji": "uchi",
+      "translation": "内部",
+      "meaning": "名词，里面/我家"
+    },
+    {
+      "id": "n3-0033",
+      "level": "N3",
+      "word": "写る",
+      "kana": "うつる",
+      "romaji": "utsuru",
+      "translation": "映照",
+      "meaning": "动词（五段），映出"
+    },
+    {
+      "id": "n3-0034",
+      "level": "N3",
+      "word": "奪う",
+      "kana": "うばう",
+      "romaji": "ubau",
+      "translation": "夺取",
+      "meaning": "动词（五段），抢夺"
+    },
+    {
+      "id": "n3-0035",
+      "level": "N3",
+      "word": "梅",
+      "kana": "うめ",
+      "romaji": "ume",
+      "translation": "梅子",
+      "meaning": "名词，梅花/梅子"
+    },
+    {
+      "id": "n3-0036",
+      "level": "N3",
+      "word": "裏切る",
+      "kana": "うらぎる",
+      "romaji": "uragiru",
+      "translation": "背叛",
+      "meaning": "动词（五段），出卖"
+    },
+    {
+      "id": "n3-0037",
+      "level": "N3",
+      "word": "売れる",
+      "kana": "うれる",
+      "romaji": "ureru",
+      "translation": "畅销",
+      "meaning": "动词（一段），卖得好"
+    },
+    {
+      "id": "n3-0038",
+      "level": "N3",
+      "word": "得る",
+      "kana": "える",
+      "romaji": "eru",
+      "translation": "得到",
+      "meaning": "动词（一段），获得"
+    },
+    {
+      "id": "n3-0039",
+      "level": "N3",
+      "word": "円",
+      "kana": "えん",
+      "romaji": "en",
+      "translation": "日元",
+      "meaning": "名词，货币单位/圆"
+    },
+    {
+      "id": "n3-0040",
+      "level": "N3",
+      "word": "演奏",
+      "kana": "えんそう",
+      "romaji": "ensou",
+      "translation": "演奏",
+      "meaning": "名词/サ变动词，吹奏"
+    },
+    {
+      "id": "n3-0041",
+      "level": "N3",
+      "word": "応援",
+      "kana": "おうえん",
+      "romaji": "ouen",
+      "translation": "声援",
+      "meaning": "名词/サ变动词，助威"
+    },
+    {
+      "id": "n3-0042",
+      "level": "N3",
+      "word": "王",
+      "kana": "おう",
+      "romaji": "ou",
+      "translation": "国王",
+      "meaning": "名词，君主"
+    },
+    {
+      "id": "n3-0043",
+      "level": "N3",
+      "word": "応じる",
+      "kana": "おうじる",
+      "romaji": "oujiru",
+      "translation": "响应",
+      "meaning": "动词（一段），顺应"
+    },
+    {
+      "id": "n3-0044",
+      "level": "N3",
+      "word": "終える",
+      "kana": "おえる",
+      "romaji": "oeru",
+      "translation": "结束",
+      "meaning": "动词（一段），做完"
+    },
+    {
+      "id": "n3-0045",
+      "level": "N3",
+      "word": "覆う",
+      "kana": "おおう",
+      "romaji": "oou",
+      "translation": "覆盖",
+      "meaning": "动词（五段），盖住"
+    },
+    {
+      "id": "n3-0046",
+      "level": "N3",
+      "word": "大家さん",
+      "kana": "おおやさん",
+      "romaji": "ooyasan",
+      "translation": "房东",
+      "meaning": "名词，房主"
+    },
+    {
+      "id": "n3-0047",
+      "level": "N3",
+      "word": "拝む",
+      "kana": "おがむ",
+      "romaji": "ogamu",
+      "translation": "拜",
+      "meaning": "动词（五段），叩拜"
+    },
+    {
+      "id": "n3-0048",
+      "level": "N3",
+      "word": "補う",
+      "kana": "おぎなう",
+      "romaji": "oginau",
+      "translation": "补充",
+      "meaning": "动词（五段），弥补"
+    },
+    {
+      "id": "n3-0049",
+      "level": "N3",
+      "word": "屋上",
+      "kana": "おくじょう",
+      "romaji": "okujou",
+      "translation": "屋顶",
+      "meaning": "名词，楼顶"
+    },
+    {
+      "id": "n3-0050",
+      "level": "N3",
+      "word": "贈る",
+      "kana": "おくる",
+      "romaji": "okuru",
+      "translation": "赠送",
+      "meaning": "动词（五段），馈赠"
+    },
+    {
+      "id": "n3-0051",
+      "level": "N3",
+      "word": "幼い",
+      "kana": "おさない",
+      "romaji": "osanai",
+      "translation": "年幼的",
+      "meaning": "形容词，稚幼"
+    },
+    {
+      "id": "n3-0052",
+      "level": "N3",
+      "word": "押し入れ",
+      "kana": "おしいれ",
+      "romaji": "oshiire",
+      "translation": "壁橱",
+      "meaning": "名词，储物柜"
+    },
+    {
+      "id": "n3-0053",
+      "level": "N3",
+      "word": "惜しい",
+      "kana": "おしい",
+      "romaji": "oshii",
+      "translation": "可惜的",
+      "meaning": "形容词，惋惜"
+    },
+    {
+      "id": "n3-0054",
+      "level": "N3",
+      "word": "収める",
+      "kana": "おさめる",
+      "romaji": "osameru",
+      "translation": "收纳",
+      "meaning": "动词（一段），取得/收藏"
+    },
+    {
+      "id": "n3-0055",
+      "level": "N3",
+      "word": "恐らく",
+      "kana": "おそらく",
+      "romaji": "osoraku",
+      "translation": "恐怕",
+      "meaning": "副词，大概"
+    },
+    {
+      "id": "n3-0056",
+      "level": "N3",
+      "word": "恐れる",
+      "kana": "おそれる",
+      "romaji": "osoreru",
+      "translation": "害怕",
+      "meaning": "动词（一段），畏惧"
+    },
+    {
+      "id": "n3-0057",
+      "level": "N3",
+      "word": "恐縮",
+      "kana": "きょうしゅく",
+      "romaji": "kyoushuku",
+      "translation": "惶恐",
+      "meaning": "名词/サ变动词，过意不去、惶恐"
+    },
+    {
+      "id": "n3-0058",
+      "level": "N3",
+      "word": "お互い",
+      "kana": "おたがい",
+      "romaji": "otagai",
+      "translation": "彼此",
+      "meaning": "名词，互相"
+    },
+    {
+      "id": "n3-0059",
+      "level": "N3",
+      "word": "落ち着く",
+      "kana": "おちつく",
+      "romaji": "ochitsuku",
+      "translation": "镇定",
+      "meaning": "动词（五段），平静"
+    },
+    {
+      "id": "n3-0060",
+      "level": "N3",
+      "word": "劣る",
+      "kana": "おとる",
+      "romaji": "otoru",
+      "translation": "逊色",
+      "meaning": "动词（五段），不如"
+    },
+    {
+      "id": "n3-0061",
+      "level": "N3",
+      "word": "驚かす",
+      "kana": "おどろかす",
+      "romaji": "odorokasu",
+      "translation": "使吃惊",
+      "meaning": "动词（五段），吓一跳"
+    },
+    {
+      "id": "n3-0062",
+      "level": "N3",
+      "word": "鬼",
+      "kana": "おに",
+      "romaji": "oni",
+      "translation": "鬼",
+      "meaning": "名词，恶魔"
+    },
+    {
+      "id": "n3-0063",
+      "level": "N3",
+      "word": "お盆",
+      "kana": "おぼん",
+      "romaji": "obon",
+      "translation": "盂兰盆节",
+      "meaning": "名词，祭祖节日"
+    },
+    {
+      "id": "n3-0064",
+      "level": "N3",
+      "word": "覚える",
+      "kana": "おぼえる",
+      "romaji": "oboeru",
+      "translation": "记住",
+      "meaning": "动词（一段），记忆"
+    },
+    {
+      "id": "n3-0065",
+      "level": "N3",
+      "word": "思い",
+      "kana": "おもい",
+      "romaji": "omoi",
+      "translation": "想法",
+      "meaning": "名词，思念/念头"
+    },
+    {
+      "id": "n3-0066",
+      "level": "N3",
+      "word": "おもちゃ",
+      "kana": "おもちゃ",
+      "romaji": "omocha",
+      "translation": "玩具",
+      "meaning": "名词，玩物"
+    },
+    {
+      "id": "n3-0067",
+      "level": "N3",
+      "word": "思い出",
+      "kana": "おもいで",
+      "romaji": "omoide",
+      "translation": "回忆",
+      "meaning": "名词，往事"
+    },
+    {
+      "id": "n3-0068",
+      "level": "N3",
+      "word": "親",
+      "kana": "おや",
+      "romaji": "oya",
+      "translation": "父母",
+      "meaning": "名词，双亲"
+    },
+    {
+      "id": "n3-0069",
+      "level": "N3",
+      "word": "及ぼす",
+      "kana": "およぼす",
+      "romaji": "oyobosu",
+      "translation": "波及",
+      "meaning": "动词（五段），影响"
+    },
+    {
+      "id": "n3-0070",
+      "level": "N3",
+      "word": "折れる",
+      "kana": "おれる",
+      "romaji": "oreru",
+      "translation": "折断",
+      "meaning": "动词（一段），自动词，断裂"
+    },
+    {
+      "id": "n3-0071",
+      "level": "N3",
+      "word": "終わり",
+      "kana": "おわり",
+      "romaji": "owari",
+      "translation": "结束",
+      "meaning": "名词，末尾"
+    },
+    {
+      "id": "n3-0072",
+      "level": "N3",
+      "word": "抱く",
+      "kana": "いだく",
+      "romaji": "idaku",
+      "translation": "抱",
+      "meaning": "动词（五段），怀抱"
+    },
+    {
+      "id": "n3-0073",
+      "level": "N3",
+      "word": "和らぐ",
+      "kana": "やわらぐ",
+      "romaji": "yawaragu",
+      "translation": "缓和",
+      "meaning": "动词（五段），减轻"
+    },
+    {
+      "id": "n3-0074",
+      "level": "N3",
+      "word": "家賃",
+      "kana": "やちん",
+      "romaji": "yachin",
+      "translation": "房租",
+      "meaning": "名词，租金"
+    },
+    {
+      "id": "n3-0075",
+      "level": "N3",
+      "word": "破る",
+      "kana": "やぶる",
+      "romaji": "yaburu",
+      "translation": "撕破",
+      "meaning": "动词（五段），打破"
+    },
+    {
+      "id": "n3-0076",
+      "level": "N3",
+      "word": "勇気",
+      "kana": "ゆうき",
+      "romaji": "yuuki",
+      "translation": "勇气",
+      "meaning": "名词，胆量"
+    },
+    {
+      "id": "n3-0077",
+      "level": "N3",
+      "word": "優しい",
+      "kana": "やさしい",
+      "romaji": "yasashii",
+      "translation": "温柔的",
+      "meaning": "形容词，和善"
+    },
+    {
+      "id": "n3-0078",
+      "level": "N3",
+      "word": "雇う",
+      "kana": "やとう",
+      "romaji": "yatou",
+      "translation": "雇用",
+      "meaning": "动词（五段），聘用"
+    },
+    {
+      "id": "n3-0079",
+      "level": "N3",
+      "word": "破れる",
+      "kana": "やぶれる",
+      "romaji": "yabureru",
+      "translation": "破",
+      "meaning": "动词（一段），破损"
+    },
+    {
+      "id": "n3-0080",
+      "level": "N3",
+      "word": "譲る",
+      "kana": "ゆずる",
+      "romaji": "yuzuru",
+      "translation": "让",
+      "meaning": "动词（五段），转让"
+    },
+    {
+      "id": "n3-0081",
+      "level": "N3",
+      "word": "夢",
+      "kana": "ゆめ",
+      "romaji": "yume",
+      "translation": "梦",
+      "meaning": "名词，梦想"
+    },
+    {
+      "id": "n3-0082",
+      "level": "N3",
+      "word": "揺れる",
+      "kana": "ゆれる",
+      "romaji": "yureru",
+      "translation": "摇动",
+      "meaning": "动词（一段），晃动"
+    },
+    {
+      "id": "n3-0083",
+      "level": "N3",
+      "word": "用意",
+      "kana": "ようい",
+      "romaji": "youi",
+      "translation": "准备",
+      "meaning": "名词/サ变动词，预备"
+    },
+    {
+      "id": "n3-0084",
+      "level": "N3",
+      "word": "用事",
+      "kana": "ようじ",
+      "romaji": "youji",
+      "translation": "事情",
+      "meaning": "名词，要办的事"
+    },
+    {
+      "id": "n3-0085",
+      "level": "N3",
+      "word": "汚す",
+      "kana": "よごす",
+      "romaji": "yogosu",
+      "translation": "弄脏",
+      "meaning": "动词（五段），玷污"
+    },
+    {
+      "id": "n3-0086",
+      "level": "N3",
+      "word": "寄る",
+      "kana": "よる",
+      "romaji": "yoru",
+      "translation": "顺路",
+      "meaning": "动词（五段），靠近"
+    },
+    {
+      "id": "n3-0087",
+      "level": "N3",
+      "word": "喜ぶ",
+      "kana": "よろこぶ",
+      "romaji": "yorokobu",
+      "translation": "高兴",
+      "meaning": "动词（五段），欢喜"
+    },
+    {
+      "id": "n3-0088",
+      "level": "N3",
+      "word": "理由",
+      "kana": "りゆう",
+      "romaji": "riyuu",
+      "translation": "理由",
+      "meaning": "名词，原因"
+    },
+    {
+      "id": "n3-0089",
+      "level": "N3",
+      "word": "利用",
+      "kana": "りよう",
+      "romaji": "riyou",
+      "translation": "利用",
+      "meaning": "名词/サ变动词，使用"
+    },
+    {
+      "id": "n3-0090",
+      "level": "N3",
+      "word": "留守",
+      "kana": "るす",
+      "romaji": "rusu",
+      "translation": "不在家",
+      "meaning": "名词，外出"
+    },
+    {
+      "id": "n3-0091",
+      "level": "N3",
+      "word": "例",
+      "kana": "れい",
+      "romaji": "rei",
+      "translation": "例子",
+      "meaning": "名词，实例"
+    },
+    {
+      "id": "n3-0092",
+      "level": "N3",
+      "word": "連絡",
+      "kana": "れんらく",
+      "romaji": "renraku",
+      "translation": "联络",
+      "meaning": "名词/サ变动词，联系"
+    },
+    {
+      "id": "n3-0093",
+      "level": "N3",
+      "word": "老人",
+      "kana": "ろうじん",
+      "romaji": "roujin",
+      "translation": "老人",
+      "meaning": "名词，年长者"
+    },
+    {
+      "id": "n3-0094",
+      "level": "N3",
+      "word": "沸く",
+      "kana": "わく",
+      "romaji": "waku",
+      "translation": "沸腾",
+      "meaning": "动词（五段），烧开"
+    },
+    {
+      "id": "n3-0095",
+      "level": "N3",
+      "word": "別れる",
+      "kana": "わかれる",
+      "romaji": "wakareru",
+      "translation": "分别",
+      "meaning": "动词（一段），分离"
+    },
+    {
+      "id": "n3-0096",
+      "level": "N3",
+      "word": "渋滞",
+      "kana": "じゅうたい",
+      "romaji": "juutai",
+      "translation": "堵车",
+      "meaning": "名词/サ变动词，交通堵塞"
+    },
+    {
+      "id": "n3-0097",
+      "level": "N3",
+      "word": "割る",
+      "kana": "わる",
+      "romaji": "waru",
+      "translation": "分、打碎",
+      "meaning": "动词（五段），分割/打破"
+    },
+    {
+      "id": "n3-0098",
+      "level": "N3",
+      "word": "悪口",
+      "kana": "わるぐち",
+      "romaji": "waruguchi",
+      "translation": "坏话",
+      "meaning": "名词，贬语"
+    },
+    {
+      "id": "n3-0099",
+      "level": "N3",
+      "word": "湾",
+      "kana": "わん",
+      "romaji": "wan",
+      "translation": "湾",
+      "meaning": "名词，海湾"
+    },
+    {
+      "id": "n3-0100",
+      "level": "N3",
+      "word": "招く",
+      "kana": "まねく",
+      "romaji": "maneku",
+      "translation": "招待",
+      "meaning": "动词（五段），邀请"
+    },
+    {
+      "id": "n2-0001",
+      "level": "N2",
+      "word": "相変わらず",
+      "kana": "あいかわらず",
+      "romaji": "aikawarazu",
+      "translation": "依旧",
+      "meaning": "副词，照旧"
+    },
+    {
+      "id": "n2-0002",
+      "level": "N2",
+      "word": "呆れる",
+      "kana": "あきれる",
+      "romaji": "akireru",
+      "translation": "吃惊",
+      "meaning": "动词（一段），惊讶到说不出话"
+    },
+    {
+      "id": "n2-0003",
+      "level": "N2",
+      "word": "合図",
+      "kana": "あいず",
+      "romaji": "aizu",
+      "translation": "信号",
+      "meaning": "名词/サ变动词，暗号"
+    },
+    {
+      "id": "n2-0004",
+      "level": "N2",
+      "word": "遭う",
+      "kana": "あう",
+      "romaji": "au",
+      "translation": "遭遇",
+      "meaning": "动词（五段），碰到（多指不好的事）"
+    },
+    {
+      "id": "n2-0005",
+      "level": "N2",
+      "word": "敢えて",
+      "kana": "あえて",
+      "romaji": "aete",
+      "translation": "敢于",
+      "meaning": "副词，特意"
+    },
+    {
+      "id": "n2-0006",
+      "level": "N2",
+      "word": "仰ぐ",
+      "kana": "あおぐ",
+      "romaji": "aogu",
+      "translation": "仰望",
+      "meaning": "动词（五段），抬头看/仰慕"
+    },
+    {
+      "id": "n2-0007",
+      "level": "N2",
+      "word": "赤字",
+      "kana": "あかじ",
+      "romaji": "akaji",
+      "translation": "赤字",
+      "meaning": "名词，亏损"
+    },
+    {
+      "id": "n2-0008",
+      "level": "N2",
+      "word": "上がり",
+      "kana": "あがり",
+      "romaji": "agari",
+      "translation": "收获",
+      "meaning": "名词，上升/做完"
+    },
+    {
+      "id": "n2-0009",
+      "level": "N2",
+      "word": "呆気ない",
+      "kana": "あっけない",
+      "romaji": "akkenai",
+      "translation": "草草",
+      "meaning": "形容词（い），太简单、意犹未尽、草草收场"
+    },
+    {
+      "id": "n2-0010",
+      "level": "N2",
+      "word": "空き",
+      "kana": "あき",
+      "romaji": "aki",
+      "translation": "空隙",
+      "meaning": "名词，空缺"
+    },
+    {
+      "id": "n2-0011",
+      "level": "N2",
+      "word": "諦める",
+      "kana": "あきらめる",
+      "romaji": "akirameru",
+      "translation": "放弃",
+      "meaning": "动词（一段），断念"
+    },
+    {
+      "id": "n2-0012",
+      "level": "N2",
+      "word": "飽きる",
+      "kana": "あきる",
+      "romaji": "akiru",
+      "translation": "腻",
+      "meaning": "动词（一段），厌倦"
+    },
+    {
+      "id": "n2-0013",
+      "level": "N2",
+      "word": "揚げる",
+      "kana": "あげる",
+      "romaji": "ageru",
+      "translation": "炸",
+      "meaning": "动词（一段），油炸"
+    },
+    {
+      "id": "n2-0014",
+      "level": "N2",
+      "word": "憧れる",
+      "kana": "あこがれる",
+      "romaji": "akogareru",
+      "translation": "憧憬",
+      "meaning": "动词（一段），向往"
+    },
+    {
+      "id": "n2-0015",
+      "level": "N2",
+      "word": "あしらう",
+      "kana": "あしらう",
+      "romaji": "ashirau",
+      "translation": "应付",
+      "meaning": "动词（五段），冷淡对待/巧妙处理"
+    },
+    {
+      "id": "n2-0016",
+      "level": "N2",
+      "word": "味わう",
+      "kana": "あじわう",
+      "romaji": "ajiwau",
+      "translation": "品味",
+      "meaning": "动词（五段），玩味"
+    },
+    {
+      "id": "n2-0017",
+      "level": "N2",
+      "word": "預かる",
+      "kana": "あずかる",
+      "romaji": "azukaru",
+      "translation": "保管",
+      "meaning": "动词（五段），代管"
+    },
+    {
+      "id": "n2-0018",
+      "level": "N2",
+      "word": "泡",
+      "kana": "あわ",
+      "romaji": "awa",
+      "translation": "泡沫",
+      "meaning": "名词，气泡/泡沫"
+    },
+    {
+      "id": "n2-0019",
+      "level": "N2",
+      "word": "扱い",
+      "kana": "あつかい",
+      "romaji": "atsukai",
+      "translation": "对待",
+      "meaning": "名词，处理/对待方式"
+    },
+    {
+      "id": "n2-0020",
+      "level": "N2",
+      "word": "当たり前",
+      "kana": "あたりまえ",
+      "romaji": "atarimae",
+      "translation": "理所当然",
+      "meaning": "名词/形容动词，自然"
+    },
+    {
+      "id": "n2-0021",
+      "level": "N2",
+      "word": "跡",
+      "kana": "あと",
+      "romaji": "ato",
+      "translation": "痕迹",
+      "meaning": "名词，印记"
+    },
+    {
+      "id": "n2-0022",
+      "level": "N2",
+      "word": "慌てる",
+      "kana": "あわてる",
+      "romaji": "awateru",
+      "translation": "慌张",
+      "meaning": "动词（一段），惊慌失措"
+    },
+    {
+      "id": "n2-0023",
+      "level": "N2",
+      "word": "浴びる",
+      "kana": "あびる",
+      "romaji": "abiru",
+      "translation": "淋浴",
+      "meaning": "动词（一段），冲洗"
+    },
+    {
+      "id": "n2-0024",
+      "level": "N2",
+      "word": "甘やかす",
+      "kana": "あまやかす",
+      "romaji": "amayakasu",
+      "translation": "娇惯",
+      "meaning": "动词（五段），溺爱、纵容"
+    },
+    {
+      "id": "n2-0025",
+      "level": "N2",
+      "word": "余る",
+      "kana": "あまる",
+      "romaji": "amaru",
+      "translation": "剩余",
+      "meaning": "动词（五段），有余"
+    },
+    {
+      "id": "n2-0026",
+      "level": "N2",
+      "word": "編む",
+      "kana": "あむ",
+      "romaji": "amu",
+      "translation": "编织",
+      "meaning": "动词（五段），编结"
+    },
+    {
+      "id": "n2-0027",
+      "level": "N2",
+      "word": "誤り",
+      "kana": "あやまり",
+      "romaji": "ayamari",
+      "translation": "错误",
+      "meaning": "名词，差错"
+    },
+    {
+      "id": "n2-0028",
+      "level": "N2",
+      "word": "争う",
+      "kana": "あらそう",
+      "romaji": "arasou",
+      "translation": "争夺",
+      "meaning": "动词（五段），竞争"
+    },
+    {
+      "id": "n2-0029",
+      "level": "N2",
+      "word": "改めて",
+      "kana": "あらためて",
+      "romaji": "aratamete",
+      "translation": "重新",
+      "meaning": "副词，再次"
+    },
+    {
+      "id": "n2-0030",
+      "level": "N2",
+      "word": "表す",
+      "kana": "あらわす",
+      "romaji": "arawasu",
+      "translation": "表现",
+      "meaning": "动词（五段），表达"
+    },
+    {
+      "id": "n2-0031",
+      "level": "N2",
+      "word": "現れる",
+      "kana": "あらわれる",
+      "romaji": "arawareru",
+      "translation": "出现",
+      "meaning": "动词（一段），显露"
+    },
+    {
+      "id": "n2-0032",
+      "level": "N2",
+      "word": "有難い",
+      "kana": "ありがたい",
+      "romaji": "arigatai",
+      "translation": "难得的",
+      "meaning": "形容词，值得感谢"
+    },
+    {
+      "id": "n2-0033",
+      "level": "N2",
+      "word": "案外",
+      "kana": "あんがい",
+      "romaji": "angai",
+      "translation": "出乎意料",
+      "meaning": "副词，意外地"
+    },
+    {
+      "id": "n2-0034",
+      "level": "N2",
+      "word": "安易",
+      "kana": "あんい",
+      "romaji": "an'i",
+      "translation": "轻易",
+      "meaning": "形容动词，随便"
+    },
+    {
+      "id": "n2-0035",
+      "level": "N2",
+      "word": "委員会",
+      "kana": "いいんかい",
+      "romaji": "iinkai",
+      "translation": "委员会",
+      "meaning": "名词，小组"
+    },
+    {
+      "id": "n2-0036",
+      "level": "N2",
+      "word": "言い訳",
+      "kana": "いいわけ",
+      "romaji": "iiwake",
+      "translation": "辩解",
+      "meaning": "名词/サ变动词，借口"
+    },
+    {
+      "id": "n2-0037",
+      "level": "N2",
+      "word": "浮気",
+      "kana": "うわき",
+      "romaji": "uwaki",
+      "translation": "出轨",
+      "meaning": "名词/サ变动词，见异思迁、外遇"
+    },
+    {
+      "id": "n2-0038",
+      "level": "N2",
+      "word": "幾分",
+      "kana": "いくぶん",
+      "romaji": "ikubun",
+      "translation": "多少",
+      "meaning": "副词，稍微"
+    },
+    {
+      "id": "n2-0039",
+      "level": "N2",
+      "word": "育つ",
+      "kana": "そだつ",
+      "romaji": "sodatsu",
+      "translation": "成长",
+      "meaning": "动词（五段），长大"
+    },
+    {
+      "id": "n2-0040",
+      "level": "N2",
+      "word": "意地",
+      "kana": "いじ",
+      "romaji": "iji",
+      "translation": "固执",
+      "meaning": "名词，倔强"
+    },
+    {
+      "id": "n2-0041",
+      "level": "N2",
+      "word": "意志",
+      "kana": "いし",
+      "romaji": "ishi",
+      "translation": "意志",
+      "meaning": "名词，意愿"
+    },
+    {
+      "id": "n2-0042",
+      "level": "N2",
+      "word": "異常",
+      "kana": "いじょう",
+      "romaji": "ijou",
+      "translation": "异常",
+      "meaning": "名词/形容动词，反常"
+    },
+    {
+      "id": "n2-0043",
+      "level": "N2",
+      "word": "傷",
+      "kana": "きず",
+      "romaji": "kizu",
+      "translation": "伤",
+      "meaning": "名词，伤口"
+    },
+    {
+      "id": "n2-0044",
+      "level": "N2",
+      "word": "いたずら",
+      "kana": "いたずら",
+      "romaji": "itazura",
+      "translation": "恶作剧",
+      "meaning": "名词，胡闹"
+    },
+    {
+      "id": "n2-0045",
+      "level": "N2",
+      "word": "位置",
+      "kana": "いち",
+      "romaji": "ichi",
+      "translation": "位置",
+      "meaning": "名词，方位"
+    },
+    {
+      "id": "n2-0046",
+      "level": "N2",
+      "word": "一層",
+      "kana": "いっそう",
+      "romaji": "issou",
+      "translation": "更加",
+      "meaning": "副词，越发"
+    },
+    {
+      "id": "n2-0047",
+      "level": "N2",
+      "word": "一致",
+      "kana": "いっち",
+      "romaji": "itchi",
+      "translation": "一致",
+      "meaning": "名词/サ变动词，吻合"
+    },
+    {
+      "id": "n2-0048",
+      "level": "N2",
+      "word": "一般",
+      "kana": "いっぱん",
+      "romaji": "ippan",
+      "translation": "一般",
+      "meaning": "名词，普通"
+    },
+    {
+      "id": "n2-0049",
+      "level": "N2",
+      "word": "いつまでも",
+      "kana": "いつまでも",
+      "romaji": "itsumademo",
+      "translation": "永远",
+      "meaning": "副词，始终"
+    },
+    {
+      "id": "n2-0050",
+      "level": "N2",
+      "word": "移転",
+      "kana": "いてん",
+      "romaji": "iten",
+      "translation": "迁移",
+      "meaning": "名词/サ变动词，搬迁"
+    },
+    {
+      "id": "n2-0051",
+      "level": "N2",
+      "word": "井戸",
+      "kana": "いど",
+      "romaji": "ido",
+      "translation": "井",
+      "meaning": "名词，水井"
+    },
+    {
+      "id": "n2-0052",
+      "level": "N2",
+      "word": "威張る",
+      "kana": "いばる",
+      "romaji": "ibaru",
+      "translation": "逞威风",
+      "meaning": "动词（五段），傲慢"
+    },
+    {
+      "id": "n2-0053",
+      "level": "N2",
+      "word": "勇ましい",
+      "kana": "いさましい",
+      "romaji": "isamashii",
+      "translation": "勇敢",
+      "meaning": "形容词（い），英勇的、雄壮的"
+    },
+    {
+      "id": "n2-0054",
+      "level": "N2",
+      "word": "以来",
+      "kana": "いらい",
+      "romaji": "irai",
+      "translation": "以来",
+      "meaning": "名词，此后"
+    },
+    {
+      "id": "n2-0055",
+      "level": "N2",
+      "word": "医療",
+      "kana": "いりょう",
+      "romaji": "iryou",
+      "translation": "医疗",
+      "meaning": "名词，治疗"
+    },
+    {
+      "id": "n2-0056",
+      "level": "N2",
+      "word": "印刷",
+      "kana": "いんさつ",
+      "romaji": "insatsu",
+      "translation": "印刷",
+      "meaning": "名词/サ变动词，打印"
+    },
+    {
+      "id": "n2-0057",
+      "level": "N2",
+      "word": "印象",
+      "kana": "いんしょう",
+      "romaji": "inshou",
+      "translation": "印象",
+      "meaning": "名词，观感"
+    },
+    {
+      "id": "n2-0058",
+      "level": "N2",
+      "word": "受付",
+      "kana": "うけつけ",
+      "romaji": "uketsuke",
+      "translation": "接待处",
+      "meaning": "名词，受理窗口"
+    },
+    {
+      "id": "n2-0059",
+      "level": "N2",
+      "word": "受け取る",
+      "kana": "うけとる",
+      "romaji": "uketoru",
+      "translation": "领取",
+      "meaning": "动词（五段），收下"
+    },
+    {
+      "id": "n2-0060",
+      "level": "N2",
+      "word": "動き",
+      "kana": "うごき",
+      "romaji": "ugoki",
+      "translation": "动向",
+      "meaning": "名词，移动"
+    },
+    {
+      "id": "n2-0061",
+      "level": "N2",
+      "word": "疑わしい",
+      "kana": "うたがわしい",
+      "romaji": "utagawashii",
+      "translation": "可疑的",
+      "meaning": "形容词，值得怀疑"
+    },
+    {
+      "id": "n2-0062",
+      "level": "N2",
+      "word": "促す",
+      "kana": "うながす",
+      "romaji": "unagasu",
+      "translation": "促使",
+      "meaning": "动词（五段），催促/促进"
+    },
+    {
+      "id": "n2-0063",
+      "level": "N2",
+      "word": "映る",
+      "kana": "うつる",
+      "romaji": "utsuru",
+      "translation": "映",
+      "meaning": "动词（五段），映现"
+    },
+    {
+      "id": "n2-0064",
+      "level": "N2",
+      "word": "埋める",
+      "kana": "うめる",
+      "romaji": "umeru",
+      "translation": "填埋",
+      "meaning": "动词（一段），掩埋"
+    },
+    {
+      "id": "n2-0065",
+      "level": "N2",
+      "word": "売り上げ",
+      "kana": "うりあげ",
+      "romaji": "uriage",
+      "translation": "销售额",
+      "meaning": "名词，营收"
+    },
+    {
+      "id": "n2-0066",
+      "level": "N2",
+      "word": "承る",
+      "kana": "うけたまわる",
+      "romaji": "uketamawaru",
+      "translation": "聆听",
+      "meaning": "动词（五段），「聞く」的谦逊语"
+    },
+    {
+      "id": "n2-0067",
+      "level": "N2",
+      "word": "運命",
+      "kana": "うんめい",
+      "romaji": "unmei",
+      "translation": "命运",
+      "meaning": "名词，天命"
+    },
+    {
+      "id": "n2-0068",
+      "level": "N2",
+      "word": "運動",
+      "kana": "うんどう",
+      "romaji": "undou",
+      "translation": "运动",
+      "meaning": "名词/サ变动词，活动"
+    },
+    {
+      "id": "n2-0069",
+      "level": "N2",
+      "word": "永遠",
+      "kana": "えいえん",
+      "romaji": "eien",
+      "translation": "永远",
+      "meaning": "名词/形容动词，永久"
+    },
+    {
+      "id": "n2-0070",
+      "level": "N2",
+      "word": "影響",
+      "kana": "えいきょう",
+      "romaji": "eikyou",
+      "translation": "影响",
+      "meaning": "名词/サ变动词，波及"
+    },
+    {
+      "id": "n2-0071",
+      "level": "N2",
+      "word": "映像",
+      "kana": "えいぞう",
+      "romaji": "eizou",
+      "translation": "影像",
+      "meaning": "名词，画面"
+    },
+    {
+      "id": "n2-0072",
+      "level": "N2",
+      "word": "笑顔",
+      "kana": "えがお",
+      "romaji": "egao",
+      "translation": "笑容",
+      "meaning": "名词，笑脸"
+    },
+    {
+      "id": "n2-0073",
+      "level": "N2",
+      "word": "描く",
+      "kana": "えがく",
+      "romaji": "egaku",
+      "translation": "描绘",
+      "meaning": "动词（五段），画"
+    },
+    {
+      "id": "n2-0074",
+      "level": "N2",
+      "word": "液体",
+      "kana": "えきたい",
+      "romaji": "ekitai",
+      "translation": "液体",
+      "meaning": "名词，流体"
+    },
+    {
+      "id": "n2-0075",
+      "level": "N2",
+      "word": "偉い",
+      "kana": "えらい",
+      "romaji": "erai",
+      "translation": "伟大",
+      "meaning": "形容词，了不起"
+    },
+    {
+      "id": "n2-0076",
+      "level": "N2",
+      "word": "縁",
+      "kana": "えん",
+      "romaji": "en",
+      "translation": "缘分",
+      "meaning": "名词，因缘"
+    },
+    {
+      "id": "n2-0077",
+      "level": "N2",
+      "word": "演劇",
+      "kana": "えんげき",
+      "romaji": "engeki",
+      "translation": "戏剧",
+      "meaning": "名词，演戏"
+    },
+    {
+      "id": "n2-0078",
+      "level": "N2",
+      "word": "追い付く",
+      "kana": "おいつく",
+      "romaji": "oitsuku",
+      "translation": "追赶",
+      "meaning": "动词（五段），追上"
+    },
+    {
+      "id": "n2-0079",
+      "level": "N2",
+      "word": "応用",
+      "kana": "おうよう",
+      "romaji": "ouyou",
+      "translation": "应用",
+      "meaning": "名词/サ变动词，运用"
+    },
+    {
+      "id": "n2-0080",
+      "level": "N2",
+      "word": "覆す",
+      "kana": "くつがえす",
+      "romaji": "kutsugaesu",
+      "translation": "推翻",
+      "meaning": "动词（五段），颠覆"
+    },
+    {
+      "id": "n2-0081",
+      "level": "N2",
+      "word": "大幅",
+      "kana": "おおはば",
+      "romaji": "oohaba",
+      "translation": "大幅",
+      "meaning": "形容动词，大幅度"
+    },
+    {
+      "id": "n2-0082",
+      "level": "N2",
+      "word": "公",
+      "kana": "おおやけ",
+      "romaji": "ooyake",
+      "translation": "公开",
+      "meaning": "名词，公共"
+    },
+    {
+      "id": "n2-0083",
+      "level": "N2",
+      "word": "屋外",
+      "kana": "おくがい",
+      "romaji": "okugai",
+      "translation": "屋外",
+      "meaning": "名词，室外"
+    },
+    {
+      "id": "n2-0084",
+      "level": "N2",
+      "word": "遡る",
+      "kana": "さかのぼる",
+      "romaji": "sakanoboru",
+      "translation": "追溯",
+      "meaning": "动词（五段），逆流而上/追溯历史"
+    },
+    {
+      "id": "n2-0085",
+      "level": "N2",
+      "word": "恐ろしい",
+      "kana": "おそろしい",
+      "romaji": "osoroshii",
+      "translation": "可怕的",
+      "meaning": "形容词，恐怖"
+    },
+    {
+      "id": "n2-0086",
+      "level": "N2",
+      "word": "抑える",
+      "kana": "おさえる",
+      "romaji": "osaeru",
+      "translation": "抑制",
+      "meaning": "动词（一段），压制"
+    },
+    {
+      "id": "n2-0087",
+      "level": "N2",
+      "word": "収まる",
+      "kana": "おさまる",
+      "romaji": "osamaru",
+      "translation": "收纳",
+      "meaning": "动词（五段），平息"
+    },
+    {
+      "id": "n2-0088",
+      "level": "N2",
+      "word": "数える",
+      "kana": "かぞえる",
+      "romaji": "kazoeru",
+      "translation": "数",
+      "meaning": "动词（一段），计数"
+    },
+    {
+      "id": "n2-0089",
+      "level": "N2",
+      "word": "傾く",
+      "kana": "かたむく",
+      "romaji": "katamuku",
+      "translation": "倾斜",
+      "meaning": "动词（五段），歪斜"
+    },
+    {
+      "id": "n2-0090",
+      "level": "N2",
+      "word": "語る",
+      "kana": "かたる",
+      "romaji": "kataru",
+      "translation": "讲述",
+      "meaning": "动词（五段），叙述"
+    },
+    {
+      "id": "n2-0091",
+      "level": "N2",
+      "word": "価値",
+      "kana": "かち",
+      "romaji": "kachi",
+      "translation": "价值",
+      "meaning": "名词，意义"
+    },
+    {
+      "id": "n2-0092",
+      "level": "N2",
+      "word": "勝手",
+      "kana": "かって",
+      "romaji": "katte",
+      "translation": "任意",
+      "meaning": "名词/形容动词，擅自/厨房"
+    },
+    {
+      "id": "n2-0093",
+      "level": "N2",
+      "word": "家内",
+      "kana": "かない",
+      "romaji": "kanai",
+      "translation": "内人",
+      "meaning": "名词，妻子"
+    },
+    {
+      "id": "n2-0094",
+      "level": "N2",
+      "word": "必ずしも",
+      "kana": "かならずしも",
+      "romaji": "kanarazushimo",
+      "translation": "未必",
+      "meaning": "副词，不见得"
+    },
+    {
+      "id": "n2-0095",
+      "level": "N2",
+      "word": "我慢",
+      "kana": "がまん",
+      "romaji": "gaman",
+      "translation": "忍耐",
+      "meaning": "名词/サ变动词，克制"
+    },
+    {
+      "id": "n2-0096",
+      "level": "N2",
+      "word": "科目",
+      "kana": "かもく",
+      "romaji": "kamoku",
+      "translation": "科目",
+      "meaning": "名词，学科"
+    },
+    {
+      "id": "n2-0097",
+      "level": "N2",
+      "word": "効く",
+      "kana": "きく",
+      "romaji": "kiku",
+      "translation": "有效",
+      "meaning": "动词（五段），见效"
+    },
+    {
+      "id": "n2-0098",
+      "level": "N2",
+      "word": "気配",
+      "kana": "けはい",
+      "romaji": "kehai",
+      "translation": "迹象",
+      "meaning": "名词，动静"
+    },
+    {
+      "id": "n2-0099",
+      "level": "N2",
+      "word": "経営",
+      "kana": "けいえい",
+      "romaji": "keiei",
+      "translation": "经营",
+      "meaning": "名词/サ变动词，管理"
+    },
+    {
+      "id": "n2-0100",
+      "level": "N2",
+      "word": "契約",
+      "kana": "けいやく",
+      "romaji": "keiyaku",
+      "translation": "合同",
+      "meaning": "名词/サ变动词，契约"
+    },
+    {
+      "id": "n1-0001",
+      "level": "N1",
+      "word": "曖昧",
+      "kana": "あいまい",
+      "romaji": "aimai",
+      "translation": "含糊",
+      "meaning": "形容动词，模棱两可"
+    },
+    {
+      "id": "n1-0002",
+      "level": "N1",
+      "word": "愛着",
+      "kana": "あいちゃく",
+      "romaji": "aichaku",
+      "translation": "依恋",
+      "meaning": "名词，眷恋"
+    },
+    {
+      "id": "n1-0003",
+      "level": "N1",
+      "word": "圧迫",
+      "kana": "あっぱく",
+      "romaji": "appaku",
+      "translation": "压迫",
+      "meaning": "名词/サ变动词，压制"
+    },
+    {
+      "id": "n1-0004",
+      "level": "N1",
+      "word": "溢れる",
+      "kana": "あふれる",
+      "romaji": "afureru",
+      "translation": "溢出",
+      "meaning": "动词（一段），满出"
+    },
+    {
+      "id": "n1-0005",
+      "level": "N1",
+      "word": "甚だしい",
+      "kana": "はなはだしい",
+      "romaji": "hanahadashii",
+      "translation": "甚/极其",
+      "meaning": "形容词，表示程度极甚"
+    },
+    {
+      "id": "n1-0006",
+      "level": "N1",
+      "word": "焦る",
+      "kana": "あせる",
+      "romaji": "aseru",
+      "translation": "着急",
+      "meaning": "动词（五段），急躁"
+    },
+    {
+      "id": "n1-0007",
+      "level": "N1",
+      "word": "崇める",
+      "kana": "あがめる",
+      "romaji": "agameru",
+      "translation": "崇敬",
+      "meaning": "动词（一段），敬仰"
+    },
+    {
+      "id": "n1-0008",
+      "level": "N1",
+      "word": "顕著",
+      "kana": "けんちょ",
+      "romaji": "kencho",
+      "translation": "显著",
+      "meaning": "形容动词，明显的、突出的"
+    },
+    {
+      "id": "n1-0009",
+      "level": "N1",
+      "word": "空ける",
+      "kana": "あける",
+      "romaji": "akeru",
+      "translation": "空出",
+      "meaning": "动词（一段），腾空"
+    },
+    {
+      "id": "n1-0010",
+      "level": "N1",
+      "word": "斡旋",
+      "kana": "あっせん",
+      "romaji": "assen",
+      "translation": "斡旋",
+      "meaning": "名词/サ变动词，居间介绍、调停"
+    },
+    {
+      "id": "n1-0011",
+      "level": "N1",
+      "word": "値する",
+      "kana": "あたいする",
+      "romaji": "ataisuru",
+      "translation": "值得",
+      "meaning": "动词（サ变），有…价值"
+    },
+    {
+      "id": "n1-0012",
+      "level": "N1",
+      "word": "悪質",
+      "kana": "あくしつ",
+      "romaji": "akushitsu",
+      "translation": "恶劣",
+      "meaning": "名词/形容动词，性质差"
+    },
+    {
+      "id": "n1-0013",
+      "level": "N1",
+      "word": "あくまで",
+      "kana": "あくまで",
+      "romaji": "akumade",
+      "translation": "彻底",
+      "meaning": "副词，始终"
+    },
+    {
+      "id": "n1-0014",
+      "level": "N1",
+      "word": "憧れ",
+      "kana": "あこがれ",
+      "romaji": "akogare",
+      "translation": "憧憬",
+      "meaning": "名词，向往"
+    },
+    {
+      "id": "n1-0015",
+      "level": "N1",
+      "word": "朝寝坊",
+      "kana": "あさねぼう",
+      "romaji": "asanebou",
+      "translation": "睡懒觉",
+      "meaning": "名词，晚起"
+    },
+    {
+      "id": "n1-0016",
+      "level": "N1",
+      "word": "味わい",
+      "kana": "あじわい",
+      "romaji": "ajiwai",
+      "translation": "滋味",
+      "meaning": "名词，韵味"
+    },
+    {
+      "id": "n1-0017",
+      "level": "N1",
+      "word": "鮮やか",
+      "kana": "あざやか",
+      "romaji": "azayaka",
+      "translation": "鲜艳",
+      "meaning": "形容动词，鲜明"
+    },
+    {
+      "id": "n1-0018",
+      "level": "N1",
+      "word": "頑な",
+      "kana": "かたくな",
+      "romaji": "katakuna",
+      "translation": "顽固",
+      "meaning": "形容动词，固执"
+    },
+    {
+      "id": "n1-0019",
+      "level": "N1",
+      "word": "頑固",
+      "kana": "がんこ",
+      "romaji": "ganko",
+      "translation": "顽固",
+      "meaning": "名词/形容动词，执拗"
+    },
+    {
+      "id": "n1-0020",
+      "level": "N1",
+      "word": "兼ねる",
+      "kana": "かねる",
+      "romaji": "kaneru",
+      "translation": "兼任",
+      "meaning": "动词（一段），兼/难以"
+    },
+    {
+      "id": "n1-0021",
+      "level": "N1",
+      "word": "加減",
+      "kana": "かげん",
+      "romaji": "kagen",
+      "translation": "程度",
+      "meaning": "名词，调节/状况"
+    },
+    {
+      "id": "n1-0022",
+      "level": "N1",
+      "word": "稼ぐ",
+      "kana": "かせぐ",
+      "romaji": "kasegu",
+      "translation": "赚钱",
+      "meaning": "动词（五段），挣得"
+    },
+    {
+      "id": "n1-0023",
+      "level": "N1",
+      "word": "傾げる",
+      "kana": "かしげる",
+      "romaji": "kashigeru",
+      "translation": "歪",
+      "meaning": "动词（一段），倾斜（头）"
+    },
+    {
+      "id": "n1-0024",
+      "level": "N1",
+      "word": "貸し出し",
+      "kana": "かしだし",
+      "romaji": "kashidashi",
+      "translation": "出借",
+      "meaning": "名词，外借"
+    },
+    {
+      "id": "n1-0025",
+      "level": "N1",
+      "word": "微か",
+      "kana": "かすか",
+      "romaji": "kasuka",
+      "translation": "微弱",
+      "meaning": "形容动词，隐约"
+    },
+    {
+      "id": "n1-0026",
+      "level": "N1",
+      "word": "数々",
+      "kana": "かずかず",
+      "romaji": "kazukazu",
+      "translation": "种种",
+      "meaning": "名词，许多"
+    },
+    {
+      "id": "n1-0027",
+      "level": "N1",
+      "word": "語彙",
+      "kana": "ごい",
+      "romaji": "goi",
+      "translation": "词汇",
+      "meaning": "名词，词量"
+    },
+    {
+      "id": "n1-0028",
+      "level": "N1",
+      "word": "課程",
+      "kana": "かてい",
+      "romaji": "katei",
+      "translation": "课程",
+      "meaning": "名词，学程"
+    },
+    {
+      "id": "n1-0029",
+      "level": "N1",
+      "word": "過程",
+      "kana": "かてい",
+      "romaji": "katei",
+      "translation": "过程",
+      "meaning": "名词，进程"
+    },
+    {
+      "id": "n1-0030",
+      "level": "N1",
+      "word": "悲観",
+      "kana": "ひかん",
+      "romaji": "hikan",
+      "translation": "悲观",
+      "meaning": "名词/サ变动词，消极"
+    },
+    {
+      "id": "n1-0031",
+      "level": "N1",
+      "word": "叶う",
+      "kana": "かなう",
+      "romaji": "kanau",
+      "translation": "实现",
+      "meaning": "动词（五段），如愿"
+    },
+    {
+      "id": "n1-0032",
+      "level": "N1",
+      "word": "叶える",
+      "kana": "かなえる",
+      "romaji": "kanaeru",
+      "translation": "实现",
+      "meaning": "动词（一段），满足（愿望）"
+    },
+    {
+      "id": "n1-0033",
+      "level": "N1",
+      "word": "金庫",
+      "kana": "きんこ",
+      "romaji": "kinko",
+      "translation": "金库",
+      "meaning": "名词，保险柜"
+    },
+    {
+      "id": "n1-0034",
+      "level": "N1",
+      "word": "気質",
+      "kana": "きしつ",
+      "romaji": "kishitsu",
+      "translation": "气质",
+      "meaning": "名词，性情"
+    },
+    {
+      "id": "n1-0035",
+      "level": "N1",
+      "word": "兆し",
+      "kana": "きざし",
+      "romaji": "kizashi",
+      "translation": "征兆",
+      "meaning": "名词，苗头"
+    },
+    {
+      "id": "n1-0036",
+      "level": "N1",
+      "word": "規制",
+      "kana": "きせい",
+      "romaji": "kisei",
+      "translation": "规制",
+      "meaning": "名词/サ变动词，限制"
+    },
+    {
+      "id": "n1-0037",
+      "level": "N1",
+      "word": "希薄",
+      "kana": "きはく",
+      "romaji": "kihaku",
+      "translation": "稀薄",
+      "meaning": "形容动词，淡薄"
+    },
+    {
+      "id": "n1-0038",
+      "level": "N1",
+      "word": "規模",
+      "kana": "きぼ",
+      "romaji": "kibo",
+      "translation": "规模",
+      "meaning": "名词，大小"
+    },
+    {
+      "id": "n1-0039",
+      "level": "N1",
+      "word": "究極",
+      "kana": "きゅうきょく",
+      "romaji": "kyuukyoku",
+      "translation": "终极",
+      "meaning": "名词，至极"
+    },
+    {
+      "id": "n1-0040",
+      "level": "N1",
+      "word": "急激",
+      "kana": "きゅうげき",
+      "romaji": "kyuugeki",
+      "translation": "急剧",
+      "meaning": "形容动词，剧烈"
+    },
+    {
+      "id": "n1-0041",
+      "level": "N1",
+      "word": "きっかけ",
+      "kana": "きっかけ",
+      "romaji": "kikkake",
+      "translation": "契机",
+      "meaning": "名词，引子"
+    },
+    {
+      "id": "n1-0042",
+      "level": "N1",
+      "word": "規定",
+      "kana": "きてい",
+      "romaji": "kitei",
+      "translation": "规定",
+      "meaning": "名词/サ变动词，规章制度"
+    },
+    {
+      "id": "n1-0043",
+      "level": "N1",
+      "word": "軌道",
+      "kana": "きどう",
+      "romaji": "kidou",
+      "translation": "轨道",
+      "meaning": "名词，路径"
+    },
+    {
+      "id": "n1-0044",
+      "level": "N1",
+      "word": "欺く",
+      "kana": "あざむく",
+      "romaji": "azamuku",
+      "translation": "欺骗",
+      "meaning": "动词（五段），欺骗、蒙蔽"
+    },
+    {
+      "id": "n1-0045",
+      "level": "N1",
+      "word": "逆転",
+      "kana": "ぎゃくてん",
+      "romaji": "gyakuten",
+      "translation": "逆转",
+      "meaning": "名词/サ变动词，翻盘"
+    },
+    {
+      "id": "n1-0046",
+      "level": "N1",
+      "word": "寄与",
+      "kana": "きよ",
+      "romaji": "kiyo",
+      "translation": "贡献",
+      "meaning": "名词/サ变动词，有益的贡献"
+    },
+    {
+      "id": "n1-0047",
+      "level": "N1",
+      "word": "極めて",
+      "kana": "きわめて",
+      "romaji": "kiwamete",
+      "translation": "极其",
+      "meaning": "副词，非常"
+    },
+    {
+      "id": "n1-0048",
+      "level": "N1",
+      "word": "緊急",
+      "kana": "きんきゅう",
+      "romaji": "kinkyuu",
+      "translation": "紧急",
+      "meaning": "名词/形容动词，急迫"
+    },
+    {
+      "id": "n1-0049",
+      "level": "N1",
+      "word": "勤務",
+      "kana": "きんむ",
+      "romaji": "kinmu",
+      "translation": "勤务",
+      "meaning": "名词/サ变动词，上班"
+    },
+    {
+      "id": "n1-0050",
+      "level": "N1",
+      "word": "区域",
+      "kana": "くいき",
+      "romaji": "kuiki",
+      "translation": "区域",
+      "meaning": "名词，地段"
+    },
+    {
+      "id": "n1-0051",
+      "level": "N1",
+      "word": "空想",
+      "kana": "くうそう",
+      "romaji": "kuusou",
+      "translation": "空想",
+      "meaning": "名词/サ变动词，幻想"
+    },
+    {
+      "id": "n1-0052",
+      "level": "N1",
+      "word": "崩す",
+      "kana": "くずす",
+      "romaji": "kuzusu",
+      "translation": "弄乱",
+      "meaning": "动词（五段），拆散"
+    },
+    {
+      "id": "n1-0053",
+      "level": "N1",
+      "word": "崩れる",
+      "kana": "くずれる",
+      "romaji": "kuzureru",
+      "translation": "坍塌",
+      "meaning": "动词（一段），崩溃"
+    },
+    {
+      "id": "n1-0054",
+      "level": "N1",
+      "word": "悔しい",
+      "kana": "くやしい",
+      "romaji": "kuyashii",
+      "translation": "后悔的",
+      "meaning": "形容词，不甘"
+    },
+    {
+      "id": "n1-0055",
+      "level": "N1",
+      "word": "一律",
+      "kana": "いちりつ",
+      "romaji": "ichiritsu",
+      "translation": "一律",
+      "meaning": "名词，一刀切、无差别"
+    },
+    {
+      "id": "n1-0056",
+      "level": "N1",
+      "word": "加わる",
+      "kana": "くわわる",
+      "romaji": "kuwawaru",
+      "translation": "加入",
+      "meaning": "动词（五段），参加"
+    },
+    {
+      "id": "n1-0057",
+      "level": "N1",
+      "word": "経緯",
+      "kana": "けいい",
+      "romaji": "keii",
+      "translation": "原委",
+      "meaning": "名词，来龙去脉"
+    },
+    {
+      "id": "n1-0058",
+      "level": "N1",
+      "word": "軽蔑",
+      "kana": "けいべつ",
+      "romaji": "keibetsu",
+      "translation": "轻蔑",
+      "meaning": "名词/サ变动词，鄙视"
+    },
+    {
+      "id": "n1-0059",
+      "level": "N1",
+      "word": "経由",
+      "kana": "けいゆ",
+      "romaji": "keiyu",
+      "translation": "经由",
+      "meaning": "名词/サ变动词，途经"
+    },
+    {
+      "id": "n1-0060",
+      "level": "N1",
+      "word": "削る",
+      "kana": "けずる",
+      "romaji": "kezuru",
+      "translation": "削减",
+      "meaning": "动词（五段），刨削"
+    },
+    {
+      "id": "n1-0061",
+      "level": "N1",
+      "word": "蹴る",
+      "kana": "ける",
+      "romaji": "keru",
+      "translation": "踢",
+      "meaning": "动词（五段），用脚踢"
+    },
+    {
+      "id": "n1-0062",
+      "level": "N1",
+      "word": "検討",
+      "kana": "けんとう",
+      "romaji": "kentou",
+      "translation": "研讨",
+      "meaning": "名词/サ变动词，研究讨论"
+    },
+    {
+      "id": "n1-0063",
+      "level": "N1",
+      "word": "権利",
+      "kana": "けんり",
+      "romaji": "kenri",
+      "translation": "权利",
+      "meaning": "名词，权益"
+    },
+    {
+      "id": "n1-0064",
+      "level": "N1",
+      "word": "措置",
+      "kana": "そち",
+      "romaji": "sochi",
+      "translation": "措施",
+      "meaning": "名词/サ变动词，处置、措施"
+    },
+    {
+      "id": "n1-0065",
+      "level": "N1",
+      "word": "貢献",
+      "kana": "こうけん",
+      "romaji": "kouken",
+      "translation": "贡献",
+      "meaning": "名词/サ变动词，出力"
+    },
+    {
+      "id": "n1-0066",
+      "level": "N1",
+      "word": "拘束",
+      "kana": "こうそく",
+      "romaji": "kousoku",
+      "translation": "拘束",
+      "meaning": "名词/サ变动词，约束"
+    },
+    {
+      "id": "n1-0067",
+      "level": "N1",
+      "word": "購入",
+      "kana": "こうにゅう",
+      "romaji": "kounyuu",
+      "translation": "购买",
+      "meaning": "名词/サ变动词，买入"
+    },
+    {
+      "id": "n1-0068",
+      "level": "N1",
+      "word": "効率",
+      "kana": "こうりつ",
+      "romaji": "kouritsu",
+      "translation": "效率",
+      "meaning": "名词，能效"
+    },
+    {
+      "id": "n1-0069",
+      "level": "N1",
+      "word": "克服",
+      "kana": "こくふく",
+      "romaji": "kokufuku",
+      "translation": "克服",
+      "meaning": "名词/サ变动词，战胜"
+    },
+    {
+      "id": "n1-0070",
+      "level": "N1",
+      "word": "誤解",
+      "kana": "ごかい",
+      "romaji": "gokai",
+      "translation": "误解",
+      "meaning": "名词/サ变动词，误会"
+    },
+    {
+      "id": "n1-0071",
+      "level": "N1",
+      "word": "孤立",
+      "kana": "こりつ",
+      "romaji": "koritsu",
+      "translation": "孤立",
+      "meaning": "名词/サ变动词，孤单"
+    },
+    {
+      "id": "n1-0072",
+      "level": "N1",
+      "word": "根拠",
+      "kana": "こんきょ",
+      "romaji": "konkyo",
+      "translation": "根据",
+      "meaning": "名词，依据"
+    },
+    {
+      "id": "n1-0073",
+      "level": "N1",
+      "word": "混同",
+      "kana": "こんどう",
+      "romaji": "kondou",
+      "translation": "混同",
+      "meaning": "名词/サ变动词，混淆"
+    },
+    {
+      "id": "n1-0074",
+      "level": "N1",
+      "word": "逆らう",
+      "kana": "さからう",
+      "romaji": "sakarau",
+      "translation": "违抗",
+      "meaning": "动词（五段），逆行"
+    },
+    {
+      "id": "n1-0075",
+      "level": "N1",
+      "word": "探る",
+      "kana": "さぐる",
+      "romaji": "saguru",
+      "translation": "探寻",
+      "meaning": "动词（五段），摸索"
+    },
+    {
+      "id": "n1-0076",
+      "level": "N1",
+      "word": "支える",
+      "kana": "ささえる",
+      "romaji": "sasaeru",
+      "translation": "支撑",
+      "meaning": "动词（一段），扶持"
+    },
+    {
+      "id": "n1-0077",
+      "level": "N1",
+      "word": "誘う",
+      "kana": "さそう",
+      "romaji": "sasou",
+      "translation": "邀请",
+      "meaning": "动词（五段），邀约"
+    },
+    {
+      "id": "n1-0078",
+      "level": "N1",
+      "word": "定める",
+      "kana": "さだめる",
+      "romaji": "sadameru",
+      "translation": "规定",
+      "meaning": "动词（一段），制定"
+    },
+    {
+      "id": "n1-0079",
+      "level": "N1",
+      "word": "覚める",
+      "kana": "さめる",
+      "romaji": "sameru",
+      "translation": "醒",
+      "meaning": "动词（一段），清醒"
+    },
+    {
+      "id": "n1-0080",
+      "level": "N1",
+      "word": "作用",
+      "kana": "さよう",
+      "romaji": "sayou",
+      "translation": "作用",
+      "meaning": "名词/サ变动词，机能"
+    },
+    {
+      "id": "n1-0081",
+      "level": "N1",
+      "word": "障る",
+      "kana": "さわる",
+      "romaji": "sawaru",
+      "translation": "妨碍",
+      "meaning": "动词（五段），妨害"
+    },
+    {
+      "id": "n1-0082",
+      "level": "N1",
+      "word": "賄う",
+      "kana": "まかなう",
+      "romaji": "makanau",
+      "translation": "筹措",
+      "meaning": "动词（五段），供应、筹措资金"
+    },
+    {
+      "id": "n1-0083",
+      "level": "N1",
+      "word": "踏まえる",
+      "kana": "ふまえる",
+      "romaji": "fumaeru",
+      "translation": "依据",
+      "meaning": "动词（一段），根据、以…为前提"
+    },
+    {
+      "id": "n1-0084",
+      "level": "N1",
+      "word": "自覚",
+      "kana": "じかく",
+      "romaji": "jikaku",
+      "translation": "自觉",
+      "meaning": "名词/サ变动词，觉悟"
+    },
+    {
+      "id": "n1-0085",
+      "level": "N1",
+      "word": "至急",
+      "kana": "しきゅう",
+      "romaji": "shikyuu",
+      "translation": "火急",
+      "meaning": "名词/副词，要紧"
+    },
+    {
+      "id": "n1-0086",
+      "level": "N1",
+      "word": "しくじる",
+      "kana": "しくじる",
+      "romaji": "shikujiru",
+      "translation": "失败",
+      "meaning": "动词（五段），搞砸"
+    },
+    {
+      "id": "n1-0087",
+      "level": "N1",
+      "word": "従う",
+      "kana": "したがう",
+      "romaji": "shitagau",
+      "translation": "遵从",
+      "meaning": "动词（五段），顺从"
+    },
+    {
+      "id": "n1-0088",
+      "level": "N1",
+      "word": "支給",
+      "kana": "しきゅう",
+      "romaji": "shikyuu",
+      "translation": "支给",
+      "meaning": "名词/サ变动词，发放"
+    },
+    {
+      "id": "n1-0089",
+      "level": "N1",
+      "word": "下書き",
+      "kana": "したがき",
+      "romaji": "shitagaki",
+      "translation": "草稿",
+      "meaning": "名词，底稿"
+    },
+    {
+      "id": "n1-0090",
+      "level": "N1",
+      "word": "実感",
+      "kana": "じっかん",
+      "romaji": "jikkan",
+      "translation": "实感",
+      "meaning": "名词/サ变动词，真实感受"
+    },
+    {
+      "id": "n1-0091",
+      "level": "N1",
+      "word": "執着",
+      "kana": "しゅうちゃく",
+      "romaji": "shuuchaku",
+      "translation": "执着",
+      "meaning": "名词/サ变动词，迷恋"
+    },
+    {
+      "id": "n1-0092",
+      "level": "N1",
+      "word": "縮小",
+      "kana": "しゅくしょう",
+      "romaji": "shukushou",
+      "translation": "缩小",
+      "meaning": "名词/サ变动词，收缩"
+    },
+    {
+      "id": "n1-0093",
+      "level": "N1",
+      "word": "主張",
+      "kana": "しゅちょう",
+      "romaji": "shuchou",
+      "translation": "主张",
+      "meaning": "名词/サ变动词，坚持己见"
+    },
+    {
+      "id": "n1-0094",
+      "level": "N1",
+      "word": "需要",
+      "kana": "じゅよう",
+      "romaji": "juyou",
+      "translation": "需求",
+      "meaning": "名词，需要量"
+    },
+    {
+      "id": "n1-0095",
+      "level": "N1",
+      "word": "順調",
+      "kana": "じゅんちょう",
+      "romaji": "junchou",
+      "translation": "顺利",
+      "meaning": "名词/形容动词，顺畅"
+    },
+    {
+      "id": "n1-0096",
+      "level": "N1",
+      "word": "承知",
+      "kana": "しょうち",
+      "romaji": "shouchi",
+      "translation": "知晓",
+      "meaning": "名词/サ变动词，知道/同意"
+    },
+    {
+      "id": "n1-0097",
+      "level": "N1",
+      "word": "詳細",
+      "kana": "しょうさい",
+      "romaji": "shousai",
+      "translation": "详细",
+      "meaning": "名词/形容动词，详尽"
+    },
+    {
+      "id": "n1-0098",
+      "level": "N1",
+      "word": "慎重",
+      "kana": "しんちょう",
+      "romaji": "shinchou",
+      "translation": "慎重",
+      "meaning": "名词/形容动词，谨慎"
+    },
+    {
+      "id": "n1-0099",
+      "level": "N1",
+      "word": "辛抱",
+      "kana": "しんぼう",
+      "romaji": "shinbou",
+      "translation": "忍耐",
+      "meaning": "名词/サ变动词，坚持"
+    },
+    {
+      "id": "n1-0100",
+      "level": "N1",
+      "word": "遂げる",
+      "kana": "とげる",
+      "romaji": "togeru",
+      "translation": "完成",
+      "meaning": "动词（一段），达成"
+    }
+  ]
+}

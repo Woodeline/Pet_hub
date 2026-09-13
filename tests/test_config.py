@@ -175,6 +175,7 @@ def test_load_after_save_is_json_readable(config_store: ConfigStore, config_path
     assert set(data) == {
         "version", "window_x", "window_y", "scale",
         "listen_enabled", "bubble_enabled", "autostart",
+        "jp_enabled", "jp_level",
     }
 
 

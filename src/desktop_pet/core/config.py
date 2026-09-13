@@ -84,6 +84,16 @@ def _coerce_scale(value: Any, default: float) -> float:
     return float(default)
 
 
+def _coerce_level(value: Any, default: str) -> str:
+    """把日语难度值收敛到 ``JP_LEVELS`` 内的合法等级；非法值回落默认。"""
+
+    if isinstance(value, str):
+        candidate = value.strip()
+        if candidate in C.JP_LEVELS:
+            return candidate
+    return default
+
+
 @dataclass
 class AppConfig:
     """应用配置数据载体（架构 §9.6 schema）。
@@ -96,6 +106,8 @@ class AppConfig:
         listen_enabled: 全局键盘监听开关。
         bubble_enabled: 气泡提示开关（PRD Q-01 的"静音"含义）。
         autostart: 开机自启开关。
+        jp_enabled: 日语学习开关（JP-02，默认关闭）。
+        jp_level: 日语难度等级（JP-06，默认 ``N5``，取值 ``N5..N1``）。
     """
 
     version: int = C.CONFIG_VERSION
@@ -105,6 +117,8 @@ class AppConfig:
     listen_enabled: bool = True
     bubble_enabled: bool = True
     autostart: bool = False
+    jp_enabled: bool = False
+    jp_level: str = C.JP_DEFAULT_LEVEL
 
     def to_dict(self) -> dict[str, Any]:
         """序列化为可 JSON 化的字典。"""
@@ -117,6 +131,8 @@ class AppConfig:
             "listen_enabled": bool(self.listen_enabled),
             "bubble_enabled": bool(self.bubble_enabled),
             "autostart": bool(self.autostart),
+            "jp_enabled": bool(self.jp_enabled),
+            "jp_level": str(self.jp_level),
         }
 
     @classmethod
@@ -142,6 +158,8 @@ class AppConfig:
             listen_enabled=_coerce_bool(get("listen_enabled"), defaults.listen_enabled),
             bubble_enabled=_coerce_bool(get("bubble_enabled"), defaults.bubble_enabled),
             autostart=_coerce_bool(get("autostart"), defaults.autostart),
+            jp_enabled=_coerce_bool(get("jp_enabled"), defaults.jp_enabled),
+            jp_level=_coerce_level(get("jp_level"), defaults.jp_level),
         )
 
 

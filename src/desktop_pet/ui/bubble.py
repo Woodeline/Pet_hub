@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QTimer
 from PySide6.QtGui import (
@@ -22,6 +22,9 @@ from PySide6.QtWidgets import QWidget
 
 from desktop_pet.core import constants as C
 
+if TYPE_CHECKING:  # 仅类型检查期导入，避免 ui 反向依赖 core 的运行时开销
+    from desktop_pet.core.vocabulary import VocabEntry
+
 #: 淡入淡出刷新间隔（毫秒）
 _FADE_TICK_MS: Final[int] = 16
 #: 相位常量
@@ -29,6 +32,9 @@ _PHASE_HIDDEN: Final[int] = 0
 _PHASE_FADE_IN: Final[int] = 1
 _PHASE_HOLD: Final[int] = 2
 _PHASE_FADE_OUT: Final[int] = 3
+#: 渲染模式（情绪气泡=纯文本；日语学习=四行多字号）
+_MODE_TEXT: Final[int] = 0
+_MODE_WORD: Final[int] = 1
 
 
 class BubbleWindow(QWidget):
@@ -57,8 +63,26 @@ class BubbleWindow(QWidget):
         self._pointing_down: bool = True  # 默认在宠物上方，三角尖朝下
         self._anchor: QPoint = QPoint(0, 0)
 
+        # 渲染模式与学习泡泡四行内容（默认文本模式，情绪气泡路径不受影响）
+        self._mode: int = _MODE_TEXT
+        self._line_word: str = ""
+        self._line_kana: str = ""
+        self._line_translation: str = ""
+        self._line_meaning: str = ""
+
         self._font = QFont("Microsoft YaHei")
         self._font.setPointSize(C.BUBBLE_FONT_SIZE)
+
+        # 学习泡泡四档字号（单词加粗；假名/翻译/释义依次递减）
+        self._font_word = QFont(C.JP_BUBBLE_FONT_FAMILY)
+        self._font_word.setPointSize(C.JP_BUBBLE_WORD_FONT_SIZE)
+        self._font_word.setBold(True)
+        self._font_kana = QFont(C.JP_BUBBLE_FONT_FAMILY)
+        self._font_kana.setPointSize(C.JP_BUBBLE_KANA_FONT_SIZE)
+        self._font_trans = QFont(C.JP_BUBBLE_FONT_FAMILY)
+        self._font_trans.setPointSize(C.JP_BUBBLE_TRANSLATION_FONT_SIZE)
+        self._font_meaning = QFont(C.JP_BUBBLE_FONT_FAMILY)
+        self._font_meaning.setPointSize(C.JP_BUBBLE_MEANING_FONT_SIZE)
 
         self._timer = QTimer(self)
         self._timer.setInterval(_FADE_TICK_MS)
@@ -82,7 +106,34 @@ class BubbleWindow(QWidget):
 
         if not text:
             return
+        self._mode = _MODE_TEXT
         self._text = text
+        self._duration = min(C.BUBBLE_MAX_DURATION_S, max(C.BUBBLE_MIN_DURATION_S, float(duration)))
+        self._elapsed = 0.0
+        self._alpha = 0.0
+        self._phase = _PHASE_FADE_IN
+
+        geometry = self._compute_geometry(self._anchor)
+        self.setGeometry(geometry)
+        self.setWindowOpacity(0.0)
+        self.show()
+        self.raise_()
+        self._timer.start()
+
+    def show_word(self, entry: "VocabEntry", duration: float) -> None:
+        """显示一条日语单词（四行多字号：单词 / 假名 / 翻译 / 释义）。
+
+        空 ``entry`` 视为 no-op；``duration`` 同 :meth:`show_message` 钳制到 ``[2, 4]`` 秒。
+        学习泡泡**固定内容宽度** = :data:`C.JP_BUBBLE_MAX_WIDTH`，保证测量换行宽 == 绘制换行宽。
+        """
+
+        if entry is None or not getattr(entry, "word", ""):
+            return
+        self._mode = _MODE_WORD
+        self._line_word = entry.word
+        self._line_kana = entry.kana
+        self._line_translation = entry.translation
+        self._line_meaning = entry.meaning
         self._duration = min(C.BUBBLE_MAX_DURATION_S, max(C.BUBBLE_MIN_DURATION_S, float(duration)))
         self._elapsed = 0.0
         self._alpha = 0.0
@@ -146,18 +197,46 @@ class BubbleWindow(QWidget):
             painter.drawPath(path)
 
             # 文字
-            painter.setPen(QPen(QColor(C.COLORS["bubble_text"])))
-            painter.setFont(self._font)
-            text_rect = body.adjusted(
-                C.BUBBLE_PAD_X, C.BUBBLE_PAD_Y, -C.BUBBLE_PAD_X, -C.BUBBLE_PAD_Y
-            )
-            painter.drawText(
-                text_rect,
-                int(Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap),
-                self._text,
-            )
+            if self._mode == _MODE_WORD:
+                self._paint_word(painter, body)
+            else:
+                painter.setPen(QPen(QColor(C.COLORS["bubble_text"])))
+                painter.setFont(self._font)
+                text_rect = body.adjusted(
+                    C.BUBBLE_PAD_X, C.BUBBLE_PAD_Y, -C.BUBBLE_PAD_X, -C.BUBBLE_PAD_Y
+                )
+                painter.drawText(
+                    text_rect,
+                    int(Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap),
+                    self._text,
+                )
         finally:
             painter.end()
+
+    def _paint_word(self, painter: QPainter, body: QRectF) -> None:
+        """绘制学习泡泡四行文本块（各行独立字号/颜色，水平居中、整块垂直居中）。"""
+
+        wrap_w = C.JP_BUBBLE_MAX_WIDTH
+        layout = self._word_layout(wrap_w)
+        if not layout:
+            return
+
+        content = body.adjusted(C.BUBBLE_PAD_X, C.BUBBLE_PAD_Y, -C.BUBBLE_PAD_X, -C.BUBBLE_PAD_Y)
+        spacing = C.BUBBLE_LINE_SPACING
+        total_h = sum(rect.height() for _f, _c, _t, rect in layout) + spacing * (len(layout) - 1)
+        left = content.left() + max(0.0, (content.width() - wrap_w) / 2.0)
+        y = content.top() + max(0.0, (content.height() - total_h) / 2.0)
+
+        for font, color, text, rect in layout:
+            painter.setFont(font)
+            painter.setPen(QPen(QColor(color)))
+            row_h = rect.height()
+            painter.drawText(
+                QRectF(left, y, wrap_w, row_h),
+                int(Qt.AlignmentFlag.AlignHCenter | Qt.TextFlag.TextWordWrap),
+                text,
+            )
+            y += row_h + spacing
 
     # ------------------------------------------------------------------ #
     # 内部
@@ -195,6 +274,45 @@ class BubbleWindow(QWidget):
             text,
         )
 
+    def _word_layout(self, wrap_w: float) -> list[tuple[QFont, str, str, QRectF]]:
+        """构造学习泡泡四行的 (字体, 颜色, 文本, 测量盒) 布局。
+
+        以 **同一换行宽度** ``wrap_w`` 测量，测量与绘制的换行结果必然一致。
+        空行（如缺失字段）被跳过。
+        """
+
+        rows = (
+            (self._font_word, C.COLORS["bubble_text"], self._line_word),
+            (self._font_kana, C.COLORS["bubble_sub_text"], self._line_kana),
+            (self._font_trans, C.COLORS["bubble_text"], self._line_translation),
+            (self._font_meaning, C.COLORS["bubble_faint_text"], self._line_meaning),
+        )
+        layout: list[tuple[QFont, str, str, QRectF]] = []
+        for font, color, text in rows:
+            if not text:
+                continue
+            metrics = QFontMetricsF(font)
+            rect = metrics.boundingRect(
+                QRectF(0.0, 0.0, wrap_w, 10000.0),
+                int(Qt.AlignmentFlag.AlignHCenter | Qt.TextFlag.TextWordWrap),
+                text,
+            )
+            # 单行时以行高兜底，避免紧包围盒裁掉上下缘
+            rect.setHeight(max(rect.height(), metrics.height()))
+            layout.append((font, color, text, rect))
+        return layout
+
+    def _measure_word(self) -> QRectF:
+        """测量学习泡泡四行文本块的包围盒（宽 ≤ ``JP_BUBBLE_MAX_WIDTH``）。"""
+
+        layout = self._word_layout(C.JP_BUBBLE_MAX_WIDTH)
+        if not layout:
+            return QRectF(0.0, 0.0, 0.0, 0.0)
+        spacing = C.BUBBLE_LINE_SPACING
+        width = max(rect.width() for _f, _c, _t, rect in layout)
+        height = sum(rect.height() for _f, _c, _t, rect in layout) + spacing * (len(layout) - 1)
+        return QRectF(0.0, 0.0, width, height)
+
     def _compute_geometry(self, anchor: QPoint) -> QRect:
         """根据锚点计算气泡窗口几何（贴近屏幕顶部时翻转）。
 
@@ -205,8 +323,12 @@ class BubbleWindow(QWidget):
             气泡窗口的全局 :class:`QRect`。
         """
 
-        measured = self._measure(self._text)
-        content_w = min(C.BUBBLE_MAX_WIDTH, max(40.0, measured.width())) + C.BUBBLE_PAD_X * 2.0
+        if self._mode == _MODE_WORD:
+            measured = self._measure_word()
+            content_w = C.JP_BUBBLE_MAX_WIDTH + C.BUBBLE_PAD_X * 2.0
+        else:
+            measured = self._measure(self._text)
+            content_w = min(C.BUBBLE_MAX_WIDTH, max(40.0, measured.width())) + C.BUBBLE_PAD_X * 2.0
         content_h = max(20.0, measured.height()) + C.BUBBLE_PAD_Y * 2.0
         w = int(round(content_w))
         h = int(round(content_h)) + int(round(C.BUBBLE_TAIL_H))

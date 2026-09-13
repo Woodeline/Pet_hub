@@ -17,6 +17,7 @@ import os
 import random
 import sys
 import time
+from datetime import datetime, timezone
 
 from PySide6.QtCore import QObject, QPoint
 from PySide6.QtGui import QGuiApplication
@@ -24,7 +25,7 @@ from PySide6.QtWidgets import QApplication
 
 from desktop_pet.app.keyboard_listener import KeystrokeBridge, KeyboardListener
 from desktop_pet.core import constants as C
-from desktop_pet.core import motion
+from desktop_pet.core import motion, paths
 from desktop_pet.core.config import AppConfig, ConfigStore
 from desktop_pet.core.constants import Expression, Gesture, Mood
 from desktop_pet.core.event_aggregator import KeystrokeAggregator
@@ -34,10 +35,13 @@ from desktop_pet.core.mood_state_machine import (
     expression_for_mood,
 )
 from desktop_pet.core.pet_model import PetModel
+from desktop_pet.core.vocab_store import VocabStore
+from desktop_pet.core.vocabulary import VocabEntry, WordBank, WordSampler
 from desktop_pet.ui.bubble import BubbleWindow
 from desktop_pet.ui.pet_renderer import PetRenderer
 from desktop_pet.ui.pet_window import PetWindow
 from desktop_pet.ui.tray import TrayController
+from desktop_pet.ui.vocab_window import VocabWindow
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +94,15 @@ class PetAppController(QObject):
         self._next_yawn_ts: float = float("inf")
         self._rng: random.Random = random.Random()
 
+        # —— 日语学习运行时状态（词库 / 抽取器 / 生词本 / 单词定时 / 生词本窗口单例）——
+        self._bank: WordBank = WordBank.empty()
+        self._sampler: WordSampler = WordSampler(self._bank, self._rng)
+        self._vocab: VocabStore = VocabStore(VocabStore.default_path())
+        self._current_word: VocabEntry | None = None
+        self._vocab_window: VocabWindow | None = None
+        self._next_word_ts: float = float("inf")
+        self._bank_warned: bool = False
+
     # ------------------------------------------------------------------ #
     # 生命周期
     # ------------------------------------------------------------------ #
@@ -111,7 +124,13 @@ class PetAppController(QObject):
         self._tray.set_scale_checked(self._cfg.scale)
         self._tray.set_autostart_checked(self._cfg.autostart)
         self._tray.set_bubble_checked(self._cfg.bubble_enabled)
+        self._load_japanese()
+        self._tray.set_jp_checked(self._cfg.jp_enabled)
+        self._tray.set_jp_level_checked(self._cfg.jp_level)
+        self._tray.set_jp_enabled(self._cfg.jp_enabled)
+        self._tray.set_jp_current_word(None)
         self._tray.show()
+        self._notify_jp_startup_state()
 
         self._window.show()
         self._window.raise_()
@@ -128,6 +147,7 @@ class PetAppController(QObject):
         now = time.monotonic()
         self._last_frame_ts = now
         self._next_yawn_ts = now + motion.random_interval(C.YAWN_MIN_S, C.YAWN_MAX_S)
+        self._schedule_next_word(now)
         self._running = True
 
         self._app.aboutToQuit.connect(self._on_about_to_quit)
@@ -183,6 +203,12 @@ class PetAppController(QObject):
         self._tray.restore_requested.connect(self._on_restore)
         self._tray.autostart_toggled.connect(self._set_autostart)
         self._tray.quit_requested.connect(self.shutdown)
+
+        # 日语学习
+        self._tray.jp_enabled_toggled.connect(self._on_jp_toggled)
+        self._tray.jp_level_selected.connect(self._on_jp_level_selected)
+        self._tray.jp_remember_requested.connect(self._on_jp_remember)
+        self._tray.jp_vocab_requested.connect(self._on_jp_vocab)
 
     # ------------------------------------------------------------------ #
     # 槽：键盘
@@ -241,6 +267,11 @@ class PetAppController(QObject):
                 self._next_yawn_ts = now + motion.random_interval(C.YAWN_MIN_S, C.YAWN_MAX_S)
             elif self._sm.mood != Mood.REST:
                 self._next_yawn_ts = now + motion.random_interval(C.YAWN_MIN_S, C.YAWN_MAX_S)
+
+            # 学习模式：独立随机节奏（25~50s）展示日语单词（挂在既有帧循环，不新开 QTimer）
+            if self._cfg.jp_enabled and now >= self._next_word_ts:
+                self._show_word_bubble(now)
+                self._schedule_next_word(now)
 
             # 帧率联动（活跃 30 / 空闲 15 / 睡眠 8）
             fps = C.FPS_ACTIVE if now < self._active_until else self._fps_for_mood(self._sm.mood)
@@ -342,6 +373,162 @@ class PetAppController(QObject):
             self._sync_fps_and_visuals(transition)
         except Exception:  # noqa: BLE001
             logger.exception("恢复窗口异常（已忽略）")
+
+    # ------------------------------------------------------------------ #
+    # 内部：日语学习（词库 / 单词定时 / 生词本 / 4 槽）
+    # ------------------------------------------------------------------ #
+    def _load_japanese(self) -> None:
+        """启动时加载内置词库与生词本（任何损坏都优雅降级，绝不崩溃）。"""
+
+        try:
+            self._bank = WordBank.load(paths.word_bank_path())
+        except Exception:  # noqa: BLE001
+            logger.exception("加载词库失败（已忽略，使用空词库）")
+            self._bank = WordBank.empty()
+        self._sampler = WordSampler(self._bank, self._rng)
+        self._sampler.set_level(self._cfg.jp_level)
+
+        try:
+            self._vocab = VocabStore(VocabStore.default_path())
+            self._vocab.load()
+        except Exception:  # noqa: BLE001
+            logger.exception("加载生词本失败（已忽略，使用空生词本）")
+            self._vocab = VocabStore(VocabStore.default_path())
+
+    def _notify_jp_startup_state(self) -> None:
+        """启动时若已开启学习：给一次状态提示（气泡总开关未开 / 词库不可用）。"""
+
+        if not self._cfg.jp_enabled:
+            return
+        if not self._cfg.bubble_enabled:
+            self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_NEED_BUBBLE)
+        elif self._bank.is_empty():
+            self._bank_warned = True
+            self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_BANK_UNAVAILABLE)
+
+    def _schedule_next_word(self, now: float) -> None:
+        """按 25~50s 随机间隔排期下一次单词展示（学习关闭时置 ``inf`` 不触发）。"""
+
+        if self._cfg.jp_enabled and not self._bank.is_empty():
+            self._next_word_ts = now + motion.random_interval(
+                C.JP_WORD_MIN_INTERVAL_S, C.JP_WORD_MAX_INTERVAL_S, self._rng
+            )
+        else:
+            self._next_word_ts = float("inf")
+
+    def _show_word_bubble(self, now: float) -> None:
+        """抽取并展示一条日语单词（受气泡总开关 / 睡觉态 / 最小间隔约束）。"""
+
+        if not self._cfg.bubble_enabled:
+            return
+        if self._sm.mood == Mood.SLEEP:
+            return
+        if (now - self._last_bubble_ts) < C.BUBBLE_MIN_GAP_S:
+            return
+        entry = self._sampler.next()
+        if entry is None:
+            if not self._bank_warned:
+                self._bank_warned = True
+                logger.warning("日语词库为空或该等级无词（level=%s）", self._cfg.jp_level)
+                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_BANK_UNAVAILABLE)
+            return
+        self._current_word = entry
+        self._tray.set_jp_current_word(entry.word)
+        self._bubble.set_anchor(self._bubble_anchor())
+        duration = motion.random_interval(
+            C.BUBBLE_MIN_DURATION_S, C.BUBBLE_MAX_DURATION_S, self._rng
+        )
+        self._bubble.show_word(entry, duration)
+        self._last_bubble_ts = now
+
+    def _on_jp_toggled(self, checked: bool) -> None:
+        """切换「日语学习」开关（JP-02）。"""
+
+        checked = bool(checked)
+        self._cfg.jp_enabled = checked
+        self._tray.set_jp_enabled(checked)
+        now = time.monotonic()
+        if checked:
+            self._sampler.set_level(self._cfg.jp_level)
+            self._schedule_next_word(now)
+            if not self._cfg.bubble_enabled:
+                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_NEED_BUBBLE)
+            elif self._bank.is_empty():
+                self._bank_warned = True
+                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_BANK_UNAVAILABLE)
+        else:
+            self._next_word_ts = float("inf")
+        self._persist()
+
+    def _on_jp_level_selected(self, level: str) -> None:
+        """切换难度等级（JP-06，单选，持久化）。"""
+
+        level = str(level)
+        if level not in C.JP_LEVELS:
+            return
+        self._cfg.jp_level = level
+        self._tray.set_jp_level_checked(level)
+        self._sampler.set_level(level)
+        self._persist()
+
+    def _on_jp_remember(self) -> None:
+        """把「最近一次展示」的单词加入生词本（JP-08，按 id 去重）。"""
+
+        if not self._cfg.jp_enabled:
+            return
+        entry = self._current_word
+        if entry is None:
+            self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_NO_WORD)
+            return
+        added_at = self._now_iso()
+        if self._vocab.add(entry, added_at):
+            self._tray.notify(
+                C.APP_DISPLAY_NAME,
+                C.JP_NOTIFY_REMEMBER_ADDED.format(word=entry.word, kana=entry.kana),
+            )
+            if self._vocab_window is not None:
+                self._vocab_window.refresh(self._vocab.items())
+        else:
+            self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_REMEMBER_DUPLICATE)
+
+    def _on_jp_vocab(self) -> None:
+        """打开生词本窗口（单例，重开则前置）。"""
+
+        try:
+            if self._vocab_window is None:
+                self._vocab_window = VocabWindow()
+                self._vocab_window.remove_requested.connect(self._on_vocab_remove)
+                self._vocab_window.clear_requested.connect(self._on_vocab_clear)
+            self._vocab_window.refresh(self._vocab.items())
+            self._vocab_window.show()
+            self._vocab_window.raise_()
+            self._vocab_window.activateWindow()
+        except Exception:  # noqa: BLE001
+            logger.exception("打开生词本窗口异常（已忽略）")
+
+    def _on_vocab_remove(self, item_id: str) -> None:
+        """删除单条生词并刷新窗口。"""
+
+        try:
+            if self._vocab.remove(str(item_id)) and self._vocab_window is not None:
+                self._vocab_window.refresh(self._vocab.items())
+        except Exception:  # noqa: BLE001
+            logger.exception("删除生词异常（已忽略）")
+
+    def _on_vocab_clear(self) -> None:
+        """清空生词本并刷新窗口。"""
+
+        try:
+            self._vocab.clear()
+            if self._vocab_window is not None:
+                self._vocab_window.refresh(self._vocab.items())
+        except Exception:  # noqa: BLE001
+            logger.exception("清空生词本异常（已忽略）")
+
+    def _now_iso(self) -> str:
+        """返回当前 UTC 墙钟时间的 ISO8601 字符串（仅 app 层生成，注入 core）。"""
+
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # ------------------------------------------------------------------ #
     # 内部：应用迁移 / 帧率 / 气泡 / 缩放 / 持久化

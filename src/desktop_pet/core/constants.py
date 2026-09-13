@@ -139,6 +139,12 @@ COLORS: Final[dict[str, str]] = {
     "glow_blue": "#B9D4E8",   # 淡蓝 睡觉柔光
     # —— 兼容保留：ui.bubble 仍引用此描边色（色值集中定义在 core）——
     "warm_brown": "#8B6B4F",
+    # —— 日语学习：学习泡泡次级文字色 + 生词本窗口配色（设计 §7.4）——
+    "bubble_sub_text": "#9C8570",   # 暖灰 假名（次级文字）
+    "bubble_faint_text": "#B7A99A",  # 淡褐 中文释义（最淡文字）
+    "vocab_bg": "#FFFDF8",          # 奶白 生词本窗口底色
+    "vocab_text": "#5A4636",        # 深棕 生词本正文文字
+    "vocab_level_tag": "#7A9E7E",   # 灰绿 生词本等级标签色
 }
 
 # 主体「柔和全息彩虹」渐变（左上前额 → 右下身体前沿的对角线性渐变）。
@@ -332,6 +338,69 @@ BUBBLE_TEXTS: Final[dict[Expression | Mood, list[str]]] = {
 TRAY_TOOLTIP: Final[str] = f"{APP_DISPLAY_NAME} · 桌面宠物"
 BUBBLE_MAX_WIDTH_PX: Final[float] = BUBBLE_MAX_WIDTH
 
+# --------------------------------------------------------------------------- #
+# 10. 日语学习（JP-01~JP-16）—— 难度 / 节奏 / 排版 / 文件 / 文案
+# --------------------------------------------------------------------------- #
+# —— 难度等级（由易到难，有序元组；与词库 level / 配置 jp_level 统一口径）——
+JP_LEVELS: Final[tuple[str, ...]] = ("N5", "N4", "N3", "N2", "N1")
+JP_DEFAULT_LEVEL: Final[str] = "N5"
+#: 等级 → 菜单/筛选显示文案（当前与等级同文字，保留为字典以便未来扩展描述）
+JP_LEVEL_LABELS: Final[dict[str, str]] = {level: level for level in JP_LEVELS}
+
+# —— 出现节奏（独立随机间隔，挂在既有帧循环上，不新开 QTimer）——
+JP_WORD_MIN_INTERVAL_S: Final[float] = 25.0
+JP_WORD_MAX_INTERVAL_S: Final[float] = 50.0
+
+# —— 学习泡泡排版（四行多字号，固定内容宽度保证「测量换行宽 == 绘制换行宽」）——
+JP_BUBBLE_WORD_FONT_SIZE: Final[int] = 16          # 日语单词（加粗）
+JP_BUBBLE_KANA_FONT_SIZE: Final[int] = 12          # 假名读音
+JP_BUBBLE_TRANSLATION_FONT_SIZE: Final[int] = 11   # 中文翻译
+JP_BUBBLE_MEANING_FONT_SIZE: Final[int] = 9        # 中文释义
+JP_BUBBLE_MAX_WIDTH: Final[float] = 240.0          # 学习泡泡固定内容宽度
+JP_BUBBLE_FONT_FAMILY: Final[str] = "Microsoft YaHei"
+BUBBLE_LINE_SPACING: Final[float] = 3.0            # 多行泡泡行距（PRD 原命名，不加 JP 前缀）
+
+# —— 词库 / 生词本文件与版本 ——
+WORD_BANK_DIR_NAME: Final[str] = "data"
+WORD_BANK_FILE_NAME: Final[str] = "jlpt_words.json"
+WORD_BANK_VERSION: Final[int] = 1
+VOCAB_FILE_NAME: Final[str] = "vocabulary.json"
+VOCAB_VERSION: Final[int] = 1
+
+# —— 生词本窗口尺寸 ——
+VOCAB_WINDOW_W: Final[int] = 440
+VOCAB_WINDOW_H: Final[int] = 360
+
+# —— 托盘菜单文案 ——
+JP_MENU_TITLE: Final[str] = "日语学习"
+JP_MENU_LEVEL: Final[str] = "难度"
+JP_MENU_REMEMBER: Final[str] = "记住当前单词"
+JP_MENU_REMEMBER_TEMPLATE: Final[str] = "记住「{word}」"   # 有当前词时动态替换
+JP_MENU_VOCAB: Final[str] = "生词本…"
+
+# —— 托盘通知文案（JP_NOTIFY_REMEMBER_ADDED 用 str.format(word=..., kana=...)）——
+JP_NOTIFY_REMEMBER_ADDED: Final[str] = "已加入生词本：{word}（{kana}）"
+JP_NOTIFY_REMEMBER_DUPLICATE: Final[str] = "已在生词本中"
+JP_NOTIFY_NO_WORD: Final[str] = "还没有单词哦，稍等泡泡弹出单词后再试～"
+JP_NOTIFY_NEED_BUBBLE: Final[str] = "已开启日语学习～先打开「气泡提示」，单词才会显示哦"
+JP_NOTIFY_BANK_UNAVAILABLE: Final[str] = "日语词库不可用，已跳过日语单词展示"
+
+# —— 生词本窗口文案 ——
+JP_VOCAB_WINDOW_TITLE: Final[str] = "生词本"
+JP_VOCAB_FILTER_ALL: Final[str] = "全部"
+JP_VOCAB_LEVEL_FILTER_LABEL: Final[str] = "等级："
+JP_VOCAB_COL_WORD: Final[str] = "单词"
+JP_VOCAB_COL_KANA: Final[str] = "假名"
+JP_VOCAB_COL_TRANSLATION: Final[str] = "翻译"
+JP_VOCAB_COL_LEVEL: Final[str] = "等级"
+JP_VOCAB_BTN_REMOVE: Final[str] = "删除选中"
+JP_VOCAB_BTN_CLEAR: Final[str] = "清空…"
+JP_VOCAB_BTN_CLOSE: Final[str] = "关闭"
+JP_VOCAB_EMPTY_TEXT: Final[str] = "还没有生词哦～ 打开「日语学习」后，把想记的单词加进来吧"
+JP_VOCAB_STATUS_TEMPLATE: Final[str] = "共 {count} 个生词"
+JP_VOCAB_CLEAR_CONFIRM_TITLE: Final[str] = "清空生词本"
+JP_VOCAB_CLEAR_CONFIRM_TEXT: Final[str] = "确定要清空全部生词吗？此操作不可撤销。"
+
 __all__ = [
     "Mood",
     "Expression",
@@ -342,4 +411,24 @@ __all__ = [
     "NEUTRAL_POSE",
     "BUBBLE_TEXTS",
     "interval_for_fps",
+    # 日语学习
+    "JP_LEVELS",
+    "JP_DEFAULT_LEVEL",
+    "JP_LEVEL_LABELS",
+    "JP_WORD_MIN_INTERVAL_S",
+    "JP_WORD_MAX_INTERVAL_S",
+    "JP_BUBBLE_WORD_FONT_SIZE",
+    "JP_BUBBLE_KANA_FONT_SIZE",
+    "JP_BUBBLE_TRANSLATION_FONT_SIZE",
+    "JP_BUBBLE_MEANING_FONT_SIZE",
+    "JP_BUBBLE_MAX_WIDTH",
+    "JP_BUBBLE_FONT_FAMILY",
+    "BUBBLE_LINE_SPACING",
+    "WORD_BANK_DIR_NAME",
+    "WORD_BANK_FILE_NAME",
+    "WORD_BANK_VERSION",
+    "VOCAB_FILE_NAME",
+    "VOCAB_VERSION",
+    "VOCAB_WINDOW_W",
+    "VOCAB_WINDOW_H",
 ]

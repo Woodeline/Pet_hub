@@ -35,6 +35,11 @@ class TrayController(QObject):
     autostart_toggled = Signal(bool)
     quit_requested = Signal()
     bubble_toggled = Signal(bool)
+    # —— 日语学习（ui 层只发信号，业务判定在 app/controller）——
+    jp_enabled_toggled = Signal(bool)
+    jp_level_selected = Signal(str)
+    jp_remember_requested = Signal()
+    jp_vocab_requested = Signal()
 
     def __init__(self, icon: QIcon, cfg: AppConfig) -> None:
         """构造托盘控制器。
@@ -60,6 +65,13 @@ class TrayController(QObject):
         self._action_quit: QAction | None = None
         self._scale_group: QActionGroup | None = None
         self._scale_actions: dict[float, QAction] = {}
+        # 日语学习菜单组
+        self._action_jp: QAction | None = None
+        self._jp_level_menu: QMenu | None = None
+        self._jp_level_group: QActionGroup | None = None
+        self._jp_level_actions: dict[str, QAction] = {}
+        self._action_jp_remember: QAction | None = None
+        self._action_jp_vocab: QAction | None = None
 
         self._build_menu()
 
@@ -120,6 +132,44 @@ class TrayController(QObject):
             self._action_bubble.setChecked(bool(checked))
             self._action_bubble.blockSignals(False)
 
+    def set_jp_checked(self, checked: bool) -> None:
+        """同步「日语学习」开关勾选状态（不触发信号）。"""
+
+        if self._action_jp is not None:
+            self._action_jp.blockSignals(True)
+            self._action_jp.setChecked(bool(checked))
+            self._action_jp.blockSignals(False)
+
+    def set_jp_level_checked(self, level: str) -> None:
+        """同步「难度」单选状态（不触发信号）。"""
+
+        for value, action in self._jp_level_actions.items():
+            action.blockSignals(True)
+            action.setChecked(value == level)
+            action.blockSignals(False)
+
+    def set_jp_enabled(self, enabled: bool) -> None:
+        """统一刷新日语菜单组：关闭时「难度」「记住当前单词」置灰；生词本始终可用。"""
+
+        enabled = bool(enabled)
+        if self._jp_level_menu is not None:
+            self._jp_level_menu.setEnabled(enabled)
+        if self._action_jp_remember is not None:
+            self._action_jp_remember.setEnabled(enabled)
+
+    def set_jp_current_word(self, word: str | None) -> None:
+        """把「记住当前单词」项文字动态反映当前展示词（无当前词时回落常量文案）。"""
+
+        if self._action_jp_remember is None:
+            return
+        if word:
+            label = C.JP_MENU_REMEMBER_TEMPLATE.format(word=word)
+        else:
+            label = C.JP_MENU_REMEMBER
+        self._action_jp_remember.blockSignals(True)
+        self._action_jp_remember.setText(label)
+        self._action_jp_remember.blockSignals(False)
+
     # ------------------------------------------------------------------ #
     # 内部
     # ------------------------------------------------------------------ #
@@ -138,6 +188,36 @@ class TrayController(QObject):
         self._action_bubble.setCheckable(True)
         self._action_bubble.setChecked(bool(self._cfg.bubble_enabled))
         self._action_bubble.toggled.connect(self.bubble_toggled.emit)
+
+        # —— 日语学习菜单组（开关 + 难度子菜单 + 记住当前单词 + 生词本…）——
+        self._action_jp = QAction(C.JP_MENU_TITLE, self._menu)
+        self._action_jp.setCheckable(True)
+        self._action_jp.setChecked(bool(self._cfg.jp_enabled))
+        self._action_jp.toggled.connect(self.jp_enabled_toggled.emit)
+
+        self._jp_level_menu = QMenu(C.JP_MENU_LEVEL, self._menu)
+        self._jp_level_group = QActionGroup(self._menu)
+        self._jp_level_group.setExclusive(True)
+        for level in C.JP_LEVELS:
+            action = QAction(C.JP_LEVEL_LABELS.get(level, level), self._jp_level_menu)
+            action.setCheckable(True)
+            action.setChecked(level == self._cfg.jp_level)
+            action.triggered.connect(
+                lambda _checked=False, lv=level: self.jp_level_selected.emit(lv)
+            )
+            self._jp_level_group.addAction(action)
+            self._jp_level_menu.addAction(action)
+            self._jp_level_actions[level] = action
+
+        self._action_jp_remember = QAction(C.JP_MENU_REMEMBER, self._menu)
+        self._action_jp_remember.triggered.connect(
+            lambda _checked=False: self.jp_remember_requested.emit()
+        )
+
+        self._action_jp_vocab = QAction(C.JP_MENU_VOCAB, self._menu)
+        self._action_jp_vocab.triggered.connect(
+            lambda _checked=False: self.jp_vocab_requested.emit()
+        )
 
         scale_menu = QMenu("大小", self._menu)
         self._scale_group = QActionGroup(self._menu)
@@ -165,6 +245,12 @@ class TrayController(QObject):
         self._menu.addAction(self._action_restore)
         self._menu.addAction(self._action_listen)
         self._menu.addAction(self._action_bubble)
+        self._menu.addSeparator()
+        self._menu.addAction(self._action_jp)
+        self._menu.addMenu(self._jp_level_menu)
+        self._menu.addAction(self._action_jp_remember)
+        self._menu.addAction(self._action_jp_vocab)
+        self._menu.addSeparator()
         self._menu.addMenu(scale_menu)
         self._menu.addAction(self._action_minimize)
         self._menu.addSeparator()
