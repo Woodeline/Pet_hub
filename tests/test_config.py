@@ -176,7 +176,52 @@ def test_load_after_save_is_json_readable(config_store: ConfigStore, config_path
         "version", "window_x", "window_y", "scale",
         "listen_enabled", "bubble_enabled", "autostart",
         "jp_enabled", "jp_level",
+        "jp_bubble_duration_s", "jp_daily_limit",
     }
+
+
+# --------------------------------------------------------------------------- #
+# 3.5 日语学习可调参数（JP-17/18）
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        (30, 30.0),            # 合法
+        ("60", 60.0),          # 数字字符串
+        (3, 5.0),              # 低于下限 → 钳到 5
+        (999, 120.0),          # 高于上限 → 钳到 120
+        ("abc", 30.0),         # 非法 → 默认 30
+        (True, 30.0),          # bool 非法
+        (None, 30.0),
+    ],
+)
+def test_jp_bubble_duration_coercion(raw, expected) -> None:
+    cfg = AppConfig.from_dict({"jp_bubble_duration_s": raw})
+    assert cfg.jp_bubble_duration_s == expected
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        (15, 15),              # 合法
+        ("20", 20),            # 数字字符串
+        (0, 1),                # 低于下限 → 钳到 1
+        (9999, 500),           # 高于上限 → 钳到 500
+        ("abc", 15),           # 非法 → 默认 15
+        (True, 15),            # bool 非法
+        (3.5, 15),             # 非整数浮点非法
+        (None, 15),
+    ],
+)
+def test_jp_daily_limit_coercion(raw, expected) -> None:
+    cfg = AppConfig.from_dict({"jp_daily_limit": raw})
+    assert cfg.jp_daily_limit == expected
+
+
+def test_jp_new_fields_default_values() -> None:
+    cfg = AppConfig()
+    assert cfg.jp_bubble_duration_s == C.JP_BUBBLE_DURATION_DEFAULT_S == 30.0
+    assert cfg.jp_daily_limit == C.JP_DAILY_LIMIT_DEFAULT == 15
 
 
 # --------------------------------------------------------------------------- #

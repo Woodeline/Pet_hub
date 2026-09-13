@@ -1,14 +1,19 @@
-"""ui.bubble —— 气泡对话浮层（FR-30 / PRD §4.3）。
+"""ui.bubble —— 气泡对话浮层（FR-30 / PRD §4.3 / JP-17）。
 
 独立无边框透明置顶窗口：圆角矩形 + 指向宠物头顶的小三角尖；
-出现 0.2s 淡入 → 停留 2~4s → 0.3s 淡出；贴近屏幕顶部时自动翻转到下方。
+出现 0.2s 淡入 → 停留设定时长 → 0.3s 淡出；贴近屏幕顶部时自动翻转到下方。
+
+两种渲染模式：
+- 文本模式（情绪气泡）：**完全点击穿透**，不拦截任何鼠标事件。
+- 单词模式（日语学习）：四行多字号文本 + 底部「记住了 / 新单词」两个按钮，
+  窗口切换为可交互（接收鼠标），超时无操作自动消失（时长由配置注入）。
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final
 
-from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QTimer
+from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QColor,
     QFont,
@@ -18,7 +23,7 @@ from PySide6.QtGui import (
     QPainterPath,
     QPen,
 )
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QPushButton, QWidget
 
 from desktop_pet.core import constants as C
 
@@ -32,24 +37,32 @@ _PHASE_HIDDEN: Final[int] = 0
 _PHASE_FADE_IN: Final[int] = 1
 _PHASE_HOLD: Final[int] = 2
 _PHASE_FADE_OUT: Final[int] = 3
-#: 渲染模式（情绪气泡=纯文本；日语学习=四行多字号）
+#: 渲染模式（情绪气泡=纯文本；日语学习=四行多字号+按钮）
 _MODE_TEXT: Final[int] = 0
 _MODE_WORD: Final[int] = 1
+#: 窗口旗标：文本模式（完全点击穿透）。运行期切换只用单比特
+#: ``WindowTransparentForInput``（见 :meth:`_set_interactive`，本机 PySide6
+#: 创建后调用 ``setWindowFlags(组合值)`` 是静默无操作），可交互形态即去掉该位。
+_FLAGS_PASSTHRU: Final[Qt.WindowType] = (
+    Qt.WindowType.FramelessWindowHint
+    | Qt.WindowType.WindowStaysOnTopHint
+    | Qt.WindowType.Tool
+    | Qt.WindowType.WindowTransparentForInput
+)
 
 
 class BubbleWindow(QWidget):
     """气泡提示窗口（复用单个实例，避免频繁创建/销毁）。"""
 
+    #: 单词模式按钮（仅单词模式可触发；业务判定在 app/controller）
+    learned_clicked = Signal()
+    new_word_clicked = Signal()
+
     def __init__(self) -> None:
         """构造气泡窗口。"""
 
         super().__init__()
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
-            | Qt.WindowType.WindowTransparentForInput
-        )
+        self.setWindowFlags(_FLAGS_PASSTHRU)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
@@ -88,6 +101,27 @@ class BubbleWindow(QWidget):
         self._timer.setInterval(_FADE_TICK_MS)
         self._timer.timeout.connect(self._update_alpha)
 
+        # 单词模式交互按钮（默认隐藏；文本模式下不可见且窗口点击穿透）
+        button_style = (
+            "QPushButton {"
+            " background: #FFFFFF;"
+            f" color: {C.COLORS['bubble_text']};"
+            f" border: 1.5px solid {C.COLORS['warm_brown']};"
+            " border-radius: 6px;"
+            f" font-family: '{C.JP_BUBBLE_FONT_FAMILY}';"
+            " font-size: 11px;"
+            " }"
+            "QPushButton:hover { background: #FFF3E0; }"
+        )
+        self._btn_learned = QPushButton(C.JP_BTN_LEARNED, self)
+        self._btn_new = QPushButton(C.JP_BTN_NEW_WORD, self)
+        for button in (self._btn_learned, self._btn_new):
+            button.setFixedSize(int(C.JP_BUBBLE_BTN_W), int(C.JP_BUBBLE_BTN_H))
+            button.setStyleSheet(button_style)
+            button.setVisible(False)
+        self._btn_learned.clicked.connect(self._on_learned_clicked)
+        self._btn_new.clicked.connect(self._on_new_clicked)
+
     # ------------------------------------------------------------------ #
     # 公共 API
     # ------------------------------------------------------------------ #
@@ -97,7 +131,7 @@ class BubbleWindow(QWidget):
         self._anchor = QPoint(anchor)
 
     def show_message(self, text: str, duration: float) -> None:
-        """显示一条气泡消息。
+        """显示一条气泡消息（文本模式，点击穿透，按钮隐藏）。
 
         Args:
             text: 显示的文案。
@@ -113,18 +147,26 @@ class BubbleWindow(QWidget):
         self._alpha = 0.0
         self._phase = _PHASE_FADE_IN
 
+        self._set_interactive(False)
+        self._hide_buttons()
         geometry = self._compute_geometry(self._anchor)
         self.setGeometry(geometry)
         self.setWindowOpacity(0.0)
         self.show()
+        self._set_interactive(False)  # 创建后补应用（创建前的切换会被 Qt 丢弃）
+        self.setWindowOpacity(0.0)    # 旗标切换会隐式隐藏窗口，重置透明度
+        self.show()                   # 重新显示
+        self.repaint()                # hide->re-show 后 ULW 位图不刷新，必须同步重绘
         self.raise_()
         self._timer.start()
 
     def show_word(self, entry: "VocabEntry", duration: float) -> None:
-        """显示一条日语单词（四行多字号：单词 / 假名 / 翻译 / 释义）。
+        """显示一条日语单词（四行多字号 + 底部「记住了 / 新单词」按钮）。
 
-        空 ``entry`` 视为 no-op；``duration`` 同 :meth:`show_message` 钳制到 ``[2, 4]`` 秒。
-        学习泡泡**固定内容宽度** = :data:`C.JP_BUBBLE_MAX_WIDTH`，保证测量换行宽 == 绘制换行宽。
+        空 ``entry`` 视为 no-op；``duration`` 钳制到
+        ``[JP_BUBBLE_DURATION_MIN_S, JP_BUBBLE_DURATION_MAX_S]``（JP-17 可调时长，
+        超时无操作自动消失）。学习泡泡**固定内容宽度** = :data:`C.JP_BUBBLE_MAX_WIDTH`，
+        保证测量换行宽 == 绘制换行宽。单词模式窗口接收鼠标交互。
         """
 
         if entry is None or not getattr(entry, "word", ""):
@@ -134,25 +176,85 @@ class BubbleWindow(QWidget):
         self._line_kana = entry.kana
         self._line_translation = entry.translation
         self._line_meaning = entry.meaning
-        self._duration = min(C.BUBBLE_MAX_DURATION_S, max(C.BUBBLE_MIN_DURATION_S, float(duration)))
+        self._duration = min(
+            C.JP_BUBBLE_DURATION_MAX_S, max(C.JP_BUBBLE_DURATION_MIN_S, float(duration))
+        )
         self._elapsed = 0.0
         self._alpha = 0.0
         self._phase = _PHASE_FADE_IN
 
+        self._set_interactive(True)
         geometry = self._compute_geometry(self._anchor)
         self.setGeometry(geometry)
+        self._place_buttons()
         self.setWindowOpacity(0.0)
         self.show()
+        self._set_interactive(True)   # 创建后补应用（创建前的切换会被 Qt 丢弃）
+        self.setWindowOpacity(0.0)    # 旗标切换会隐式隐藏窗口，重置透明度避免闪帧
+        self.show()                   # 重新显示
+        self.repaint()                # hide->re-show 后 ULW 位图不刷新，必须同步重绘
         self.raise_()
         self._timer.start()
 
     def hide_bubble(self) -> None:
-        """立即隐藏气泡并复位状态。"""
+        """立即隐藏气泡并复位状态（按钮一并隐藏，恢复点击穿透）。"""
 
         self._timer.stop()
         self._phase = _PHASE_HIDDEN
         self._alpha = 0.0
+        self._hide_buttons()
+        self._set_interactive(False)
         self.hide()
+
+    # ------------------------------------------------------------------ #
+    # 交互（JP-17）
+    # ------------------------------------------------------------------ #
+    def _on_learned_clicked(self) -> None:
+        """「记住了」：隐藏气泡并通知 controller（业务判定在 app 层）。"""
+
+        self.hide_bubble()
+        self.learned_clicked.emit()
+
+    def _on_new_clicked(self) -> None:
+        """「新单词」：隐藏气泡并通知 controller（业务判定在 app 层）。"""
+
+        self.hide_bubble()
+        self.new_word_clicked.emit()
+
+    def _set_interactive(self, interactive: bool) -> None:
+        """在「点击穿透」与「可交互」两种窗口形态间切换。
+
+        ⚠️ 本机 PySide6 的两条实测约束：
+        1. 窗口创建后 ``setWindowFlags(组合值)`` 是静默无操作，必须用单比特
+           ``setWindowFlag``（原生 ``WS_EX_TRANSPARENT`` 实时更新）。
+        2. 窗口创建（首次 ``show``）**之前**对该比特的清除会被 Qt 丢弃，
+           因此 :meth:`show_message` / :meth:`show_word` 在 ``show()`` 之后
+           还要再调用一次本方法。
+        """
+
+        self.setWindowFlag(Qt.WindowType.WindowTransparentForInput, not interactive)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, not interactive)
+
+    def _place_buttons(self) -> None:
+        """把两个按钮定位到泡泡主体底部居中（仅单词模式可见）。"""
+
+        if self._mode != _MODE_WORD:
+            self._hide_buttons()
+            return
+        bottom = self.height() - (C.BUBBLE_TAIL_H if self._pointing_down else 0.0)
+        y = int(round(bottom - C.BUBBLE_PAD_Y - C.JP_BUBBLE_BTN_H))
+        total_w = C.JP_BUBBLE_BTN_W * 2.0 + C.JP_BUBBLE_BTN_GAP
+        x0 = (self.width() - total_w) / 2.0
+        self._btn_learned.move(int(round(x0)), y)
+        self._btn_new.move(int(round(x0 + C.JP_BUBBLE_BTN_W + C.JP_BUBBLE_BTN_GAP)), y)
+        self._btn_learned.setVisible(True)
+        self._btn_new.setVisible(True)
+
+    def _hide_buttons(self) -> None:
+        """隐藏两个交互按钮。"""
+
+        self._btn_learned.setVisible(False)
+        self._btn_new.setVisible(False)
 
     # ------------------------------------------------------------------ #
     # 绘制
@@ -221,7 +323,13 @@ class BubbleWindow(QWidget):
         if not layout:
             return
 
-        content = body.adjusted(C.BUBBLE_PAD_X, C.BUBBLE_PAD_Y, -C.BUBBLE_PAD_X, -C.BUBBLE_PAD_Y)
+        # 文本块垂直区域需为底部按钮行让位（按钮高 + 行间距）
+        content = body.adjusted(
+            C.BUBBLE_PAD_X,
+            C.BUBBLE_PAD_Y,
+            -C.BUBBLE_PAD_X,
+            -(C.BUBBLE_PAD_Y + C.JP_BUBBLE_BTN_H + C.JP_BUBBLE_BTN_ROW_SPACING),
+        )
         spacing = C.BUBBLE_LINE_SPACING
         total_h = sum(rect.height() for _f, _c, _t, rect in layout) + spacing * (len(layout) - 1)
         left = content.left() + max(0.0, (content.width() - wrap_w) / 2.0)
@@ -326,10 +434,13 @@ class BubbleWindow(QWidget):
         if self._mode == _MODE_WORD:
             measured = self._measure_word()
             content_w = C.JP_BUBBLE_MAX_WIDTH + C.BUBBLE_PAD_X * 2.0
+            # 单词模式额外加底部按钮行高度（按钮 + 与文本块间距）
+            extra_h = C.JP_BUBBLE_BTN_H + C.JP_BUBBLE_BTN_ROW_SPACING
         else:
             measured = self._measure(self._text)
             content_w = min(C.BUBBLE_MAX_WIDTH, max(40.0, measured.width())) + C.BUBBLE_PAD_X * 2.0
-        content_h = max(20.0, measured.height()) + C.BUBBLE_PAD_Y * 2.0
+            extra_h = 0.0
+        content_h = max(20.0, measured.height()) + C.BUBBLE_PAD_Y * 2.0 + extra_h
         w = int(round(content_w))
         h = int(round(content_h)) + int(round(C.BUBBLE_TAIL_H))
 

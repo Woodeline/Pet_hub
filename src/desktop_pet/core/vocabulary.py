@@ -1,4 +1,4 @@
-"""core.vocabulary —— 内置词库加载、分级索引与「洗牌非重复」抽取。
+"""core.vocabulary —— 内置词库加载、分级索引与「加权随机」抽取。
 
 **本模块禁止 import 任何图形界面（Qt/GUI）库，亦不得调用 ``time`` / ``datetime``。**
 
@@ -200,12 +200,14 @@ class WordBank:
 
 
 class WordSampler:
-    """在单一等级内「洗牌非重复」抽取词条。
+    """加权随机抽取词条（JP-07 / JP-19）。
 
-    规则（JP-07）：
-    - 一轮内不重复：维护一份打乱后的队列，逐个弹出。
-    - 队列耗尽后重新洗牌，且**新一轮首词 ≠ 上一轮末词**（长度 > 1 时首尾对调）。
-    - 切换等级时清空队列并重洗。
+    规则：
+    - **排除已记住**：``learned_ids`` 中的词条永不参与抽取（标记「记住了」后不再出现）。
+    - **生词本加权**：``boost_ids``（生词本内词条，即标记过「新单词」的词）
+      抽取权重为 :data:`C.JP_NEW_WORD_WEIGHT` 倍，其余为 1.0。
+    - **不连续重复**：池中多于 1 条时不与上一次展示的词条相同。
+    - 切换等级时保留 learned / boost 集合（跨等级语义不变）。
     """
 
     def __init__(self, bank: WordBank, rng: random.Random | None = None) -> None:
@@ -219,48 +221,53 @@ class WordSampler:
         self._bank: WordBank = bank
         self._rng: random.Random = rng if rng is not None else random.Random()
         self._level: str = ""
-        self._queue: list[VocabEntry] = []
-        self._last: VocabEntry | None = None
+        self._learned: set[str] = set()
+        self._boost: set[str] = set()
+        self._last_id: str | None = None
 
     def set_level(self, level: str) -> None:
-        """切换抽取等级。
-
-        非法等级 → no-op；同级且队列非空 → no-op；否则清空队列并等待下次重洗。
-        """
+        """切换抽取等级；非法等级 → no-op。"""
 
         if level not in C.JP_LEVELS:
             return
-        if level == self._level and self._queue:
-            return
-        if level != self._level:
-            # 换级：上轮末词属于旧池，清空避免跨池误判「首尾重复」
-            self._last = None
         self._level = level
-        self._queue = []
+
+    def set_learned_ids(self, ids) -> None:
+        """更新「已记住」集合（标记过「记住了」的词条 id）。"""
+
+        self._learned = {str(item) for item in ids}
+
+    def set_boost_ids(self, ids) -> None:
+        """更新加权集合（生词本内词条 id）。"""
+
+        self._boost = {str(item) for item in ids}
 
     def next(self) -> "VocabEntry | None":
-        """抽取下一条词条；无可用等级 / 该级无词时返回 ``None``。"""
+        """加权抽取下一条词条；无可用等级 / 该级无可抽词条时返回 ``None``。"""
 
         if not self._level:
             return None
-        if not self._queue:
-            pool = self._bank.entries_for(self._level)
-            if not pool:
-                return None
-            shuffled = list(pool)
-            self._rng.shuffle(shuffled)
-            if len(shuffled) > 1 and self._last is not None and shuffled[0].id == self._last.id:
-                shuffled[0], shuffled[1] = shuffled[1], shuffled[0]
-            self._queue = shuffled
-        entry = self._queue.pop(0)
-        self._last = entry
+        pool = [
+            entry for entry in self._bank.entries_for(self._level)
+            if entry.id not in self._learned
+        ]
+        if not pool:
+            return None
+        if len(pool) > 1 and self._last_id is not None:
+            filtered = [entry for entry in pool if entry.id != self._last_id]
+            if filtered:
+                pool = filtered
+        weights = [
+            C.JP_NEW_WORD_WEIGHT if entry.id in self._boost else 1.0 for entry in pool
+        ]
+        entry = self._rng.choices(pool, weights=weights, k=1)[0]
+        self._last_id = entry.id
         return entry
 
     def reset(self) -> None:
-        """重置抽取状态（清空队列与「上轮末词」记录，保留当前等级）。"""
+        """重置抽取状态（清空「上次展示」记录，保留等级与 learned/boost 集合）。"""
 
-        self._queue = []
-        self._last = None
+        self._last_id = None
 
 
 __all__ = ["VocabEntry", "WordBank", "WordSampler"]

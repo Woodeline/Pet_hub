@@ -371,6 +371,42 @@ VOCAB_VERSION: Final[int] = 1
 VOCAB_WINDOW_W: Final[int] = 440
 VOCAB_WINDOW_H: Final[int] = 360
 
+# —— 学习泡泡交互按钮（JP-17：泡泡下方「记住了 / 新单词」）——
+JP_BUBBLE_BTN_W: Final[float] = 92.0            # 单个按钮宽
+JP_BUBBLE_BTN_H: Final[float] = 26.0            # 单个按钮高
+JP_BUBBLE_BTN_GAP: Final[float] = 10.0          # 两按钮间距
+JP_BUBBLE_BTN_ROW_SPACING: Final[float] = 6.0   # 文本块与按钮行的间距
+JP_BTN_LEARNED: Final[str] = "记住了"
+JP_BTN_NEW_WORD: Final[str] = "新单词"
+
+# —— 学习泡泡显示时长（JP-17：可调，超时无操作自动消失）——
+JP_BUBBLE_DURATION_DEFAULT_S: Final[float] = 30.0
+JP_BUBBLE_DURATION_MIN_S: Final[float] = 5.0
+JP_BUBBLE_DURATION_MAX_S: Final[float] = 120.0
+JP_DURATION_CHOICES_S: Final[tuple[float, ...]] = (10.0, 30.0, 60.0, 120.0)
+
+# —— 每日展示配额（JP-18：每日轮流展示的单词数量可调）——
+JP_DAILY_LIMIT_DEFAULT: Final[int] = 15
+JP_DAILY_LIMIT_MIN: Final[int] = 1
+JP_DAILY_LIMIT_MAX: Final[int] = 500
+JP_DAILY_CHOICES: Final[tuple[int, ...]] = (5, 10, 15, 20, 50)
+
+# —— 「新单词」加权（JP-19：生词本内词条的抽取权重倍数）——
+JP_NEW_WORD_WEIGHT: Final[float] = 3.0
+
+# —— 每日学习进度文件（已记住集合 + 当日展示进度）——
+JP_STATE_FILE_NAME: Final[str] = "jp_state.json"
+JP_STATE_VERSION: Final[int] = 1
+
+# —— 托盘菜单（可调参数）——
+JP_MENU_DURATION: Final[str] = "显示时长"
+JP_MENU_DAILY: Final[str] = "每日单词数"
+
+# —— 通知文案 ——
+JP_NOTIFY_MARK_LEARNED: Final[str] = "「{word}」已记住，之后不再出现～"
+JP_NOTIFY_DAILY_DONE: Final[str] = "今日单词配额已完成，明天继续加油～"
+JP_NOTIFY_ALL_LEARNED_TODAY: Final[str] = "今天的单词全部记住啦，休息一下～"
+
 # —— 托盘菜单文案 ——
 JP_MENU_TITLE: Final[str] = "日语学习"
 JP_MENU_LEVEL: Final[str] = "难度"
@@ -431,4 +467,27 @@ __all__ = [
     "VOCAB_VERSION",
     "VOCAB_WINDOW_W",
     "VOCAB_WINDOW_H",
+    # 日语学习交互（JP-17/18/19）
+    "JP_BUBBLE_BTN_W",
+    "JP_BUBBLE_BTN_H",
+    "JP_BUBBLE_BTN_GAP",
+    "JP_BUBBLE_BTN_ROW_SPACING",
+    "JP_BTN_LEARNED",
+    "JP_BTN_NEW_WORD",
+    "JP_BUBBLE_DURATION_DEFAULT_S",
+    "JP_BUBBLE_DURATION_MIN_S",
+    "JP_BUBBLE_DURATION_MAX_S",
+    "JP_DURATION_CHOICES_S",
+    "JP_DAILY_LIMIT_DEFAULT",
+    "JP_DAILY_LIMIT_MIN",
+    "JP_DAILY_LIMIT_MAX",
+    "JP_DAILY_CHOICES",
+    "JP_NEW_WORD_WEIGHT",
+    "JP_STATE_FILE_NAME",
+    "JP_STATE_VERSION",
+    "JP_MENU_DURATION",
+    "JP_MENU_DAILY",
+    "JP_NOTIFY_MARK_LEARNED",
+    "JP_NOTIFY_DAILY_DONE",
+    "JP_NOTIFY_ALL_LEARNED_TODAY",
 ]

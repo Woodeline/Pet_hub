@@ -94,6 +94,20 @@ def _coerce_level(value: Any, default: str) -> str:
     return default
 
 
+def _coerce_duration_s(value: Any, default: float) -> float:
+    """把学习泡泡显示时长收敛到 ``[JP_BUBBLE_DURATION_MIN_S, MAX]``；非法值回落默认。"""
+
+    candidate = _coerce_float(value, default)
+    return float(min(C.JP_BUBBLE_DURATION_MAX_S, max(C.JP_BUBBLE_DURATION_MIN_S, candidate)))
+
+
+def _coerce_daily_limit(value: Any, default: int) -> int:
+    """把每日单词配额收敛到 ``[JP_DAILY_LIMIT_MIN, MAX]``；非法值回落默认。"""
+
+    candidate = _coerce_int(value, default)
+    return int(min(C.JP_DAILY_LIMIT_MAX, max(C.JP_DAILY_LIMIT_MIN, candidate)))
+
+
 @dataclass
 class AppConfig:
     """应用配置数据载体（架构 §9.6 schema）。
@@ -108,6 +122,8 @@ class AppConfig:
         autostart: 开机自启开关。
         jp_enabled: 日语学习开关（JP-02，默认关闭）。
         jp_level: 日语难度等级（JP-06，默认 ``N5``，取值 ``N5..N1``）。
+        jp_bubble_duration_s: 学习泡泡显示时长（秒，JP-17，默认 30，超时无操作自动消失）。
+        jp_daily_limit: 每日展示单词配额（JP-18，默认 15，当日达到后不再展示）。
     """
 
     version: int = C.CONFIG_VERSION
@@ -119,6 +135,8 @@ class AppConfig:
     autostart: bool = False
     jp_enabled: bool = False
     jp_level: str = C.JP_DEFAULT_LEVEL
+    jp_bubble_duration_s: float = C.JP_BUBBLE_DURATION_DEFAULT_S
+    jp_daily_limit: int = C.JP_DAILY_LIMIT_DEFAULT
 
     def to_dict(self) -> dict[str, Any]:
         """序列化为可 JSON 化的字典。"""
@@ -133,6 +151,8 @@ class AppConfig:
             "autostart": bool(self.autostart),
             "jp_enabled": bool(self.jp_enabled),
             "jp_level": str(self.jp_level),
+            "jp_bubble_duration_s": float(self.jp_bubble_duration_s),
+            "jp_daily_limit": int(self.jp_daily_limit),
         }
 
     @classmethod
@@ -160,6 +180,10 @@ class AppConfig:
             autostart=_coerce_bool(get("autostart"), defaults.autostart),
             jp_enabled=_coerce_bool(get("jp_enabled"), defaults.jp_enabled),
             jp_level=_coerce_level(get("jp_level"), defaults.jp_level),
+            jp_bubble_duration_s=_coerce_duration_s(
+                get("jp_bubble_duration_s"), defaults.jp_bubble_duration_s
+            ),
+            jp_daily_limit=_coerce_daily_limit(get("jp_daily_limit"), defaults.jp_daily_limit),
         )
 
 

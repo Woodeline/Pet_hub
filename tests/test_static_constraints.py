@@ -93,6 +93,7 @@ def test_core_imports_without_loading_qt(project_root: Path) -> None:
         "import desktop_pet.core.paths\n"
         "import desktop_pet.core.vocabulary\n"
         "import desktop_pet.core.vocab_store\n"
+        "import desktop_pet.core.jp_state\n"
         "loaded = [m for m in sys.modules if m.startswith('PySide6')]\n"
         "assert not loaded, 'core 导入过程加载了 Qt: %r' % loaded\n"
         "print('CORE_IS_QT_FREE')\n"
