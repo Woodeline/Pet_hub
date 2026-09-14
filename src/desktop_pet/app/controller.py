@@ -17,6 +17,7 @@ import os
 import random
 import sys
 import time
+from datetime import datetime, timezone
 
 from PySide6.QtCore import QObject, QPoint
 from PySide6.QtGui import QGuiApplication
@@ -24,7 +25,7 @@ from PySide6.QtWidgets import QApplication
 
 from desktop_pet.app.keyboard_listener import KeystrokeBridge, KeyboardListener
 from desktop_pet.core import constants as C
-from desktop_pet.core import motion
+from desktop_pet.core import motion, paths
 from desktop_pet.core.config import AppConfig, ConfigStore
 from desktop_pet.core.constants import Expression, Gesture, Mood
 from desktop_pet.core.event_aggregator import KeystrokeAggregator
@@ -33,11 +34,19 @@ from desktop_pet.core.mood_state_machine import (
     MoodTransition,
     expression_for_mood,
 )
+from desktop_pet.core.daily_log_store import DailyLogEntry, DailyLogStore
+from desktop_pet.core.mastered_store import MasteredStore
 from desktop_pet.core.pet_model import PetModel
+from desktop_pet.core.vocab_store import VocabStore
+from desktop_pet.core.vocabulary import VocabEntry, WordBank
+from desktop_pet.core.weighted_picker import WeightedWordPicker
 from desktop_pet.ui.bubble import BubbleWindow
+from desktop_pet.ui.bubble_button_bar import BubbleButtonBar
+from desktop_pet.ui.log_window import LogWindow
 from desktop_pet.ui.pet_renderer import PetRenderer
 from desktop_pet.ui.pet_window import PetWindow
 from desktop_pet.ui.tray import TrayController
+from desktop_pet.ui.vocab_window import VocabWindow
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +99,26 @@ class PetAppController(QObject):
         self._next_yawn_ts: float = float("inf")
         self._rng: random.Random = random.Random()
 
+        # —— 日语学习运行时状态（词库 / 加权抽取器 / 生词本 / 单词定时 / 生词本窗口单例）——
+        self._bank: WordBank = WordBank.empty()
+        self._picker: WeightedWordPicker = WeightedWordPicker(self._bank, self._rng)
+        self._vocab: VocabStore = VocabStore(VocabStore.default_path())
+        self._current_word: VocabEntry | None = None
+        self._vocab_window: VocabWindow | None = None
+        self._next_word_ts: float = float("inf")
+        self._bank_warned: bool = False
+
+        # —— 日语记忆闭环运行时状态（已掌握集合 / 每日记录 / 按钮条 / 记录窗口单例）——
+        self._mastered: MasteredStore = MasteredStore(MasteredStore.default_path())
+        self._daily_log: DailyLogStore = DailyLogStore(DailyLogStore.default_path())
+        self._button_bar: BubbleButtonBar = BubbleButtonBar()
+        self._log_window: LogWindow | None = None
+        self._word_deadline: float = float("inf")
+        self._word_disposed: bool = True
+        self._today_str: str = ""
+        self._today_done_notified: bool = False
+        self._level_done_notified: bool = False
+
     # ------------------------------------------------------------------ #
     # 生命周期
     # ------------------------------------------------------------------ #
@@ -111,7 +140,13 @@ class PetAppController(QObject):
         self._tray.set_scale_checked(self._cfg.scale)
         self._tray.set_autostart_checked(self._cfg.autostart)
         self._tray.set_bubble_checked(self._cfg.bubble_enabled)
+        self._load_japanese()
+        self._tray.set_jp_checked(self._cfg.jp_enabled)
+        self._tray.set_jp_level_checked(self._cfg.jp_level)
+        self._tray.set_jp_enabled(self._cfg.jp_enabled)
+        self._tray.set_jp_current_word(None)
         self._tray.show()
+        self._notify_jp_startup_state()
 
         self._window.show()
         self._window.raise_()
@@ -128,6 +163,7 @@ class PetAppController(QObject):
         now = time.monotonic()
         self._last_frame_ts = now
         self._next_yawn_ts = now + motion.random_interval(C.YAWN_MIN_S, C.YAWN_MAX_S)
+        self._schedule_next_word(now)
         self._running = True
 
         self._app.aboutToQuit.connect(self._on_about_to_quit)
@@ -153,6 +189,7 @@ class PetAppController(QObject):
         self._persist()
         try:
             self._bubble.hide_bubble()
+            self._button_bar.hide_bar()
             self._window.hide()
         except Exception:  # noqa: BLE001
             logger.exception("隐藏窗口失败")
@@ -183,6 +220,17 @@ class PetAppController(QObject):
         self._tray.restore_requested.connect(self._on_restore)
         self._tray.autostart_toggled.connect(self._set_autostart)
         self._tray.quit_requested.connect(self.shutdown)
+
+        # 日语学习
+        self._tray.jp_enabled_toggled.connect(self._on_jp_toggled)
+        self._tray.jp_level_selected.connect(self._on_jp_level_selected)
+        self._tray.jp_add_vocab_requested.connect(self._on_jp_add_vocab)
+        self._tray.jp_vocab_requested.connect(self._on_jp_vocab)
+        self._tray.jp_log_requested.connect(self._on_jp_log)
+
+        # 日语记忆：气泡按钮条（记住了 / 新单词）
+        self._button_bar.mastered_clicked.connect(self._on_word_mastered)
+        self._button_bar.vocab_clicked.connect(self._on_word_vocab)
 
     # ------------------------------------------------------------------ #
     # 槽：键盘
@@ -226,6 +274,21 @@ class PetAppController(QObject):
                 dt = C.interval_for_fps(C.FPS_ACTIVE) / 1000.0
             self._last_frame_ts = now
 
+            # ① 跨日检测：本地自然日变化 → 重置当日状态并立即恢复排期（core 无时钟，日期由 app 判定）
+            today = self._local_date_str()
+            if today != self._today_str:
+                self._today_str = today
+                self._today_done_notified = False
+                self._next_word_ts = now
+
+            # ② 超时检测：当前词到点未处置 → 记「未处理」（与按钮点击单飞互斥）
+            if (
+                self._current_word is not None
+                and not self._word_disposed
+                and now >= self._word_deadline
+            ):
+                self._dispose_word(C.DAILY_LOG_STATUS_UNPROCESSED, now)
+
             transition = self._sm.update(now)
             if transition.changed:
                 self._sync_fps_and_visuals(transition)
@@ -241,6 +304,11 @@ class PetAppController(QObject):
                 self._next_yawn_ts = now + motion.random_interval(C.YAWN_MIN_S, C.YAWN_MAX_S)
             elif self._sm.mood != Mood.REST:
                 self._next_yawn_ts = now + motion.random_interval(C.YAWN_MIN_S, C.YAWN_MAX_S)
+
+            # 学习模式：独立随机节奏（25~50s）展示日语单词（挂在既有帧循环，不新开 QTimer）
+            if self._cfg.jp_enabled and now >= self._next_word_ts:
+                self._show_word_bubble(now)
+                self._schedule_next_word(now)
 
             # 帧率联动（活跃 30 / 空闲 15 / 睡眠 8）
             fps = C.FPS_ACTIVE if now < self._active_until else self._fps_for_mood(self._sm.mood)
@@ -344,6 +412,305 @@ class PetAppController(QObject):
             logger.exception("恢复窗口异常（已忽略）")
 
     # ------------------------------------------------------------------ #
+    # 内部：日语学习（词库 / 单词定时 / 生词本 / 4 槽）
+    # ------------------------------------------------------------------ #
+    def _load_japanese(self) -> None:
+        """启动时加载内置词库、生词本、已掌握集合与每日记录（损坏均优雅降级，绝不崩溃）。"""
+
+        try:
+            self._bank = WordBank.load(paths.word_bank_path())
+        except Exception:  # noqa: BLE001
+            logger.exception("加载词库失败（已忽略，使用空词库）")
+            self._bank = WordBank.empty()
+        self._picker = WeightedWordPicker(self._bank, self._rng)
+
+        try:
+            self._vocab = VocabStore(VocabStore.default_path())
+            self._vocab.load()
+        except Exception:  # noqa: BLE001
+            logger.exception("加载生词本失败（已忽略，使用空生词本）")
+            self._vocab = VocabStore(VocabStore.default_path())
+
+        try:
+            self._mastered = MasteredStore(MasteredStore.default_path())
+            self._mastered.load()
+        except Exception:  # noqa: BLE001
+            logger.exception("加载已掌握集合失败（已忽略，使用空集合）")
+            self._mastered = MasteredStore(MasteredStore.default_path())
+
+        try:
+            self._daily_log = DailyLogStore(DailyLogStore.default_path())
+            self._daily_log.load()
+        except Exception:  # noqa: BLE001
+            logger.exception("加载每日记录失败（已忽略，使用空表）")
+            self._daily_log = DailyLogStore(DailyLogStore.default_path())
+
+    def _notify_jp_startup_state(self) -> None:
+        """启动时若已开启学习：给一次状态提示（气泡总开关未开 / 词库不可用）。"""
+
+        if not self._cfg.jp_enabled:
+            return
+        if not self._cfg.bubble_enabled:
+            self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_NEED_BUBBLE)
+        elif self._bank.is_empty():
+            self._bank_warned = True
+            self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_BANK_UNAVAILABLE)
+
+    def _schedule_next_word(self, now: float) -> None:
+        """按 25~50s 随机间隔排期下一次单词展示（学习关闭时置 ``inf`` 不触发）。"""
+
+        if self._cfg.jp_enabled and not self._bank.is_empty():
+            self._next_word_ts = now + motion.random_interval(
+                C.JP_WORD_MIN_INTERVAL_S, C.JP_WORD_MAX_INTERVAL_S, self._rng
+            )
+        else:
+            self._next_word_ts = float("inf")
+
+    def _show_word_bubble(self, now: float) -> None:
+        """记忆闭环：停止判定 → 加权抽取 → 展示学习泡泡 + 按钮条（受多重守卫约束）。"""
+
+        # 守卫：已有词在展示时不重复抽取；气泡关闭 / 睡觉 / 最小间隔不展示
+        if self._current_word is not None:
+            return
+        if not self._cfg.bubble_enabled:
+            return
+        if self._sm.mood == Mood.SLEEP:
+            return
+        if (now - self._last_bubble_ts) < C.BUBBLE_MIN_GAP_S:
+            return
+
+        if not self._today_str:
+            self._today_str = self._local_date_str()
+
+        # 停止判定：达到每日上限 或 当日已展示词全部掌握 → 一次性通知后今日不再弹
+        if self._jp_stop_for_today():
+            if not self._today_done_notified:
+                self._today_done_notified = True
+                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_TODAY_DONE)
+            return
+
+        today = self._today_str
+        excluded = self._mastered.ids() | self._daily_log.shown_ids_for(today)
+        vocab_ids = {item.id for item in self._vocab.items()}
+        entry = self._picker.pick(self._cfg.jp_level, excluded, vocab_ids)
+        if entry is None:
+            if not self._bank.is_empty() and not self._level_done_notified:
+                self._level_done_notified = True
+                logger.warning("该等级单词已全部掌握（level=%s）", self._cfg.jp_level)
+                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_LEVEL_DONE)
+            return
+
+        # 单飞状态机：置当前词 / deadline / 未处置标志
+        self._current_word = entry
+        self._word_deadline = now + self._cfg.jp_bubble_duration_s
+        self._word_disposed = False
+        self._tray.set_jp_current_word(entry.word)
+
+        anchor = self._bubble_anchor()
+        self._bubble.set_anchor(anchor)
+        self._bubble.show_word(entry, self._cfg.jp_bubble_duration_s)
+        self._button_bar.show_bar(
+            anchor,
+            self._bubble.geometry(),
+            self._bubble.pointing_down(),
+            self._cfg.jp_bubble_duration_s,
+        )
+        self._last_bubble_ts = now
+
+    def _on_jp_toggled(self, checked: bool) -> None:
+        """切换「日语学习」开关（JP-02）。"""
+
+        checked = bool(checked)
+        self._cfg.jp_enabled = checked
+        self._tray.set_jp_enabled(checked)
+        now = time.monotonic()
+        if checked:
+            self._level_done_notified = False
+            self._schedule_next_word(now)
+            if not self._cfg.bubble_enabled:
+                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_NEED_BUBBLE)
+            elif self._bank.is_empty():
+                self._bank_warned = True
+                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_BANK_UNAVAILABLE)
+        else:
+            self._next_word_ts = float("inf")
+            # 关闭学习时若仍有展示词：清理气泡/按钮条（不落库，用户主动关闭）
+            if self._current_word is not None:
+                self._bubble.hide_bubble()
+                self._button_bar.hide_bar()
+                self._current_word = None
+                self._word_deadline = float("inf")
+                self._word_disposed = True
+                self._tray.set_jp_current_word(None)
+        self._persist()
+
+    def _on_jp_level_selected(self, level: str) -> None:
+        """切换难度等级（JP-06，单选，持久化）。"""
+
+        level = str(level)
+        if level not in C.JP_LEVELS:
+            return
+        self._cfg.jp_level = level
+        self._tray.set_jp_level_checked(level)
+        self._level_done_notified = False
+        self._persist()
+
+    def _on_jp_add_vocab(self) -> None:
+        """托盘「加入生词本」→ 把当前展示词处置为生词（等价气泡「新单词」按钮）。"""
+
+        if self._current_word is None:
+            if self._cfg.jp_enabled:
+                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_NO_WORD)
+            return
+        self._dispose_word(C.DAILY_LOG_STATUS_VOCAB, time.monotonic())
+
+    def _on_jp_log(self) -> None:
+        """打开学习记录窗口（单例，喂入全部日期与当日记录，重开则前置）。"""
+
+        try:
+            if self._log_window is None:
+                self._log_window = LogWindow()
+            days = self._daily_log.days()
+            self._log_window.set_dates(days)
+            limit = self._cfg.jp_daily_limit
+            today = self._local_date_str()
+            for day in days:
+                self._log_window.refresh(day, self._daily_log.entries_for(day), limit)
+            # 保证「今天」始终可选中（即使今日暂无记录）
+            self._log_window.refresh(today, self._daily_log.entries_for(today), limit)
+            self._log_window.show()
+            self._log_window.raise_()
+            self._log_window.activateWindow()
+        except Exception:  # noqa: BLE001
+            logger.exception("打开学习记录窗口异常（已忽略）")
+
+    def _on_jp_vocab(self) -> None:
+        """打开生词本窗口（单例，重开则前置）。"""
+
+        try:
+            if self._vocab_window is None:
+                self._vocab_window = VocabWindow()
+                self._vocab_window.remove_requested.connect(self._on_vocab_remove)
+                self._vocab_window.clear_requested.connect(self._on_vocab_clear)
+            self._vocab_window.refresh(self._vocab.items())
+            self._vocab_window.show()
+            self._vocab_window.raise_()
+            self._vocab_window.activateWindow()
+        except Exception:  # noqa: BLE001
+            logger.exception("打开生词本窗口异常（已忽略）")
+
+    def _on_vocab_remove(self, item_id: str) -> None:
+        """删除单条生词并刷新窗口。"""
+
+        try:
+            if self._vocab.remove(str(item_id)) and self._vocab_window is not None:
+                self._vocab_window.refresh(self._vocab.items())
+        except Exception:  # noqa: BLE001
+            logger.exception("删除生词异常（已忽略）")
+
+    def _on_vocab_clear(self) -> None:
+        """清空生词本并刷新窗口。"""
+
+        try:
+            self._vocab.clear()
+            if self._vocab_window is not None:
+                self._vocab_window.refresh(self._vocab.items())
+        except Exception:  # noqa: BLE001
+            logger.exception("清空生词本异常（已忽略）")
+
+    def _local_date_str(self) -> str:
+        """返回本地自然日字符串 ``YYYY-MM-DD``（仅 app 层使用 ``datetime``）。"""
+
+        return datetime.now().strftime("%Y-%m-%d")
+
+    def _jp_stop_for_today(self) -> bool:
+        """当日停止判定：达到每日上限，或当日已展示词已全部掌握。"""
+
+        today = self._today_str or self._local_date_str()
+        return (
+            self._daily_log.count_for(today) >= self._cfg.jp_daily_limit
+            or self._daily_log.all_mastered(today)
+        )
+
+    def _dispose_word(self, status: str, now: float) -> None:
+        """单飞处置当前展示词（三态互斥：一次展示恰好落一种终态）。
+
+        帧循环超时与按钮点击都在 Qt 主线程内串行执行，``_word_disposed`` 保证「先到先得、
+        后到即 no-op」。处置后落库、清状态并排期下一词。
+        """
+
+        # 1) 单飞守卫：同词二次处置直接丢弃
+        if self._word_disposed:
+            return
+        entry = self._current_word
+        if entry is None:
+            return
+
+        # 2) 置已处置标志，杜绝竞态
+        self._word_disposed = True
+
+        # 3) 立即隐藏气泡与按钮条
+        self._bubble.hide_bubble()
+        self._button_bar.hide_bar()
+
+        # 4) 落库（today 为本地自然日 key，由 app 注入 core）
+        today = self._today_str or self._local_date_str()
+        iso = self._now_iso()
+        if status == C.DAILY_LOG_STATUS_MASTERED:
+            added = self._mastered.add(entry, iso)
+            self._daily_log.add_entry(
+                today, DailyLogEntry.from_entry(entry, iso, status)
+            )
+            if added:
+                self._tray.notify(
+                    C.APP_DISPLAY_NAME,
+                    C.JP_NOTIFY_MASTERED_ADDED.format(word=entry.word, kana=entry.kana),
+                )
+            else:
+                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_MASTERED_DUPLICATE)
+        elif status == C.DAILY_LOG_STATUS_VOCAB:
+            added = self._vocab.add(entry, iso)
+            self._daily_log.add_entry(
+                today, DailyLogEntry.from_entry(entry, iso, status)
+            )
+            if added:
+                self._tray.notify(
+                    C.APP_DISPLAY_NAME,
+                    C.JP_NOTIFY_REMEMBER_ADDED.format(word=entry.word, kana=entry.kana),
+                )
+            else:
+                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_REMEMBER_DUPLICATE)
+            if self._vocab_window is not None:
+                self._vocab_window.refresh(self._vocab.items())
+        elif status == C.DAILY_LOG_STATUS_UNPROCESSED:
+            self._daily_log.add_entry(
+                today, DailyLogEntry.from_entry(entry, iso, status)
+            )
+
+        # 6) 清状态
+        self._current_word = None
+        self._word_deadline = float("inf")
+        self._tray.set_jp_current_word(None)
+
+        # 7) 排期下一词
+        self._schedule_next_word(now)
+
+    def _on_word_mastered(self) -> None:
+        """气泡「记住了」按钮 → 处置为已掌握。"""
+
+        self._dispose_word(C.DAILY_LOG_STATUS_MASTERED, time.monotonic())
+
+    def _on_word_vocab(self) -> None:
+        """气泡「新单词」按钮 → 处置为生词。"""
+
+        self._dispose_word(C.DAILY_LOG_STATUS_VOCAB, time.monotonic())
+
+    def _now_iso(self) -> str:
+        """返回当前 UTC 墙钟时间的 ISO8601 字符串（仅 app 层生成，注入 core）。"""
+
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # ------------------------------------------------------------------ #
     # 内部：应用迁移 / 帧率 / 气泡 / 缩放 / 持久化
     # ------------------------------------------------------------------ #
     def _sync_fps_and_visuals(self, transition: MoodTransition) -> None:
@@ -383,6 +750,9 @@ class PetAppController(QObject):
         """
 
         if not self._cfg.bubble_enabled:
+            return
+        # 学习词展示期间抑制情绪气泡（避免覆盖「展示 → 标记」闭环，设计 §1.5）
+        if self._current_word is not None:
             return
         now = float(now) if now is not None else time.monotonic()
         if (now - self._last_bubble_ts) < C.BUBBLE_MIN_GAP_S:

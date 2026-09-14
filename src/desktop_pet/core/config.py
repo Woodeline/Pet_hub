@@ -84,6 +84,30 @@ def _coerce_scale(value: Any, default: float) -> float:
     return float(default)
 
 
+def _coerce_level(value: Any, default: str) -> str:
+    """把日语难度值收敛到 ``JP_LEVELS`` 内的合法等级；非法值回落默认。"""
+
+    if isinstance(value, str):
+        candidate = value.strip()
+        if candidate in C.JP_LEVELS:
+            return candidate
+    return default
+
+
+def _coerce_duration(value: Any, default: float) -> float:
+    """把学习泡泡时长安全转换为 float，并钳制到 ``[JP_BUBBLE_MIN, JP_BUBBLE_MAX]`` 秒。"""
+
+    candidate = _coerce_float(value, default)
+    return min(C.JP_BUBBLE_MAX_DURATION_S, max(C.JP_BUBBLE_MIN_DURATION_S, candidate))
+
+
+def _coerce_daily_limit(value: Any, default: int) -> int:
+    """把每日上限安全转换为 int，并钳制到 ``[1, JP_DAILY_LIMIT_MAX]``；bool 视为非法。"""
+
+    candidate = _coerce_int(value, default)
+    return max(1, min(C.JP_DAILY_LIMIT_MAX, candidate))
+
+
 @dataclass
 class AppConfig:
     """应用配置数据载体（架构 §9.6 schema）。
@@ -96,6 +120,10 @@ class AppConfig:
         listen_enabled: 全局键盘监听开关。
         bubble_enabled: 气泡提示开关（PRD Q-01 的"静音"含义）。
         autostart: 开机自启开关。
+        jp_enabled: 日语学习开关（JP-02，默认关闭）。
+        jp_level: 日语难度等级（JP-06，默认 ``N5``，取值 ``N5..N1``）。
+        jp_bubble_duration_s: 学习泡泡停留时长（秒，默认 30，钳制 2~300）。
+        jp_daily_limit: 每日展示上限（默认 15，钳制 1~200）。
     """
 
     version: int = C.CONFIG_VERSION
@@ -105,6 +133,10 @@ class AppConfig:
     listen_enabled: bool = True
     bubble_enabled: bool = True
     autostart: bool = False
+    jp_enabled: bool = False
+    jp_level: str = C.JP_DEFAULT_LEVEL
+    jp_bubble_duration_s: float = C.JP_BUBBLE_DURATION_S
+    jp_daily_limit: int = C.JP_DAILY_LIMIT
 
     def to_dict(self) -> dict[str, Any]:
         """序列化为可 JSON 化的字典。"""
@@ -117,6 +149,10 @@ class AppConfig:
             "listen_enabled": bool(self.listen_enabled),
             "bubble_enabled": bool(self.bubble_enabled),
             "autostart": bool(self.autostart),
+            "jp_enabled": bool(self.jp_enabled),
+            "jp_level": str(self.jp_level),
+            "jp_bubble_duration_s": float(self.jp_bubble_duration_s),
+            "jp_daily_limit": int(self.jp_daily_limit),
         }
 
     @classmethod
@@ -142,6 +178,12 @@ class AppConfig:
             listen_enabled=_coerce_bool(get("listen_enabled"), defaults.listen_enabled),
             bubble_enabled=_coerce_bool(get("bubble_enabled"), defaults.bubble_enabled),
             autostart=_coerce_bool(get("autostart"), defaults.autostart),
+            jp_enabled=_coerce_bool(get("jp_enabled"), defaults.jp_enabled),
+            jp_level=_coerce_level(get("jp_level"), defaults.jp_level),
+            jp_bubble_duration_s=_coerce_duration(
+                get("jp_bubble_duration_s"), defaults.jp_bubble_duration_s
+            ),
+            jp_daily_limit=_coerce_daily_limit(get("jp_daily_limit"), defaults.jp_daily_limit),
         )
 
 

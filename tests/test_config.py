@@ -175,6 +175,8 @@ def test_load_after_save_is_json_readable(config_store: ConfigStore, config_path
     assert set(data) == {
         "version", "window_x", "window_y", "scale",
         "listen_enabled", "bubble_enabled", "autostart",
+        "jp_enabled", "jp_level",
+        "jp_bubble_duration_s", "jp_daily_limit",
     }
 
 
@@ -244,3 +246,57 @@ def test_default_config_fields_match_architecture() -> None:
     assert cfg.autostart is False
     assert cfg.window_x == C.DEFAULT_WINDOW_X
     assert cfg.window_y == C.DEFAULT_WINDOW_Y
+    assert cfg.jp_bubble_duration_s == C.JP_BUBBLE_DURATION_S == 30.0
+    assert cfg.jp_daily_limit == C.JP_DAILY_LIMIT == 15
+
+
+# --------------------------------------------------------------------------- #
+# 7. 日语记忆配置项容错（JP-17+）
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        (None, C.JP_BUBBLE_DURATION_S),       # 缺省 → 默认 30
+        (30.0, 30.0),
+        (5, 5.0),
+        ("8.5", 8.5),
+        (True, C.JP_BUBBLE_DURATION_S),       # bool 非法 → 默认
+        ("oops", C.JP_BUBBLE_DURATION_S),     # 不可解析 → 默认
+        (1.0, C.JP_BUBBLE_MIN_DURATION_S),    # 越界下钳制到 2
+        (9999.0, C.JP_BUBBLE_MAX_DURATION_S),  # 越界上钳制到 300
+        (-3.0, C.JP_BUBBLE_MIN_DURATION_S),
+    ],
+)
+def test_jp_bubble_duration_coercion(raw, expected) -> None:
+    cfg = AppConfig.from_dict({"jp_bubble_duration_s": raw})
+    assert cfg.jp_bubble_duration_s == expected
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        (None, C.JP_DAILY_LIMIT),             # 缺省 → 默认 15
+        (15, 15),
+        ("20", 20),
+        (30.0, 30),                           # 整数浮点可接受
+        (True, C.JP_DAILY_LIMIT),             # bool 非法 → 默认
+        (3.5, C.JP_DAILY_LIMIT),              # 非整数浮点非法 → 默认
+        ("oops", C.JP_DAILY_LIMIT),           # 不可解析 → 默认
+        (0, 1),                               # 越界下钳制到 1
+        (-5, 1),
+        (99999, C.JP_DAILY_LIMIT_MAX),        # 越界上钳制到 200
+    ],
+)
+def test_jp_daily_limit_coercion(raw, expected) -> None:
+    cfg = AppConfig.from_dict({"jp_daily_limit": raw})
+    assert cfg.jp_daily_limit == expected
+
+
+def test_missing_jp_memory_fields_use_defaults() -> None:
+    """旧配置缺两键 → 回落默认，不抛异常（向后兼容，CONFIG_VERSION 仍为 1）。"""
+
+    cfg = AppConfig.from_dict({"version": 1, "jp_enabled": True, "jp_level": "N4"})
+    assert cfg.jp_enabled is True
+    assert cfg.jp_level == "N4"
+    assert cfg.jp_bubble_duration_s == C.JP_BUBBLE_DURATION_S
+    assert cfg.jp_daily_limit == C.JP_DAILY_LIMIT

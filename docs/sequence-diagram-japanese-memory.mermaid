@@ -1,0 +1,105 @@
+%% 4.1 展示：到点 → 停止判定 → 加权抽取 → 气泡 + 按钮条
+sequenceDiagram
+    autonumber
+    participant FL as 帧循环
+    participant CT as PetAppController
+    participant DL as DailyLogStore
+    participant WP as WeightedWordPicker
+    participant BW as BubbleWindow
+    participant BB as BubbleButtonBar
+
+    FL->>CT: _on_frame_tick(now)
+    CT->>CT: 跨日检测（today != _today_str → 更新并 _next_word_ts=now）
+    CT->>CT: 超时检测（_current_word 且 now>=_word_deadline → dispose unprocessed）
+    alt now < _next_word_ts 或 未开启 或 _current_word 已存在
+        CT-->>FL: return
+    end
+    CT->>CT: _show_word_bubble(now)
+    CT->>DL: count_for(today) / mastered_count_for(today)
+    DL-->>CT: shown, mastered
+    CT->>CT: 停止判定（shown>=limit 或 all_mastered）→ 通知+return
+    CT->>DL: shown_ids_for(today)
+    CT->>WP: pick(level, excluded=mastered∪shown, vocab_ids)
+    WP-->>CT: entry 或 None
+    alt None → 通知该等级已全部掌握
+    else 有效
+        CT->>CT: _current_word=entry; _word_deadline=now+duration; _word_disposed=False
+        CT->>BW: show_word(entry, duration)
+        CT->>BB: show_bar(anchor, bubble.geometry(), pointing_down, duration)
+    end
+
+%% 4.2 点击「记住了 / 新单词」→ 单飞处置 → 落库 → 排期
+sequenceDiagram
+    autonumber
+    participant U as 用户
+    participant BB as BubbleButtonBar
+    participant CT as PetAppController
+    participant MS as MasteredStore
+    participant VS as VocabStore
+    participant DL as DailyLogStore
+    participant BW as BubbleWindow
+
+    U->>BB: 点击「记住了」
+    BB->>CT: mastered_clicked
+    CT->>CT: _dispose_word("mastered", now)
+    CT->>CT: guard _word_disposed → return（单飞）
+    CT->>CT: _word_disposed = True
+    CT->>BW: hide_bubble()
+    CT->>BB: hide_bar()
+    CT->>MS: add(entry, mastered_at=_now_iso())
+    CT->>DL: add_entry(today, DailyLogEntry(..., "mastered"))
+    CT->>CT: _current_word=None; _word_deadline=inf; 通知; _schedule_next_word(now)
+
+%% 4.3 超时 → 未处理（与点击互斥）
+sequenceDiagram
+    autonumber
+    participant FL as 帧循环
+    participant CT as PetAppController
+    participant DL as DailyLogStore
+    participant BB as BubbleButtonBar
+    participant BW as BubbleWindow
+
+    FL->>CT: _on_frame_tick(now)
+    CT->>CT: if _current_word 且 not _word_disposed 且 now>=_word_deadline
+    CT->>CT: _dispose_word("unprocessed", now)
+    CT->>BB: hide_bar()
+    CT->>DL: add_entry(today, DailyLogEntry(..., "unprocessed"))
+    CT->>CT: _current_word=None; _schedule_next_word(now)
+    Note over BW: 气泡自身按 duration 淡出（controller 不再重复落库）
+
+%% 4.4 停止判定 + 跨日重置
+sequenceDiagram
+    autonumber
+    participant FL as 帧循环
+    participant CT as PetAppController
+    participant DL as DailyLogStore
+
+    FL->>CT: _on_frame_tick(now)
+    CT->>CT: today = _local_date_str()
+    alt today != _today_str（跨日）
+        CT->>CT: _today_str = today；_today_done_notified=False；_next_word_ts=now
+        Note over CT,DL: 计数/去重天然归零：新日期 key 在 daily_log 中无记录
+    end
+    CT->>DL: count_for(today)
+    DL-->>CT: shown
+    CT->>CT: shown >= jp_daily_limit → 今日不再弹（一次性通知）
+    CT->>DL: all_mastered(today)
+    DL-->>CT: True/False
+    CT->>CT: shown>0 且 mastered==shown → 提前停
+
+%% 4.5 回查：打开学习记录窗口
+sequenceDiagram
+    autonumber
+    participant U as 用户
+    participant TY as TrayController
+    participant CT as PetAppController
+    participant DL as DailyLogStore
+    participant LW as LogWindow
+
+    U->>TY: 点击「学习记录…」
+    TY->>CT: jp_log_requested
+    CT->>CT: 首次创建 LogWindow 单例
+    CT->>DL: days()
+    CT->>LW: set_dates(days)
+    CT->>LW: refresh(today, entries_for(today), cfg.jp_daily_limit)
+    LW->>LW: 日期/状态筛选（本地过滤）→ 表格 + 统计栏

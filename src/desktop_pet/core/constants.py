@@ -139,6 +139,25 @@ COLORS: Final[dict[str, str]] = {
     "glow_blue": "#B9D4E8",   # 淡蓝 睡觉柔光
     # —— 兼容保留：ui.bubble 仍引用此描边色（色值集中定义在 core）——
     "warm_brown": "#8B6B4F",
+    # —— 日语学习：学习泡泡次级文字色 + 生词本窗口配色（设计 §7.4）——
+    "bubble_sub_text": "#9C8570",   # 暖灰 假名（次级文字）
+    "bubble_faint_text": "#B7A99A",  # 淡褐 中文释义（最淡文字）
+    "vocab_bg": "#FFFDF8",          # 奶白 生词本窗口底色
+    "vocab_text": "#5A4636",        # 深棕 生词本正文文字
+    "vocab_level_tag": "#7A9E7E",   # 灰绿 生词本等级标签色
+    # —— 日语记忆（JP-17+）：学习泡泡高光 / 按钮条 / 记录窗口状态标签（设计 §7.3）——
+    "bubble_gradient_hi": "#FFFFFF",       # 学习泡泡 body 顶部浅高光（质感）
+    "jp_button_primary_bg": "#7A9E7E",     # 「记住了」主色填充（正向绿）
+    "jp_button_primary_text": "#FFFFFF",   # 「记住了」文字
+    "jp_button_primary_hover": "#8FB090",  # 主按钮悬停
+    "jp_button_primary_pressed": "#6B8E6F",  # 主按钮按下
+    "jp_button_secondary_border": "#9C8570",  # 「新单词」描边
+    "jp_button_secondary_text": "#7A5A42",    # 「新单词」文字
+    "jp_button_secondary_hover": "#F3EAE0",   # 次按钮悬停填充
+    "jp_button_bar_bg": "#FFFDF8",             # 按钮条底色
+    "log_status_mastered": "#7A9E7E",     # 状态标签·已掌握（绿）
+    "log_status_vocab": "#5B8DB8",        # 状态标签·生词（蓝）
+    "log_status_unprocessed": "#B7A99A",  # 状态标签·未处理（灰）
 }
 
 # 主体「柔和全息彩虹」渐变（左上前额 → 右下身体前沿的对角线性渐变）。
@@ -351,6 +370,139 @@ BUBBLE_TEXTS: Final[dict[Expression | Mood, list[str]]] = {
 TRAY_TOOLTIP: Final[str] = f"{APP_DISPLAY_NAME} · 桌面宠物"
 BUBBLE_MAX_WIDTH_PX: Final[float] = BUBBLE_MAX_WIDTH
 
+# --------------------------------------------------------------------------- #
+# 10. 日语学习（JP-01~JP-16）—— 难度 / 节奏 / 排版 / 文件 / 文案
+# --------------------------------------------------------------------------- #
+# —— 难度等级（由易到难，有序元组；与词库 level / 配置 jp_level 统一口径）——
+JP_LEVELS: Final[tuple[str, ...]] = ("N5", "N4", "N3", "N2", "N1")
+JP_DEFAULT_LEVEL: Final[str] = "N5"
+#: 等级 → 菜单/筛选显示文案（当前与等级同文字，保留为字典以便未来扩展描述）
+JP_LEVEL_LABELS: Final[dict[str, str]] = {level: level for level in JP_LEVELS}
+
+# —— 出现节奏（独立随机间隔，挂在既有帧循环上，不新开 QTimer）——
+JP_WORD_MIN_INTERVAL_S: Final[float] = 25.0
+JP_WORD_MAX_INTERVAL_S: Final[float] = 50.0
+
+# —— 学习泡泡排版（四行多字号，固定内容宽度保证「测量换行宽 == 绘制换行宽」）——
+JP_BUBBLE_WORD_FONT_SIZE: Final[int] = 16          # 日语单词（加粗）
+JP_BUBBLE_KANA_FONT_SIZE: Final[int] = 12          # 假名读音
+JP_BUBBLE_TRANSLATION_FONT_SIZE: Final[int] = 11   # 中文翻译
+JP_BUBBLE_MEANING_FONT_SIZE: Final[int] = 9        # 中文释义
+JP_BUBBLE_MAX_WIDTH: Final[float] = 240.0          # 学习泡泡固定内容宽度
+JP_BUBBLE_FONT_FAMILY: Final[str] = "Microsoft YaHei"
+BUBBLE_LINE_SPACING: Final[float] = 3.0            # 多行泡泡行距（PRD 原命名，不加 JP 前缀）
+
+# —— 词库 / 生词本文件与版本 ——
+WORD_BANK_DIR_NAME: Final[str] = "data"
+WORD_BANK_FILE_NAME: Final[str] = "jlpt_words.json"
+WORD_BANK_VERSION: Final[int] = 1
+VOCAB_FILE_NAME: Final[str] = "vocabulary.json"
+VOCAB_VERSION: Final[int] = 1
+
+# —— 生词本窗口尺寸 ——
+VOCAB_WINDOW_W: Final[int] = 440
+VOCAB_WINDOW_H: Final[int] = 360
+
+# —— 托盘菜单文案 ——
+JP_MENU_TITLE: Final[str] = "日语学习"
+JP_MENU_LEVEL: Final[str] = "难度"
+JP_MENU_REMEMBER: Final[str] = "记住当前单词"
+JP_MENU_REMEMBER_TEMPLATE: Final[str] = "记住「{word}」"   # 有当前词时动态替换
+JP_MENU_VOCAB: Final[str] = "生词本…"
+
+# —— 托盘通知文案（JP_NOTIFY_REMEMBER_ADDED 用 str.format(word=..., kana=...)）——
+JP_NOTIFY_REMEMBER_ADDED: Final[str] = "已加入生词本：{word}（{kana}）"
+JP_NOTIFY_REMEMBER_DUPLICATE: Final[str] = "已在生词本中"
+JP_NOTIFY_NO_WORD: Final[str] = "还没有单词哦，稍等泡泡弹出单词后再试～"
+JP_NOTIFY_NEED_BUBBLE: Final[str] = "已开启日语学习～先打开「气泡提示」，单词才会显示哦"
+JP_NOTIFY_BANK_UNAVAILABLE: Final[str] = "日语词库不可用，已跳过日语单词展示"
+
+# —— 生词本窗口文案 ——
+JP_VOCAB_WINDOW_TITLE: Final[str] = "生词本"
+JP_VOCAB_FILTER_ALL: Final[str] = "全部"
+JP_VOCAB_LEVEL_FILTER_LABEL: Final[str] = "等级："
+JP_VOCAB_COL_WORD: Final[str] = "单词"
+JP_VOCAB_COL_KANA: Final[str] = "假名"
+JP_VOCAB_COL_TRANSLATION: Final[str] = "翻译"
+JP_VOCAB_COL_LEVEL: Final[str] = "等级"
+JP_VOCAB_BTN_REMOVE: Final[str] = "删除选中"
+JP_VOCAB_BTN_CLEAR: Final[str] = "清空…"
+JP_VOCAB_BTN_CLOSE: Final[str] = "关闭"
+JP_VOCAB_EMPTY_TEXT: Final[str] = "还没有生词哦～ 打开「日语学习」后，把想记的单词加进来吧"
+JP_VOCAB_STATUS_TEMPLATE: Final[str] = "共 {count} 个生词"
+JP_VOCAB_CLEAR_CONFIRM_TITLE: Final[str] = "清空生词本"
+JP_VOCAB_CLEAR_CONFIRM_TEXT: Final[str] = "确定要清空全部生词吗？此操作不可撤销。"
+
+# --------------------------------------------------------------------------- #
+# 11. 日语记忆（JP-17+）—— 时长 / 上限 / 权重 / 三态 / 文件 / 按钮条 / 托盘 / 记录窗口
+# --------------------------------------------------------------------------- #
+# —— 学习泡泡时长（默认 30s；解钳范围 2~300s，见设计 §1.4 难点 4）——
+JP_BUBBLE_DURATION_S: Final[float] = 30.0
+JP_BUBBLE_MIN_DURATION_S: Final[float] = 2.0
+JP_BUBBLE_MAX_DURATION_S: Final[float] = 300.0
+
+# —— 每日展示上限与生词加权抽取 ——
+JP_DAILY_LIMIT: Final[int] = 15
+JP_DAILY_LIMIT_MAX: Final[int] = 200
+JP_VOCAB_WEIGHT: Final[float] = 3.0
+
+# —— 已掌握集合 / 每日记录 文件与版本 ——
+MASTERED_FILE_NAME: Final[str] = "mastered.json"
+MASTERED_VERSION: Final[int] = 1
+DAILY_LOG_FILE_NAME: Final[str] = "daily_log.json"
+DAILY_LOG_VERSION: Final[int] = 1
+
+# —— 每日记录三态（一次展示恰好落一种终态；与设计 §7.6 一致）——
+DAILY_LOG_STATUS_MASTERED: Final[str] = "mastered"
+DAILY_LOG_STATUS_VOCAB: Final[str] = "vocab"
+DAILY_LOG_STATUS_UNPROCESSED: Final[str] = "unprocessed"
+DAILY_LOG_STATUSES: Final[tuple[str, ...]] = (
+    DAILY_LOG_STATUS_MASTERED,
+    DAILY_LOG_STATUS_VOCAB,
+    DAILY_LOG_STATUS_UNPROCESSED,
+)
+
+# —— 气泡按钮条（几何 / 文案 / 字号，见设计 §3.1）——
+JP_BUTTON_MASTERED: Final[str] = "记住了"
+JP_BUTTON_VOCAB: Final[str] = "新单词"
+JP_BUTTON_RADIUS: Final[int] = 16
+JP_BUTTON_PAD_X: Final[int] = 14
+JP_BUTTON_PAD_Y: Final[int] = 8
+JP_BUTTON_BAR_GAP_PX: Final[int] = 6
+JP_BUTTON_BAR_PAD: Final[int] = 6
+JP_BUTTON_FONT_SIZE: Final[int] = 12
+
+# —— 托盘菜单文案（「记住当前单词」→「加入生词本」，见设计 §3.1）——
+JP_MENU_ADD_VOCAB: Final[str] = "加入生词本"
+JP_MENU_ADD_VOCAB_TEMPLATE: Final[str] = "加入生词本「{word}」"  # 有当前词时动态替换
+JP_MENU_LOG: Final[str] = "学习记录…"
+
+# —— 记忆闭环通知文案（str.format(word=..., kana=...)）——
+JP_NOTIFY_MASTERED_ADDED: Final[str] = "已标记为掌握：{word}（{kana}）"
+JP_NOTIFY_MASTERED_DUPLICATE: Final[str] = "这个单词已经掌握啦"
+JP_NOTIFY_LEVEL_DONE: Final[str] = "该等级单词已全部掌握，切换难度继续学习吧~"
+JP_NOTIFY_TODAY_DONE: Final[str] = "今日学习完成，明天继续加油！"
+
+# —— 学习记录窗口文案 / 尺寸 ——
+JP_LOG_WINDOW_TITLE: Final[str] = "学习记录"
+JP_LOG_WINDOW_W: Final[int] = 560
+JP_LOG_WINDOW_H: Final[int] = 420
+JP_LOG_DATE_LABEL: Final[str] = "日期："
+JP_LOG_STATUS_LABEL: Final[str] = "状态："
+JP_LOG_FILTER_ALL: Final[str] = "全部"
+JP_LOG_STATUS_MASTERED: Final[str] = "已掌握"
+JP_LOG_STATUS_VOCAB: Final[str] = "生词"
+JP_LOG_STATUS_UNPROCESSED: Final[str] = "未处理"
+JP_LOG_COL_WORD: Final[str] = "单词"
+JP_LOG_COL_KANA: Final[str] = "假名"
+JP_LOG_COL_TRANSLATION: Final[str] = "翻译"
+JP_LOG_COL_SHOWN_AT: Final[str] = "展示时间"
+JP_LOG_COL_STATUS: Final[str] = "状态"
+JP_LOG_EMPTY_TEXT: Final[str] = "这一天还没有学习记录哦～"
+JP_LOG_STATUS_TEMPLATE: Final[str] = (
+    "当日 {shown}/{limit} 条 · 已掌握 {mastered} · 生词 {vocab} · 未处理 {unprocessed}"
+)
+
 __all__ = [
     "Mood",
     "Expression",
@@ -361,4 +513,70 @@ __all__ = [
     "NEUTRAL_POSE",
     "BUBBLE_TEXTS",
     "interval_for_fps",
+    # 日语学习
+    "JP_LEVELS",
+    "JP_DEFAULT_LEVEL",
+    "JP_LEVEL_LABELS",
+    "JP_WORD_MIN_INTERVAL_S",
+    "JP_WORD_MAX_INTERVAL_S",
+    "JP_BUBBLE_WORD_FONT_SIZE",
+    "JP_BUBBLE_KANA_FONT_SIZE",
+    "JP_BUBBLE_TRANSLATION_FONT_SIZE",
+    "JP_BUBBLE_MEANING_FONT_SIZE",
+    "JP_BUBBLE_MAX_WIDTH",
+    "JP_BUBBLE_FONT_FAMILY",
+    "BUBBLE_LINE_SPACING",
+    "WORD_BANK_DIR_NAME",
+    "WORD_BANK_FILE_NAME",
+    "WORD_BANK_VERSION",
+    "VOCAB_FILE_NAME",
+    "VOCAB_VERSION",
+    "VOCAB_WINDOW_W",
+    "VOCAB_WINDOW_H",
+    # 日语记忆
+    "JP_BUBBLE_DURATION_S",
+    "JP_BUBBLE_MIN_DURATION_S",
+    "JP_BUBBLE_MAX_DURATION_S",
+    "JP_DAILY_LIMIT",
+    "JP_DAILY_LIMIT_MAX",
+    "JP_VOCAB_WEIGHT",
+    "MASTERED_FILE_NAME",
+    "MASTERED_VERSION",
+    "DAILY_LOG_FILE_NAME",
+    "DAILY_LOG_VERSION",
+    "DAILY_LOG_STATUS_MASTERED",
+    "DAILY_LOG_STATUS_VOCAB",
+    "DAILY_LOG_STATUS_UNPROCESSED",
+    "DAILY_LOG_STATUSES",
+    "JP_BUTTON_MASTERED",
+    "JP_BUTTON_VOCAB",
+    "JP_BUTTON_RADIUS",
+    "JP_BUTTON_PAD_X",
+    "JP_BUTTON_PAD_Y",
+    "JP_BUTTON_BAR_GAP_PX",
+    "JP_BUTTON_BAR_PAD",
+    "JP_BUTTON_FONT_SIZE",
+    "JP_MENU_ADD_VOCAB",
+    "JP_MENU_ADD_VOCAB_TEMPLATE",
+    "JP_MENU_LOG",
+    "JP_NOTIFY_MASTERED_ADDED",
+    "JP_NOTIFY_MASTERED_DUPLICATE",
+    "JP_NOTIFY_LEVEL_DONE",
+    "JP_NOTIFY_TODAY_DONE",
+    "JP_LOG_WINDOW_TITLE",
+    "JP_LOG_WINDOW_W",
+    "JP_LOG_WINDOW_H",
+    "JP_LOG_DATE_LABEL",
+    "JP_LOG_STATUS_LABEL",
+    "JP_LOG_FILTER_ALL",
+    "JP_LOG_STATUS_MASTERED",
+    "JP_LOG_STATUS_VOCAB",
+    "JP_LOG_STATUS_UNPROCESSED",
+    "JP_LOG_COL_WORD",
+    "JP_LOG_COL_KANA",
+    "JP_LOG_COL_TRANSLATION",
+    "JP_LOG_COL_SHOWN_AT",
+    "JP_LOG_COL_STATUS",
+    "JP_LOG_EMPTY_TEXT",
+    "JP_LOG_STATUS_TEMPLATE",
 ]

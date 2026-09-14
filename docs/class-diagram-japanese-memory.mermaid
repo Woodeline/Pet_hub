@@ -1,0 +1,154 @@
+classDiagram
+    class VocabEntry {
+        <<frozen dataclass / 既有>>
+        +str id
+        +str level
+        +str word
+        +str kana
+        +str translation
+        +str meaning
+        +str romaji
+    }
+    class MasteredItem {
+        <<frozen dataclass / 新建>>
+        +str id
+        +str level
+        +str word
+        +str kana
+        +str translation
+        +str mastered_at
+        +from_entry(entry, mastered_at) MasteredItem
+        +to_dict() dict
+        +from_dict(data) MasteredItem
+    }
+    class MasteredStore {
+        -Path _path
+        -list~MasteredItem~ _items
+        +default_path() Path
+        +load() list~MasteredItem~
+        +items() list~MasteredItem~
+        +ids() set~str~
+        +contains(item_id) bool
+        +count() int
+        +add(entry, mastered_at) bool
+        +remove(item_id) bool
+        +clear() None
+        +save() None
+        -_backup_corrupt(reason) None
+        -_corrupt_suffix() str
+    }
+    class DailyLogEntry {
+        <<frozen dataclass / 新建>>
+        +str id
+        +str level
+        +str word
+        +str kana
+        +str translation
+        +str shown_at
+        +str status
+        +from_entry(entry, shown_at, status) DailyLogEntry
+        +to_dict() dict
+        +from_dict(data) DailyLogEntry
+    }
+    class DailyLogStore {
+        -Path _path
+        -dict~str,list~DailyLogEntry~~ _days
+        +default_path() Path
+        +load() dict~str,list~DailyLogEntry~~
+        +days() list~str~
+        +entries_for(day) list~DailyLogEntry~
+        +add_entry(day, entry) None
+        +count_for(day) int
+        +mastered_count_for(day) int
+        +vocab_count_for(day) int
+        +unprocessed_count_for(day) int
+        +shown_ids_for(day) set~str~
+        +all_mastered(day) bool
+        +save() None
+        -_backup_corrupt(reason) None
+        -_corrupt_suffix() str
+    }
+    class WeightedWordPicker {
+        -WordBank _bank
+        -Random _rng
+        +pick(level, excluded_ids, vocab_ids) VocabEntry
+    }
+    class AppConfig {
+        +float jp_bubble_duration_s
+        +int jp_daily_limit
+        +to_dict() dict
+        +from_dict(data) AppConfig
+    }
+    class BubbleWindow {
+        <<既有 + 修改>>
+        +show_word(entry, duration) None
+        +show_message(text, duration) None
+        +hide_bubble() None
+        +set_anchor(anchor) None
+        +pointing_down() bool
+    }
+    class BubbleButtonBar {
+        <<新建>>
+        +Signal mastered_clicked
+        +Signal vocab_clicked
+        +show_bar(anchor, bubble_rect, pointing_down, duration) None
+        +hide_bar() None
+        -QPushButton _btn_mastered
+        -QPushButton _btn_vocab
+        -_compute_geometry(anchor, bubble_rect, pointing_down) QRect
+        -_update_alpha() None
+    }
+    class LogWindow {
+        <<新建>>
+        +set_dates(dates) None
+        +refresh(day, entries, limit) None
+        +current_day() str
+        +current_status() str
+        -QComboBox _combo_date
+        -QComboBox _combo_status
+        -QTableWidget _table
+        -QLabel _status
+    }
+    class TrayController {
+        <<既有 + 修改>>
+        +Signal jp_add_vocab_requested
+        +Signal jp_log_requested
+        +set_jp_enabled(enabled) None
+        +set_jp_current_word(word) None
+    }
+    class PetAppController {
+        <<既有 + 修改>>
+        -MasteredStore _mastered
+        -DailyLogStore _daily_log
+        -WeightedWordPicker _picker
+        -BubbleButtonBar _button_bar
+        -LogWindow _log_window
+        -VocabEntry _current_word
+        -float _word_deadline
+        -bool _word_disposed
+        -str _today_str
+        +_show_word_bubble(now) None
+        +_dispose_word(status, now) None
+        +_on_word_mastered() None
+        +_on_word_vocab() None
+        +_on_jp_add_vocab() None
+        +_on_jp_log() None
+        +_jp_stop_for_today() bool
+        +_local_date_str() str
+        +_now_iso() str
+    }
+
+    MasteredStore o-- MasteredItem : contains
+    DailyLogStore o-- DailyLogEntry : contains
+    MasteredItem ..> VocabEntry : from_entry()
+    DailyLogEntry ..> VocabEntry : from_entry()
+    WeightedWordPicker --> WordBank : queries
+    PetAppController --> MasteredStore
+    PetAppController --> DailyLogStore
+    PetAppController --> WeightedWordPicker
+    PetAppController --> BubbleWindow
+    PetAppController --> BubbleButtonBar
+    PetAppController --> LogWindow
+    PetAppController --> TrayController
+    PetAppController ..> AppConfig : reads
+    BubbleButtonBar ..> BubbleWindow : 读取 geometry()/pointing_down()

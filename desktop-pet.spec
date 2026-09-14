@@ -5,7 +5,7 @@ a = Analysis(
     ['src/desktop_pet/main.py'],
     pathex=['src'],
     binaries=[],
-    datas=[],
+    datas=[('src/desktop_pet/data/jlpt_words.json', 'desktop_pet/data')],
     hiddenimports=['pynput.keyboard._win32', 'pynput.mouse._win32'],
     hookspath=[],
     hooksconfig={},
