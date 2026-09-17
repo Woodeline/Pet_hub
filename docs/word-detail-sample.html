@@ -1,0 +1,1288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>日语详情词库 · 人工抽查</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --line: #e3e6ea;
+    --ink: #1f2328;
+    --ink-2: #57606a;
+    --ink-3: #8b949e;
+    --accent: #1a73e8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", sans-serif;
+    font-size: 14px;
+    line-height: 1.65;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 32px 24px 64px; }
+
+  .page-head {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 24px 28px;
+    margin-bottom: 28px;
+  }
+  .page-head h1 { margin: 0 0 6px; font-size: 21px; letter-spacing: .2px; }
+  .page-head p { margin: 0; color: var(--ink-2); }
+  .kpis { display: flex; flex-wrap: wrap; gap: 28px; margin-top: 18px; }
+  .kpi b { display: block; font-size: 22px; font-weight: 600; }
+  .kpi span { color: var(--ink-3); font-size: 12px; }
+  table { border-collapse: collapse; margin-top: 14px; font-size: 13px; }
+  th, td { border: 1px solid var(--line); padding: 4px 14px; text-align: left; }
+  th { background: #fafbfc; color: var(--ink-2); font-weight: 600; }
+
+  .level-block { margin-top: 34px; }
+  .level-block h2 {
+    display: flex; align-items: baseline; gap: 12px;
+    font-size: 16px; margin: 0 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--c);
+  }
+  .lv { color: var(--c); font-weight: 700; letter-spacing: .5px; }
+  .lv-sub { color: var(--ink-3); font-size: 12px; font-weight: 400; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 18px 20px 14px;
+    display: flex;
+    flex-direction: column;
+  }
+  .card-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding-bottom: 12px; border-bottom: 1px dashed var(--line);
+  }
+  .headline { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .word { font-size: 24px; font-weight: 700; letter-spacing: .5px; }
+  .kana { color: var(--ink-3); font-size: 13px; }
+  .chip {
+    flex: none; font-size: 11px; font-weight: 700; color: #fff;
+    background: var(--c); border-radius: 999px; padding: 2px 9px; letter-spacing: .5px;
+  }
+
+  .field { margin-top: 13px; }
+  .caption {
+    font-size: 11px; font-weight: 700; color: var(--ink-3);
+    letter-spacing: 1px; margin-bottom: 5px;
+  }
+  ul { margin: 0; padding-left: 18px; }
+  li { margin: 2px 0; }
+  .meanings li::marker { color: var(--accent); }
+
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag {
+    background: #eef2f7; color: #33404d; border-radius: 6px;
+    padding: 1px 8px; font-size: 12px;
+  }
+
+  .collos { list-style: none; padding-left: 0; }
+  .collos li { display: flex; gap: 8px; align-items: baseline; }
+  .collos code {
+    background: #f3f5f8; border-radius: 5px; padding: 1px 7px;
+    font-family: "SFMono-Regular", Consolas, monospace; font-size: 12.5px; color: #0b4f9e;
+  }
+  .collos .note { color: var(--ink-2); font-size: 12.5px; }
+
+  .examples { list-style: none; padding-left: 0; }
+  .examples li { padding: 6px 0 6px 12px; border-left: 2px solid #e8eef7; margin-bottom: 4px; }
+  .examples .jp { font-weight: 600; }
+  .examples .zh { color: var(--ink-2); font-size: 13px; }
+
+  .usage {
+    margin: 0; background: #fbf7ec; border: 1px solid #f0e4c8;
+    border-radius: 8px; padding: 8px 11px; font-size: 13px; color: #57492c;
+  }
+  .muted { color: var(--ink-3); }
+
+  .card-foot {
+    margin-top: 14px; padding-top: 8px; border-top: 1px solid var(--line);
+    color: var(--ink-3); font-size: 11px; font-family: Consolas, monospace;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="page-head">
+    <h1>日语学习详情词库 · 人工抽查表</h1>
+    <p>五要素内容由并行生成，机器仅能校验<b>结构 / 展示上限 / 零英文残留</b>；
+       释义准确度、搭配真实性、例句地道度需人工判断。以下为等距抽样。</p>
+    <div class="kpis">
+      <div class="kpi"><b>500</b><span>词条总数</span></div>
+      <div class="kpi"><b>5</b><span>等级数</span></div>
+      <div class="kpi"><b>30</b><span>本次抽查条数</span></div>
+    </div>
+    <table>
+      <tr><th>等级</th><th>词库条数</th><th>抽查条数</th></tr>
+      <tr><td>N5</td><td>100</td><td>6</td></tr><tr><td>N4</td><td>100</td><td>6</td></tr><tr><td>N3</td><td>100</td><td>6</td></tr><tr><td>N2</td><td>100</td><td>6</td></tr><tr><td>N1</td><td>100</td><td>6</td></tr>
+    </table>
+  </div>
+  
+            <section class="level-block">
+              <h2 style="--c:#0f9d58">
+                <span class="lv">N5</span>
+                <span class="lv-sub">抽查 6 / 100 条</span>
+              </h2>
+              <div class="grid">
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">先生</span>
+          <span class="kana">せんせい</span>
+        </div>
+        <span class="chip" style="--c:#0f9d58">N5</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>老师</li><li>教师</li><li>（尊称）医生/律师等专业人士</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">名词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>先生の言うこと</code><span class="note">老师说的话</span></li><li><code>英語の先生</code><span class="note">英语老师</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">田中先生は優しいです。</div><div class="zh">田中老师很和蔼。</div></li><li><div class="jp">お医者さんを先生と呼びます。</div><div class="zh">我们称呼医生为「先生」。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">尊称，用于教师、医生、律师等；称呼时直接加在人姓后（如「田中先生」），不加「の」。</p>
+      </div>
+
+      <footer class="card-foot">id: n5-0008</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">夜</span>
+          <span class="kana">よる</span>
+        </div>
+        <span class="chip" style="--c:#0f9d58">N5</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>夜晚</li><li>晚上</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">名词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>夜ご飯</code><span class="note">晚饭</span></li><li><code>夜遅く</code><span class="note">深夜</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">夜は静かです。</div><div class="zh">夜晚很安静。</div></li><li><div class="jp">昨日の夜、電話しました。</div><div class="zh">昨晚打了电话。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">指夜里；「夜ご飯」即晚饭，与「あさ（朝）」相对，时间副词可直接接在句首。</p>
+      </div>
+
+      <footer class="card-foot">id: n5-0024</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">車</span>
+          <span class="kana">くるま</span>
+        </div>
+        <span class="chip" style="--c:#0f9d58">N5</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>车</li><li>汽车</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">名词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>車を運転する</code><span class="note">开车</span></li><li><code>車を買う</code><span class="note">买车</span></li><li><code>車に乗る</code><span class="note">坐车</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">父は車で会社へ行きます。</div><div class="zh">父亲开车去公司。</div></li><li><div class="jp">新しい車がほしいです。</div><div class="zh">想要一辆新车。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">「くるま」，泛指汽车；自行车另有「自転車」。</p>
+      </div>
+
+      <footer class="card-foot">id: n5-0040</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">買う</span>
+          <span class="kana">かう</span>
+        </div>
+        <span class="chip" style="--c:#0f9d58">N5</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>买</li><li>购买</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">五段动词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>本を買う</code><span class="note">买书</span></li><li><code>切符を買う</code><span class="note">买票</span></li><li><code>お土産を買う</code><span class="note">买特产</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">店でりんごを買いました。</div><div class="zh">在店里买了苹果。</div></li><li><div class="jp">新しい服を買いたいです。</div><div class="zh">想买新衣服。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">他动词，宾语用「を」；与「売る（卖）」相对。</p>
+      </div>
+
+      <footer class="card-foot">id: n5-0056</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">面白い</span>
+          <span class="kana">おもしろい</span>
+        </div>
+        <span class="chip" style="--c:#0f9d58">N5</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>有趣的</li><li>好玩的</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">い形容词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>面白い本</code><span class="note">有趣的书</span></li><li><code>面白い映画</code><span class="note">有趣的电影</span></li><li><code>面白い人</code><span class="note">有趣的人</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">この本はとても面白いです。</div><div class="zh">这本书很有趣。</div></li><li><div class="jp">昨日の旅行は面白かったです。</div><div class="zh">昨天的旅行很有意思。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">い形容词，与「つまらない（无聊）」相对；也可表「奇怪」的语感。</p>
+      </div>
+
+      <footer class="card-foot">id: n5-0072</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">また</span>
+          <span class="kana">また</span>
+        </div>
+        <span class="chip" style="--c:#0f9d58">N5</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>又</li><li>再</li><li>还</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">副词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>また来て</code><span class="note">再来哦</span></li><li><code>また明日</code><span class="note">明天见</span></li><li><code>また会おう</code><span class="note">再见面吧</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">また週末に行きましょう。</div><div class="zh">周末再去吧。</div></li><li><div class="jp">彼はまた遅刻した。</div><div class="zh">他又迟到了。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">副词，表重复或追加；告别时「また（下次见）」为常用寒暄，语气自然随意。</p>
+      </div>
+
+      <footer class="card-foot">id: n5-0088</footer>
+    </article>
+    </div>
+            </section>
+            
+            <section class="level-block">
+              <h2 style="--c:#1a73e8">
+                <span class="lv">N4</span>
+                <span class="lv-sub">抽查 6 / 100 条</span>
+              </h2>
+              <div class="grid">
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">以下</span>
+          <span class="kana">いか</span>
+        </div>
+        <span class="chip" style="--c:#1a73e8">N4</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>以下</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">名词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>十八歳以下</code><span class="note">十八岁以下</span></li><li><code>以下の条件</code><span class="note">以下条件</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">この映画は十五歳以下は見られない。</div><div class="zh">这部电影十五岁以下不能观看。</div></li><li><div class="jp">料金は千円以下です。</div><div class="zh">费用在千日元以下。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">表示数量、程度“不超过某基准”，含该基准本身；反义是「以上」。</p>
+      </div>
+
+      <footer class="card-foot">id: n4-0008</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">腕</span>
+          <span class="kana">うで</span>
+        </div>
+        <span class="chip" style="--c:#1a73e8">N4</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>手臂</li><li>胳膊</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">名词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>腕を組む</code><span class="note">抱臂</span></li><li><code>腕がいい</code><span class="note">手艺好/技术高</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">重い荷物を持って腕が疲れた。</div><div class="zh">提着重物，胳膊累了。</div></li><li><div class="jp">彼は料理の腕が上がった。</div><div class="zh">他的烹饪手艺进步了。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">本义身体部位“胳膊”；引申为“技能、本事”（如「腕が上がる」）。</p>
+      </div>
+
+      <footer class="card-foot">id: n4-0024</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">落ちる</span>
+          <span class="kana">おちる</span>
+        </div>
+        <span class="chip" style="--c:#1a73e8">N4</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>掉落</li><li>落下</li><li>脱落</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">一段动词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>落ちる</code><span class="note">掉落</span></li><li><code>葉が落ちる</code><span class="note">叶子落下</span></li><li><code>試験に落ちる</code><span class="note">考试落榜</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">ポケットから財布が落ちました。</div><div class="zh">钱包从口袋里掉了出来。</div></li><li><div class="jp">秋になると、木の葉が落ちます。</div><div class="zh">到了秋天，树叶会落下。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">自动词，表示自己掉落；「試験に落ちる」为固定用法，指落榜。</p>
+      </div>
+
+      <footer class="card-foot">id: n4-0040</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">終わる</span>
+          <span class="kana">おわる</span>
+        </div>
+        <span class="chip" style="--c:#1a73e8">N4</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>结束</li><li>完结</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">五段动词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>仕事が終わる</code><span class="note">工作结束</span></li><li><code>授業が終わる</code><span class="note">课程结束</span></li><li><code>一日が終わる</code><span class="note">一天结束</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">映画はもう終わりました。</div><div class="zh">电影已经结束了。</div></li><li><div class="jp">いつ仕事が終わりますか。</div><div class="zh">工作什么时候结束？</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">自动词；使某事物结束用他动词「終える」。</p>
+      </div>
+
+      <footer class="card-foot">id: n4-0056</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">家族</span>
+          <span class="kana">かぞく</span>
+        </div>
+        <span class="chip" style="--c:#1a73e8">N4</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>家人</li><li>家庭</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">名词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>家族と住む</code><span class="note">和家人同住</span></li><li><code>家族旅行</code><span class="note">家庭旅行</span></li><li><code>家族が増える</code><span class="note">家庭成员增加</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">家族みんなで夕ご飯を食べました。</div><div class="zh">全家人一起吃了晚饭。</div></li><li><div class="jp">家族の写真を撮りました。</div><div class="zh">拍了全家福。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">指由血缘或婚姻组成的家庭成员整体，区别于「家庭」（家）。</p>
+      </div>
+
+      <footer class="card-foot">id: n4-0072</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">関係</span>
+          <span class="kana">かんけい</span>
+        </div>
+        <span class="chip" style="--c:#1a73e8">N4</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>关系</li><li>关联</li><li>牵连</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">名词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>関係がある</code><span class="note">有关系</span></li><li><code>関係ない</code><span class="note">没关系/无关</span></li><li><code>国際関係</code><span class="note">国际关系</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">この二つの事件は関係がある。</div><div class="zh">这两件事有关系。</div></li><li><div class="jp">私には関係ないことだ。</div><div class="zh">那是与我无关的事。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">名词，指事物间的关联；口语常用「関係ない」表示「没关系、不关我事」，语气较随意。</p>
+      </div>
+
+      <footer class="card-foot">id: n4-0088</footer>
+    </article>
+    </div>
+            </section>
+            
+            <section class="level-block">
+              <h2 style="--c:#b06000">
+                <span class="lv">N3</span>
+                <span class="lv-sub">抽查 6 / 100 条</span>
+              </h2>
+              <div class="grid">
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">与える</span>
+          <span class="kana">あたえる</span>
+        </div>
+        <span class="chip" style="--c:#b06000">N3</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>给予，给</li><li>授予，带来</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">一段动词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>影響を与える</code><span class="note">给予影响</span></li><li><code>機会を与える</code><span class="note">给予机会</span></li><li><code>被害を与える</code><span class="note">造成损失、带来损害</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">子供に良い影響を与えたいです。</div><div class="zh">想给孩子带来好的影响。</div></li><li><div class="jp">この仕事は私に大きな経験を与えてくれました。</div><div class="zh">这份工作给了我很大的历练。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">郑重书面语，常用于抽象事物的「给予、赋予、造成」；日常「给」多用「あげる」。</p>
+      </div>
+
+      <footer class="card-foot">id: n3-0008</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">祝う</span>
+          <span class="kana">いわう</span>
+        </div>
+        <span class="chip" style="--c:#b06000">N3</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>庆祝，祝贺</li><li>祝愿</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">五段动词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>誕生日を祝う</code><span class="note">庆祝生日</span></li><li><code>成功を祝う</code><span class="note">祝贺成功</span></li><li><code>お祝いをする</code><span class="note">举行庆祝</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">みんなで友達の結婚を祝いました。</div><div class="zh">大家一同祝贺朋友结婚。</div></li><li><div class="jp">合格を心から祝っています。</div><div class="zh">从心底祝贺你及格。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">对喜事表达「庆祝、道贺」；名词形式为「祝い（いわい）」，节日如「クリスマス」常搭配使用。</p>
+      </div>
+
+      <footer class="card-foot">id: n3-0024</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">演奏</span>
+          <span class="kana">えんそう</span>
+        </div>
+        <span class="chip" style="--c:#b06000">N3</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>演奏</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">名词</span><span class="tag">サ变动词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>ピアノを演奏する</code><span class="note">演奏钢琴</span></li><li><code>演奏会</code><span class="note">演奏会/音乐会</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">彼はバイオリンを演奏した。</div><div class="zh">他演奏了小提琴。</div></li><li><div class="jp">美しい演奏に感動した。</div><div class="zh">被美妙的演奏打动了。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">指用乐器演奏乐曲，可作名词或サ变动词（～する）；区别于“演じる（表演角色）”。</p>
+      </div>
+
+      <footer class="card-foot">id: n3-0040</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">恐れる</span>
+          <span class="kana">おそれる</span>
+        </div>
+        <span class="chip" style="--c:#b06000">N3</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>害怕</li><li>畏惧</li><li>担心</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">一段动词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>失敗を恐れる</code><span class="note">害怕失败</span></li><li><code>将来を恐れる</code><span class="note">担忧将来</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">彼は何も恐れずに進んだ。</div><div class="zh">他毫无畏惧地前行。</div></li><li><div class="jp">高いところを恐れる。</div><div class="zh">害怕高处。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">表示心理上的害怕或担忧，多用于较正式场合；口语常用「こわい」「怖がる」。</p>
+      </div>
+
+      <footer class="card-foot">id: n3-0056</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">抱く</span>
+          <span class="kana">いだく</span>
+        </div>
+        <span class="chip" style="--c:#b06000">N3</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>抱</li><li>怀抱</li><li>怀有</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">五段动词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>子供を抱く</code><span class="note">抱着孩子</span></li><li><code>夢を抱く</code><span class="note">怀揣梦想</span></li><li><code>疑問を抱く</code><span class="note">抱有疑问</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">母は赤ちゃんを優しく抱いた。</div><div class="zh">母亲温柔地抱着婴儿。</div></li><li><div class="jp">彼は将来への希望を抱いている。</div><div class="zh">他对未来怀抱希望。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">本义拥抱，也常用于抽象「怀有（梦想、疑问、感情）」，注意与「抱える」（承担）区分。</p>
+      </div>
+
+      <footer class="card-foot">id: n3-0072</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">理由</span>
+          <span class="kana">りゆう</span>
+        </div>
+        <span class="chip" style="--c:#b06000">N3</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>理由</li><li>原因</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">名词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>理由がある</code><span class="note">有理由</span></li><li><code>理由を説明する</code><span class="note">说明原因</span></li><li><code>十分な理由</code><span class="note">充分的理由</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">遅れた理由を教えてください。</div><div class="zh">请告诉我迟到的原因。</div></li><li><div class="jp">何か理由があって休んだのかな。</div><div class="zh">是有什么原因才请假了吧。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">指事情发生的缘由或依据，常与「～ため／～から」的原因句呼应，常用于解释说明。</p>
+      </div>
+
+      <footer class="card-foot">id: n3-0088</footer>
+    </article>
+    </div>
+            </section>
+            
+            <section class="level-block">
+              <h2 style="--c:#c5221f">
+                <span class="lv">N2</span>
+                <span class="lv-sub">抽查 6 / 100 条</span>
+              </h2>
+              <div class="grid">
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">上がり</span>
+          <span class="kana">あがり</span>
+        </div>
+        <span class="chip" style="--c:#c5221f">N2</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>收获</li><li>上升</li><li>完成（的成果）</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">名词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>米の上がり</code><span class="note">大米的收成</span></li><li><code>試験の上がり</code><span class="note">考试的成绩、结果</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">今年の米の上がりは良い。</div><div class="zh">今年大米的收成不错。</div></li><li><div class="jp">仕事の上がりが早い。</div><div class="zh">干活的收尾（完成）很快。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">是「上がる」的名词形，依语境指收成、成果、完成或价格上涨等，含义需结合上下文判断。</p>
+      </div>
+
+      <footer class="card-foot">id: n2-0008</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">甘やかす</span>
+          <span class="kana">あまやかす</span>
+        </div>
+        <span class="chip" style="--c:#c5221f">N2</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>娇惯</li><li>溺爱</li><li>纵容</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">五段动词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>子どもを甘やかす</code><span class="note">娇惯孩子</span></li><li><code>甘やかして育てる</code><span class="note">溺爱着养大</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">親が甘やかしすぎた。</div><div class="zh">父母太溺爱了。</div></li><li><div class="jp">甘やかさずに厳しく教えた。</div><div class="zh">没有娇惯，而是严格管教。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">指不加约束、过度疼爱而使对方任性，含负面评价；与「甘える（撒娇）」不同，主语是纵容方。</p>
+      </div>
+
+      <footer class="card-foot">id: n2-0024</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">意地</span>
+          <span class="kana">いじ</span>
+        </div>
+        <span class="chip" style="--c:#c5221f">N2</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>固执</li><li>倔强</li><li>自尊心</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">名词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>意地を張る</code><span class="note">固执己见</span></li><li><code>意地の悪い人</code><span class="note">心眼坏的人</span></li><li><code>意地になる</code><span class="note">变得执拗</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">彼はすぐ意地を張って聞かない。</div><div class="zh">他马上就倔起来不听人劝。</div></li><li><div class="jp">負けず嫌いで意地の強い子だ。</div><div class="zh">是个好胜又倔强的孩子。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">多指不肯退让的执拗或自尊心，「意地が悪い」则含心眼坏的贬义。</p>
+      </div>
+
+      <footer class="card-foot">id: n2-0040</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">印刷</span>
+          <span class="kana">いんさつ</span>
+        </div>
+        <span class="chip" style="--c:#c5221f">N2</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>印刷</li><li>打印</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">名词</span><span class="tag">サ变动词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>印刷する</code><span class="note">印刷</span></li><li><code>印刷物</code><span class="note">印刷品</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">この本は明日印刷される。</div><div class="zh">这本书明天印刷。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">名词亦可作サ变动词使用。</p>
+      </div>
+
+      <footer class="card-foot">id: n2-0056</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">笑顔</span>
+          <span class="kana">えがお</span>
+        </div>
+        <span class="chip" style="--c:#c5221f">N2</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>笑容</li><li>笑脸</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">名词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>笑顔で迎える</code><span class="note">笑脸相迎</span></li><li><code>笑顔が素敵</code><span class="note">笑容动人</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">彼女はいつも笑顔だ。</div><div class="zh">她总是面带笑容。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">指微笑、和善的表情。</p>
+      </div>
+
+      <footer class="card-foot">id: n2-0072</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">数える</span>
+          <span class="kana">かぞえる</span>
+        </div>
+        <span class="chip" style="--c:#c5221f">N2</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>数</li><li>计数</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">一段动词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>人数を数える</code><span class="note">数人数</span></li><li><code>星を数える</code><span class="note">数星星</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">子供が指で数えている。</div><div class="zh">孩子用手指在数数。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">他动词，表逐一清点数量。</p>
+      </div>
+
+      <footer class="card-foot">id: n2-0088</footer>
+    </article>
+    </div>
+            </section>
+            
+            <section class="level-block">
+              <h2 style="--c:#7b1fa2">
+                <span class="lv">N1</span>
+                <span class="lv-sub">抽查 6 / 100 条</span>
+              </h2>
+              <div class="grid">
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">顕著</span>
+          <span class="kana">けんちょ</span>
+        </div>
+        <span class="chip" style="--c:#7b1fa2">N1</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>显著</li><li>明显</li><li>突出</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">な形容词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>顕著な成果</code><span class="note">显著成果</span></li><li><code>顕著な差</code><span class="note">明显差距</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">近年その傾向は顕著だ。</div><div class="zh">近年该趋势十分显著。</div></li><li><div class="jp">効果が顕著に表れた。</div><div class="zh">效果显现得十分明显。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">多用于数据、变化等客观而明显之处。</p>
+      </div>
+
+      <footer class="card-foot">id: n1-0008</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">貸し出し</span>
+          <span class="kana">かしだし</span>
+        </div>
+        <span class="chip" style="--c:#7b1fa2">N1</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>出借</li><li>借出</li><li>外借</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">名词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>本の貸し出し</code><span class="note">借书</span></li><li><code>貸し出し中</code><span class="note">出借中</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">図書館は本の貸し出しをしている。</div><div class="zh">图书馆在出借图书。</div></li><li><div class="jp">この資料は貸し出しできない。</div><div class="zh">这份资料不能外借。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">指把物品借给他人，多用于图书馆等。</p>
+      </div>
+
+      <footer class="card-foot">id: n1-0024</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">急激</span>
+          <span class="kana">きゅうげき</span>
+        </div>
+        <span class="chip" style="--c:#7b1fa2">N1</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>急剧</li><li>剧烈</li><li>迅猛</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">な形容词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>急激な変化</code><span class="note">急剧变化</span></li><li><code>気温が急激に下がる</code><span class="note">气温骤降</span></li><li><code>急激な成長</code><span class="note">迅猛增长</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">気温が一晩で急激に下がった。</div><div class="zh">气温一夜间骤降。</div></li><li><div class="jp">急激な円高は輸出に打撃を与えた。</div><div class="zh">日元急剧升值给出口造成了打击。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">形容变化速度快、幅度大，作谓语用「急激だ」，修饰动词用「急激に」。</p>
+      </div>
+
+      <footer class="card-foot">id: n1-0040</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">加わる</span>
+          <span class="kana">くわわる</span>
+        </div>
+        <span class="chip" style="--c:#7b1fa2">N1</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>加入</li><li>参加</li><li>附加上</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">五段动词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>議論に加わる</code><span class="note">参与讨论</span></li><li><code>仲間に加わる</code><span class="note">成为伙伴</span></li><li><code>力が加わる</code><span class="note">力量增强</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">新しいメンバーがプロジェクトに加わった。</div><div class="zh">新成员加入了项目。</div></li><li><div class="jp">私もその話し合いに加わりたい。</div><div class="zh">我也想参加那场商谈。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">自动词，表示加入某群体、活动或力量叠加其上，书面正式，区别于他动词「加える」。</p>
+      </div>
+
+      <footer class="card-foot">id: n1-0056</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">根拠</span>
+          <span class="kana">こんきょ</span>
+        </div>
+        <span class="chip" style="--c:#7b1fa2">N1</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>根据</li><li>依据</li><li>根基</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">名词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>根拠となる</code><span class="note">成为根据</span></li><li><code>根拠を示す</code><span class="note">出示依据</span></li><li><code>根拠のない噂</code><span class="note">无根据的传言</span></li><li><code>科学的根拠</code><span class="note">科学根据</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">その主張には根拠がない。</div><div class="zh">那种主张毫无根据。</div></li><li><div class="jp">事実に根拠を置いて話した。</div><div class="zh">我依据事实陈述。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">支撑判断或论点的理由、依据，否定形「根拠がない」极常用，书面正式。</p>
+      </div>
+
+      <footer class="card-foot">id: n1-0072</footer>
+    </article>
+    
+    <article class="card">
+      <header class="card-head">
+        <div class="headline">
+          <span class="word">支給</span>
+          <span class="kana">しきゅう</span>
+        </div>
+        <span class="chip" style="--c:#7b1fa2">N1</span>
+      </header>
+
+      <div class="field">
+        <div class="caption">中文释义</div>
+        <ul class="meanings"><li>支给、发放（物资、补贴）</li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">词性标注</div>
+        <div class="tags"><span class="tag">名词</span><span class="tag">サ变动词</span></div>
+      </div>
+
+      <div class="field">
+        <div class="caption">常见搭配</div>
+        <ul class="collos"><li><code>給料を支給する</code><span class="note">发放工资</span></li><li><code>食事を支給する</code><span class="note">提供伙食</span></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">典型例句</div>
+        <ul class="examples"><li><div class="jp">会社から交通費が支給される。</div><div class="zh">公司发放交通费。</div></li></ul>
+      </div>
+
+      <div class="field">
+        <div class="caption">语境 / 语气注意</div>
+        <p class="usage">多指单位、组织向个人发放金钱或物资。</p>
+      </div>
+
+      <footer class="card-foot">id: n1-0088</footer>
+    </article>
+    </div>
+            </section>
+            
+</div>
+</body>
+</html>

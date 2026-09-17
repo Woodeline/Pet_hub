@@ -158,6 +158,12 @@ COLORS: Final[dict[str, str]] = {
     "log_status_mastered": "#7A9E7E",     # 状态标签·已掌握（绿）
     "log_status_vocab": "#5B8DB8",        # 状态标签·生词（蓝）
     "log_status_unprocessed": "#B7A99A",  # 状态标签·未处理（灰）
+    # —— B 版气泡质感 / 等级角标（设计 §A1.1）——
+    "bubble_shadow": "#C9B8A6",           # 气泡底部柔和阴影（绘制时用低 alpha）
+    "bubble_divider": "#EFE3D4",          # 气泡「单词/假名」与「翻译/释义」分割线
+    "bubble_gradient_bottom": "#F7EEDF",  # 气泡 body 底部渐变略深
+    "jp_level_chip_bg": "#7A9E7E",        # 右上角等级 chip 背景
+    "jp_level_chip_text": "#FFFFFF",      # 右上角等级 chip 文字
 }
 
 # 主体「柔和全息彩虹」渐变（左上前额 → 右下身体前沿的对角线性渐变）。
@@ -406,14 +412,11 @@ VOCAB_WINDOW_H: Final[int] = 360
 # —— 托盘菜单文案 ——
 JP_MENU_TITLE: Final[str] = "日语学习"
 JP_MENU_LEVEL: Final[str] = "难度"
-JP_MENU_REMEMBER: Final[str] = "记住当前单词"
-JP_MENU_REMEMBER_TEMPLATE: Final[str] = "记住「{word}」"   # 有当前词时动态替换
 JP_MENU_VOCAB: Final[str] = "生词本…"
 
 # —— 托盘通知文案（JP_NOTIFY_REMEMBER_ADDED 用 str.format(word=..., kana=...)）——
 JP_NOTIFY_REMEMBER_ADDED: Final[str] = "已加入生词本：{word}（{kana}）"
 JP_NOTIFY_REMEMBER_DUPLICATE: Final[str] = "已在生词本中"
-JP_NOTIFY_NO_WORD: Final[str] = "还没有单词哦，稍等泡泡弹出单词后再试～"
 JP_NOTIFY_NEED_BUBBLE: Final[str] = "已开启日语学习～先打开「气泡提示」，单词才会显示哦"
 JP_NOTIFY_BANK_UNAVAILABLE: Final[str] = "日语词库不可用，已跳过日语单词展示"
 
@@ -436,14 +439,19 @@ JP_VOCAB_CLEAR_CONFIRM_TEXT: Final[str] = "确定要清空全部生词吗？此�
 # --------------------------------------------------------------------------- #
 # 11. 日语记忆（JP-17+）—— 时长 / 上限 / 权重 / 三态 / 文件 / 按钮条 / 托盘 / 记录窗口
 # --------------------------------------------------------------------------- #
-# —— 学习泡泡时长（默认 30s；解钳范围 2~300s，见设计 §1.4 难点 4）——
-JP_BUBBLE_DURATION_S: Final[float] = 30.0
+# —— 学习泡泡时长（档位枚举 {15,30,60}，默认 30；MIN/MAX 仅作 UI 展示安全钳制，见设计 §A5.1）——
+JP_BUBBLE_DURATION_S: Final[int] = 30
+JP_BUBBLE_DURATION_OPTIONS: Final[tuple[int, ...]] = (15, 30, 60)
+JP_BUBBLE_DURATION_LABELS: Final[dict[int, str]] = {15: "15 秒", 30: "30 秒", 60: "60 秒"}
 JP_BUBBLE_MIN_DURATION_S: Final[float] = 2.0
 JP_BUBBLE_MAX_DURATION_S: Final[float] = 300.0
 
-# —— 每日展示上限与生词加权抽取 ——
+# —— 每日展示上限（档位枚举 {5,10,15,20,30}，默认 15）与生词加权抽取 ——
 JP_DAILY_LIMIT: Final[int] = 15
-JP_DAILY_LIMIT_MAX: Final[int] = 200
+JP_DAILY_LIMIT_OPTIONS: Final[tuple[int, ...]] = (5, 10, 15, 20, 30)
+JP_DAILY_LIMIT_LABELS: Final[dict[int, str]] = {
+    5: "5 个", 10: "10 个", 15: "15 个", 20: "20 个", 30: "30 个",
+}
 JP_VOCAB_WEIGHT: Final[float] = 3.0
 
 # —— 已掌握集合 / 每日记录 文件与版本 ——
@@ -472,16 +480,27 @@ JP_BUTTON_BAR_GAP_PX: Final[int] = 6
 JP_BUTTON_BAR_PAD: Final[int] = 6
 JP_BUTTON_FONT_SIZE: Final[int] = 12
 
-# —— 托盘菜单文案（「记住当前单词」→「加入生词本」，见设计 §3.1）——
-JP_MENU_ADD_VOCAB: Final[str] = "加入生词本"
-JP_MENU_ADD_VOCAB_TEMPLATE: Final[str] = "加入生词本「{word}」"  # 有当前词时动态替换
+# —— 托盘菜单文案（B 版：显示时长 / 每日数量 / 立即显示）——
 JP_MENU_LOG: Final[str] = "学习记录…"
+JP_MENU_DURATION: Final[str] = "显示时长"
+JP_MENU_DAILY_LIMIT: Final[str] = "每日数量"
+JP_MENU_SHOW_NOW: Final[str] = "立即显示一个新单词"
 
 # —— 记忆闭环通知文案（str.format(word=..., kana=...)）——
 JP_NOTIFY_MASTERED_ADDED: Final[str] = "已标记为掌握：{word}（{kana}）"
 JP_NOTIFY_MASTERED_DUPLICATE: Final[str] = "这个单词已经掌握啦"
 JP_NOTIFY_LEVEL_DONE: Final[str] = "该等级单词已全部掌握，切换难度继续学习吧~"
 JP_NOTIFY_TODAY_DONE: Final[str] = "今日学习完成，明天继续加油！"
+JP_NOTIFY_SHOW_NOW: Final[str] = "已立即显示：{word}（{kana}）"
+JP_NOTIFY_SHOW_NOW_BLOCKED: Final[str] = "现在还不能显示新单词哦～"
+# —— 手动「立即显示」不受每日上限约束（用户决策）；以下为手动路径专用反馈文案 ——
+# 每次手动点击都必须给出可见反馈，严禁静默返回（历史缺陷：与自动路径共用一次性标志位）。
+JP_NOTIFY_SHOW_NOW_OVER_LIMIT: Final[str] = (
+    "已立即显示：{word}（{kana}）｜今日已完成 {count}/{limit}，已超出今日目标"
+)
+JP_NOTIFY_POOL_EXHAUSTED: Final[str] = "{level} 的词都学完了，换个难度试试～"
+JP_NOTIFY_JP_OFF: Final[str] = "请先开启「日语学习」哦～"
+JP_NOTIFY_SHOW_NOW_FAILED: Final[str] = "显示单词时出错了，请稍后重试"
 
 # —— 学习记录窗口文案 / 尺寸 ——
 JP_LOG_WINDOW_TITLE: Final[str] = "学习记录"
@@ -502,6 +521,91 @@ JP_LOG_EMPTY_TEXT: Final[str] = "这一天还没有学习记录哦～"
 JP_LOG_STATUS_TEMPLATE: Final[str] = (
     "当日 {shown}/{limit} 条 · 已掌握 {mastered} · 生词 {vocab} · 未处理 {unprocessed}"
 )
+
+# --------------------------------------------------------------------------- #
+# 12. Jisho 词典与单词详情（B 版 JC-*）—— 联网 / 缓存 / 窗口
+# --------------------------------------------------------------------------- #
+# —— Jisho 查询（纯标准库 urllib，仅用户双击触发；超时 5s）——
+JISHO_API_URL: Final[str] = "https://jisho.org/api/v1/search/words"
+JISHO_TIMEOUT_S: Final[float] = 5.0
+JISHO_MAX_DEFINITIONS: Final[int] = 6
+
+# —— Jisho 持久缓存文件与版本（TTL 判定在 app 层，见设计 §B8）——
+JISHO_CACHE_FILENAME: Final[str] = "jisho_cache.json"
+JISHO_CACHE_VERSION: Final[int] = 1
+JISHO_CACHE_TTL_DAYS: Final[int] = 7
+
+# —— 单词详情窗口（尺寸 / 基础字段标签 / 通用按钮）——
+# 说明：详情窗口已重写为「纯中文五要素」（见 §13），此处仅保留窗口几何、
+# 基础字段标签与通用按钮文案；Jisho 详情专用英文文案已移除。
+WORD_DETAIL_WINDOW_TITLE: Final[str] = "单词详情"
+WORD_DETAIL_WINDOW_W: Final[int] = 420
+WORD_DETAIL_WINDOW_H: Final[int] = 560
+WORD_DETAIL_LABEL_KANA: Final[str] = "假名"
+WORD_DETAIL_RETRY: Final[str] = "重试"
+WORD_DETAIL_CLOSE: Final[str] = "关闭"
+WORD_DETAIL_NO_VALUE: Final[str] = "—"
+
+# --------------------------------------------------------------------------- #
+# 13. 中文详情五要素 / 用户缓存 / DeepSeek 联网（增量改造）
+# --------------------------------------------------------------------------- #
+# —— 五要素字段键名（与 JSON 契约严格一致，唯一来源）——
+WORD_DETAIL_FIELD_MEANING: Final[str] = "meaning_zh"       # 中文释义（str 或 str[]）
+WORD_DETAIL_FIELD_POS: Final[str] = "pos_zh"               # 中文词性标签（str[]）
+WORD_DETAIL_FIELD_COLLOCATIONS: Final[str] = "collocations"  # 常见搭配（obj[]）
+WORD_DETAIL_FIELD_EXAMPLES: Final[str] = "examples"         # 典型例句（obj[]）
+WORD_DETAIL_FIELD_USAGE: Final[str] = "usage_note_zh"       # 语境 / 语气提示（str）
+
+# —— 展示上限（统一口径，避免版面漂移）——
+WORD_DETAIL_MAX_MEANINGS: Final[int] = 3        # 释义 ≤3 条
+WORD_DETAIL_MAX_EXAMPLES: Final[int] = 3        # 例句 ≤3 条
+WORD_DETAIL_MAX_COLLOCATIONS: Final[int] = 5    # 搭配 ≤5 条
+
+# —— 打包内置详情库（只读，随包分发）——
+WORD_DETAILS_FILE_NAME: Final[str] = "jlpt_word_details.json"
+WORD_DETAILS_FILE_VERSION: Final[int] = 1
+
+# —— 用户级联网结果缓存（TTL=0 表示永久有效，判定在 app 层）——
+WORD_DETAILS_CACHE_FILENAME: Final[str] = "word_details_cache.json"
+WORD_DETAILS_CACHE_VERSION: Final[int] = 1
+WORD_DETAILS_CACHE_TTL_DAYS: Final[int] = 0
+
+# —— DeepSeek 联网（OpenAI 兼容接口；仅标准库 urllib，默认超时 10s / 重试 1）——
+LLM_ENDPOINT: Final[str] = "https://api.deepseek.com/v1/chat/completions"
+LLM_MODEL: Final[str] = "deepseek-chat"
+LLM_TIMEOUT_S: Final[float] = 10.0
+LLM_RETRIES: Final[int] = 1
+LLM_TEMPERATURE: Final[float] = 0.3
+LLM_RESPONSE_FORMAT_TYPE: Final[str] = "json_object"
+#: 系统提示：约束模型只输出一个 JSON 对象
+LLM_PROMPT_SYSTEM: Final[str] = (
+    "你是严谨的日语词典编辑，只输出一个 JSON 对象，不要任何解释或 Markdown 代码围栏。"
+)
+#: 用户提示模板（``str.format``；模板内的 JSON 花括号已转义为双花括号）
+LLM_PROMPT_USER_TEMPLATE: Final[str] = (
+    "请为日语词「{word}」（假名：{kana}，JLPT 等级：{level}，参考中文词义：{translation}）"
+    "生成中文学习详情。严格只输出 JSON："
+    '{{"meaning_zh":["…"],"pos_zh":["…"],'
+    '"collocations":[{{"phrase":"…","note":"…"}}],'
+    '"examples":[{{"jp":"…","zh":"…"}}],"usage_note_zh":"…"}}。'
+    "要求：全部为简体中文；meaning_zh 1~3 条；pos_zh 为中文词性标签；collocations ≤5 条；"
+    "examples 1~3 条（日文原句+中文翻译）；usage_note_zh 一句语境/语气提示；不确定的字段留空。"
+)
+
+# —— 详情窗口中文分组标题 / 状态 / 来源标注 / 文案 ——
+WORD_DETAIL_LABEL_MEANING_ZH: Final[str] = "中文释义"
+WORD_DETAIL_LABEL_POS_ZH: Final[str] = "词性"
+WORD_DETAIL_LABEL_COLLOCATIONS: Final[str] = "常见搭配"
+WORD_DETAIL_LABEL_EXAMPLES: Final[str] = "典型例句"
+WORD_DETAIL_LABEL_USAGE: Final[str] = "语境语气"
+WORD_DETAIL_EMPTY_GROUP: Final[str] = "暂无"
+WORD_DETAIL_LOADING: Final[str] = "联网查询中…"
+WORD_DETAIL_NOT_FOUND: Final[str] = "未找到该词的详情"
+WORD_DETAIL_ERROR_TEMPLATE: Final[str] = "联网获取失败：{msg}"
+WORD_DETAIL_OFFLINE_HINT: Final[str] = "未配置密钥，联网后可获取"
+WORD_DETAIL_SOURCE_LOCAL: Final[str] = "来源：本地词库"
+WORD_DETAIL_SOURCE_CACHE: Final[str] = "来源：用户缓存"
+WORD_DETAIL_SOURCE_NET: Final[str] = "来源：联网获取"
 
 __all__ = [
     "Mood",
@@ -535,10 +639,13 @@ __all__ = [
     "VOCAB_WINDOW_H",
     # 日语记忆
     "JP_BUBBLE_DURATION_S",
+    "JP_BUBBLE_DURATION_OPTIONS",
+    "JP_BUBBLE_DURATION_LABELS",
     "JP_BUBBLE_MIN_DURATION_S",
     "JP_BUBBLE_MAX_DURATION_S",
     "JP_DAILY_LIMIT",
-    "JP_DAILY_LIMIT_MAX",
+    "JP_DAILY_LIMIT_OPTIONS",
+    "JP_DAILY_LIMIT_LABELS",
     "JP_VOCAB_WEIGHT",
     "MASTERED_FILE_NAME",
     "MASTERED_VERSION",
@@ -556,13 +663,20 @@ __all__ = [
     "JP_BUTTON_BAR_GAP_PX",
     "JP_BUTTON_BAR_PAD",
     "JP_BUTTON_FONT_SIZE",
-    "JP_MENU_ADD_VOCAB",
-    "JP_MENU_ADD_VOCAB_TEMPLATE",
     "JP_MENU_LOG",
+    "JP_MENU_DURATION",
+    "JP_MENU_DAILY_LIMIT",
+    "JP_MENU_SHOW_NOW",
     "JP_NOTIFY_MASTERED_ADDED",
     "JP_NOTIFY_MASTERED_DUPLICATE",
     "JP_NOTIFY_LEVEL_DONE",
     "JP_NOTIFY_TODAY_DONE",
+    "JP_NOTIFY_SHOW_NOW",
+    "JP_NOTIFY_SHOW_NOW_BLOCKED",
+    "JP_NOTIFY_SHOW_NOW_OVER_LIMIT",
+    "JP_NOTIFY_POOL_EXHAUSTED",
+    "JP_NOTIFY_JP_OFF",
+    "JP_NOTIFY_SHOW_NOW_FAILED",
     "JP_LOG_WINDOW_TITLE",
     "JP_LOG_WINDOW_W",
     "JP_LOG_WINDOW_H",
@@ -579,4 +693,54 @@ __all__ = [
     "JP_LOG_COL_STATUS",
     "JP_LOG_EMPTY_TEXT",
     "JP_LOG_STATUS_TEMPLATE",
+    # Jisho 词典（保留，文件不再被详情链路引用）
+    "JISHO_API_URL",
+    "JISHO_TIMEOUT_S",
+    "JISHO_MAX_DEFINITIONS",
+    "JISHO_CACHE_FILENAME",
+    "JISHO_CACHE_VERSION",
+    "JISHO_CACHE_TTL_DAYS",
+    # 单词详情窗口（基础几何 / 标签 / 通用按钮）
+    "WORD_DETAIL_WINDOW_TITLE",
+    "WORD_DETAIL_WINDOW_W",
+    "WORD_DETAIL_WINDOW_H",
+    "WORD_DETAIL_LABEL_KANA",
+    "WORD_DETAIL_RETRY",
+    "WORD_DETAIL_CLOSE",
+    "WORD_DETAIL_NO_VALUE",
+    # 中文详情五要素 / 用户缓存 / DeepSeek 联网（增量改造 §13）
+    "WORD_DETAIL_FIELD_MEANING",
+    "WORD_DETAIL_FIELD_POS",
+    "WORD_DETAIL_FIELD_COLLOCATIONS",
+    "WORD_DETAIL_FIELD_EXAMPLES",
+    "WORD_DETAIL_FIELD_USAGE",
+    "WORD_DETAIL_MAX_MEANINGS",
+    "WORD_DETAIL_MAX_EXAMPLES",
+    "WORD_DETAIL_MAX_COLLOCATIONS",
+    "WORD_DETAILS_FILE_NAME",
+    "WORD_DETAILS_FILE_VERSION",
+    "WORD_DETAILS_CACHE_FILENAME",
+    "WORD_DETAILS_CACHE_VERSION",
+    "WORD_DETAILS_CACHE_TTL_DAYS",
+    "LLM_ENDPOINT",
+    "LLM_MODEL",
+    "LLM_TIMEOUT_S",
+    "LLM_RETRIES",
+    "LLM_TEMPERATURE",
+    "LLM_RESPONSE_FORMAT_TYPE",
+    "LLM_PROMPT_SYSTEM",
+    "LLM_PROMPT_USER_TEMPLATE",
+    "WORD_DETAIL_LABEL_MEANING_ZH",
+    "WORD_DETAIL_LABEL_POS_ZH",
+    "WORD_DETAIL_LABEL_COLLOCATIONS",
+    "WORD_DETAIL_LABEL_EXAMPLES",
+    "WORD_DETAIL_LABEL_USAGE",
+    "WORD_DETAIL_EMPTY_GROUP",
+    "WORD_DETAIL_LOADING",
+    "WORD_DETAIL_NOT_FOUND",
+    "WORD_DETAIL_ERROR_TEMPLATE",
+    "WORD_DETAIL_OFFLINE_HINT",
+    "WORD_DETAIL_SOURCE_LOCAL",
+    "WORD_DETAIL_SOURCE_CACHE",
+    "WORD_DETAIL_SOURCE_NET",
 ]

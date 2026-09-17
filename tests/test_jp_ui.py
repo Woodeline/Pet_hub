@@ -92,18 +92,32 @@ def test_word_layout_uses_max_width(qtbot) -> None:
 # --------------------------------------------------------------------------- #
 def test_tray_jp_menu_structure_and_signals(qtbot) -> None:
     tray = TrayController(QIcon(), AppConfig())
-    captured: list[str] = []
-    tray.jp_level_selected.connect(captured.append)
-    tray.jp_add_vocab_requested.connect(lambda: captured.append("add_vocab"))
-    tray.jp_vocab_requested.connect(lambda: captured.append("vocab"))
-    tray.jp_log_requested.connect(lambda: captured.append("log"))
+    captured: list[object] = []
+    tray.jp_level_selected.connect(lambda v: captured.append(("level", v)))
+    tray.jp_duration_selected.connect(lambda v: captured.append(("duration", v)))
+    tray.jp_daily_limit_selected.connect(lambda v: captured.append(("limit", v)))
+    tray.jp_show_now_requested.connect(lambda: captured.append(("show_now",)))
+    tray.jp_vocab_requested.connect(lambda: captured.append(("vocab",)))
+    tray.jp_log_requested.connect(lambda: captured.append(("log",)))
 
     assert set(tray._jp_level_actions) == set(C.JP_LEVELS)
+    assert set(tray._jp_duration_actions) == set(C.JP_BUBBLE_DURATION_OPTIONS)
+    assert set(tray._jp_daily_limit_actions) == set(C.JP_DAILY_LIMIT_OPTIONS)
+
     tray._jp_level_actions["N4"].trigger()
-    tray._action_jp_add_vocab.trigger()
+    tray._jp_duration_actions[60].trigger()
+    tray._jp_daily_limit_actions[20].trigger()
+    tray._action_jp_show_now.trigger()
     tray._action_jp_vocab.trigger()
     tray._action_jp_log.trigger()
-    assert captured == ["N4", "add_vocab", "vocab", "log"]
+    assert captured == [
+        ("level", "N4"),
+        ("duration", 60),
+        ("limit", 20),
+        ("show_now",),
+        ("vocab",),
+        ("log",),
+    ]
 
 
 def test_tray_set_jp_enabled_greys_out(qtbot) -> None:
@@ -111,21 +125,28 @@ def test_tray_set_jp_enabled_greys_out(qtbot) -> None:
 
     tray.set_jp_enabled(False)
     assert tray._jp_level_menu.isEnabled() is False
-    assert tray._action_jp_add_vocab.isEnabled() is False  # 加入生词本随开关置灰
+    assert tray._jp_duration_menu.isEnabled() is False
+    assert tray._jp_daily_limit_menu.isEnabled() is False
+    assert tray._action_jp_show_now.isEnabled() is False  # 立即显示随开关置灰
     assert tray._action_jp_vocab.isEnabled() is True       # 生词本始终可用
     assert tray._action_jp_log.isEnabled() is True         # 学习记录始终可用
 
     tray.set_jp_enabled(True)
     assert tray._jp_level_menu.isEnabled() is True
-    assert tray._action_jp_add_vocab.isEnabled() is True
+    assert tray._jp_duration_menu.isEnabled() is True
+    assert tray._jp_daily_limit_menu.isEnabled() is True
+    assert tray._action_jp_show_now.isEnabled() is True
 
 
-def test_tray_current_word_label(qtbot) -> None:
+def test_tray_set_jp_duration_and_daily_limit_checked(qtbot) -> None:
     tray = TrayController(QIcon(), AppConfig())
-    tray.set_jp_current_word("私")
-    assert tray._action_jp_add_vocab.text() == C.JP_MENU_ADD_VOCAB_TEMPLATE.format(word="私")
-    tray.set_jp_current_word(None)
-    assert tray._action_jp_add_vocab.text() == C.JP_MENU_ADD_VOCAB
+    tray.set_jp_duration_checked(60)
+    assert tray._jp_duration_actions[60].isChecked() is True
+    assert tray._jp_duration_actions[30].isChecked() is False
+
+    tray.set_jp_daily_limit_checked(20)
+    assert tray._jp_daily_limit_actions[20].isChecked() is True
+    assert tray._jp_daily_limit_actions[15].isChecked() is False
 
 
 def test_tray_set_jp_checked_and_level(qtbot) -> None:

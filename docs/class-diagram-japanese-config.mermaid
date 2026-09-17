@@ -1,0 +1,121 @@
+classDiagram
+    class AppConfig {
+        +int version
+        +int jp_bubble_duration_s
+        +int jp_daily_limit
+        +str jp_level
+        +bool jp_enabled
+        +from_dict(data) AppConfig
+        +to_dict() dict
+    }
+
+    class JishoResult {
+        +str word
+        +tuple readings
+        +tuple parts_of_speech
+        +tuple english_definitions
+        +tuple jlpt
+        +bool is_common
+        +to_dict() dict
+        +from_dict(data) JishoResult
+    }
+    class JishoError
+    class JishoNotFound
+
+    class JishoCacheItem {
+        +str fetched_at
+        +JishoResult result
+        +to_dict() dict
+        +from_dict(data) JishoCacheItem
+    }
+    class JishoCacheStore {
+        +Path path
+        +load() dict
+        +get(word) JishoCacheItem
+        +put(word, result, fetched_at) None
+        +save() None
+        +_backup_corrupt(reason) None
+        +_corrupt_suffix() str
+    }
+
+    class WordBank {
+        +entry_by_id(id) VocabEntry
+        +entries_for(level) list
+    }
+
+    class JishoSignals {
+        +Signal succeeded(str, object)
+        +Signal failed(str, str)
+    }
+    class JishoWorker {
+        +str word
+        +float timeout_s
+        +JishoSignals signals
+        +run() None
+    }
+
+    class WordDetailWindow {
+        +Signal jisho_succeeded(str, object)
+        +Signal jisho_failed(str, str)
+        +show_entry(entry, cached, source) None
+        +set_loading() None
+        +set_jisho_result(word, result, source) None
+        +set_jisho_error(word, msg) None
+        +closeEvent(event) None
+        +_start_jisho(word) None
+    }
+
+    class TrayController {
+        +Signal jp_duration_selected(int)
+        +Signal jp_daily_limit_selected(int)
+        +Signal jp_show_now_requested()
+        +set_jp_duration_checked(int) None
+        +set_jp_daily_limit_checked(int) None
+        +set_jp_enabled(bool) None
+    }
+
+    class LogWindow {
+        +Signal word_double_clicked(str)
+    }
+    class VocabWindow {
+        +Signal word_double_clicked(str)
+    }
+
+    class PetAppController {
+        +JishoCacheStore _jisho_cache
+        +dict _jisho_memory
+        +WordDetailWindow _detail_window
+        +_open_word_detail(entry) None
+        +_jisho_cached(word) tuple
+        +_on_jisho_succeeded(word, result) None
+        +_on_jisho_failed(word, msg) None
+        +_on_jp_duration_selected(int) None
+        +_on_jp_daily_limit_selected(int) None
+        +_on_jp_show_now() None
+        +_show_word_bubble(now, bypass_gap) None
+    }
+
+    class BubbleWindow {
+        +str _line_level
+        +show_word(entry, duration) None
+        +_paint_shadow(painter) None
+        +_paint_divider(painter) None
+        +_paint_level_chip(painter) None
+    }
+    class BubbleButtonBar
+
+    JishoCacheItem --> JishoResult
+    JishoCacheStore --> JishoCacheItem
+    JishoWorker --> JishoSignals : 持有
+    JishoWorker ..> JishoResult : 返回
+    WordDetailWindow --> JishoWorker : 创建/start
+    WordDetailWindow --> JishoSignals : 保持引用
+    PetAppController --> JishoCacheStore
+    PetAppController --> WordDetailWindow : 单例管理
+    PetAppController --> WordBank
+    PetAppController --> TrayController
+    PetAppController --> LogWindow
+    PetAppController --> VocabWindow
+    LogWindow ..> PetAppController : word_double_clicked(id)
+    VocabWindow ..> PetAppController : word_double_clicked(id)
+    PetAppController ..> WordDetailWindow : show_entry(entry, cached, source)

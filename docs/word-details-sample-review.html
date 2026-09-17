@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>日语详情词库 · 内容质量抽检</title>
+<style>
+:root{--ink:#1b1f24;--ink2:#4a5560;--ink3:#7a8794;--line:#e3e7ec;--bg:#f6f7f9;--card:#ffffff;--accent:#0e7c66;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+ font-family:-apple-system,"Segoe UI","Noto Sans SC","Microsoft YaHei",system-ui,sans-serif;
+ -webkit-font-smoothing:antialiased;line-height:1.65}
+.wrap{max-width:1180px;margin:0 auto;padding:48px 28px 72px}
+h1{font-size:26px;letter-spacing:-.01em;margin:0 0 10px}
+.sub{color:var(--ink2);font-size:14px;margin:0 0 26px}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 34px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 18px;min-width:132px}
+.stat b{display:block;font-size:21px;font-weight:650;letter-spacing:-.02em}
+.stat span{font-size:12px;color:var(--ink3)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 20px 14px;
+ display:flex;flex-direction:column;gap:13px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.card header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+ padding-bottom:12px;border-bottom:1px solid var(--line)}
+.word{font-size:23px;font-weight:650;letter-spacing:.01em;line-height:1.25}
+.kana{font-size:12.5px;color:var(--ink3);margin-top:2px}
+.chip{font-size:11px;font-weight:650;color:#fff;background:var(--c);border-radius:999px;padding:3px 11px;letter-spacing:.04em}
+.sec{display:flex;flex-direction:column;gap:6px}
+.lbl{font-size:11px;font-weight:650;color:var(--ink3);letter-spacing:.08em}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{font-size:12px;color:var(--accent);background:#e8f3f0;border:1px solid #d2e8e2;border-radius:6px;padding:1px 9px}
+.mean{margin:0;padding-left:18px;font-size:14.5px}
+.mean li::marker{color:var(--ink3)}
+.coll{width:100%;border-collapse:collapse;font-size:14px}
+.coll td{padding:4px 0;vertical-align:top}
+.coll .ph{width:46%;font-weight:550;padding-right:12px}
+.coll .nt{color:var(--ink2);font-size:13.5px}
+.coll .none{color:var(--ink3)}
+.ex{margin:0;padding-left:18px;font-size:14px}
+.ex li{margin-bottom:7px}
+.ex li::marker{color:var(--ink3)}
+.ex .jp{color:var(--ink)}
+.ex .zh{color:var(--ink2);font-size:13.5px;margin-top:1px}
+.note{font-size:13.5px;color:var(--ink2);background:#fafbfc;border-left:2.5px solid var(--accent);
+ border-radius:0 6px 6px 0;padding:9px 13px}
+.card footer{margin-top:auto;padding-top:11px;border-top:1px solid var(--line);
+ font-size:11px;color:var(--ink3);font-family:ui-monospace,Consolas,monospace}
+</style></head>
+<body><div class="wrap">
+<h1>日语详情词库 · 内容质量抽检</h1>
+<p class="sub">从 <b>jlpt_word_details.json</b>（500 条，N5–N1 各 100）中按等级均匀抽样 20 条，覆盖各批次产出，用于人工核对释义准确性、搭配真实度与例句语感。</p>
+<div class="stats">
+  <div class="stat"><b>500</b><span>详情词条总数</span></div>
+  <div class="stat"><b>100 × 5</b><span>N5–N1 各 100 条</span></div>
+  <div class="stat"><b>5</b><span>每词要素数</span></div>
+  <div class="stat"><b>0</b><span>英文残留</span></div>
+  <div class="stat"><b>785</b><span>全量测试通过</span></div>
+  <div class="stat"><b>20</b><span>本页抽样</span></div>
+</div>
+<div class="grid">
+    <article class="card">
+      <header>
+        <div class="head-l">
+          <div class="word">私</div>
+          <div class="kana">わたし</div>
+        </div>
+        <span class="chip" style="--c:#0e7c66">N5</span>
+      </header>
+      <div class="sec"><div class="lbl">词性</div><div class="tags"><span class="tag">代词</span></div></div>
+      <div class="sec"><div class="lbl">中文释义</div><ul class="mean"><li>我</li><li>第一人称代词</li></ul></div>
+      <div class="sec"><div class="lbl">常见搭配</div><table class="coll"><tr><td class="ph">私の名前</td><td class="nt">我的名字</td></tr><tr><td class="ph">私たち</td><td class="nt">我们</td></tr></table></div>
+      <div class="sec"><div class="lbl">典型例句</div><ul class="ex"><li><div class="jp">私は学生です。</div><div class="zh">我是学生。</div></li><li><div class="jp">私の国は日本です。</div><div class="zh">我的国家是日本。</div></li></ul></div>
+      <div class="sec"><div class="lbl">语境 / 语气</div><div class="note">通用且礼貌的第一人称说法，男女通用，正式场合常用，比「僕」「俺」更得体。</div></div>
+      <footer>n5-0001</footer>
+    </article>
+    <article class="card">
+      <header>
+        <div class="head-l">
+          <div class="word">今日</div>
+          <div class="kana">きょう</div>
+        </div>
+        <span class="chip" style="--c:#0e7c66">N5</span>
+      </header>
+      <div class="sec"><div class="lbl">词性</div><div class="tags"><span class="tag">名词</span></div></div>
+      <div class="sec"><div class="lbl">中文释义</div><ul class="mean"><li>今天</li><li>当日</li></ul></div>
+      <div class="sec"><div class="lbl">常见搭配</div><table class="coll"><tr><td class="ph">今日の朝</td><td class="nt">今天早上</td></tr><tr><td class="ph">今日は</td><td class="nt">今天（也作寒暄语「你好」）</td></tr></table></div>
+      <div class="sec"><div class="lbl">典型例句</div><ul class="ex"><li><div class="jp">今日はいい天気です。</div><div class="zh">今天天气很好。</div></li><li><div class="jp">今日学校へ行きます。</div><div class="zh">今天去学校。</div></li></ul></div>
+      <div class="sec"><div class="lbl">语境 / 语气</div><div class="note">指当天；「こんにちは」由「今日は」演变而来，作寒暄语表「你好」，书写时带「は」。</div></div>
+      <footer>n5-0025</footer>
+    </article>
+    <article class="card">
+      <header>
+        <div class="head-l">
+          <div class="word">話す</div>
+          <div class="kana">はなす</div>
+        </div>
+        <span class="chip" style="--c:#0e7c66">N5</span>
+      </header>
+      <div class="sec"><div class="lbl">词性</div><div class="tags"><span class="tag">五段动词</span></div></div>
+      <div class="sec"><div class="lbl">中文释义</div><ul class="mean"><li>说话</li><li>交谈</li><li>告诉</li></ul></div>
+      <div class="sec"><div class="lbl">常见搭配</div><table class="coll"><tr><td class="ph">日本語で話す</td><td class="nt">用日语说话</td></tr><tr><td class="ph">友達と話す</td><td class="nt">和朋友交谈</td></tr><tr><td class="ph">大声で話す</td><td class="nt">大声说话</td></tr></table></div>
+      <div class="sec"><div class="lbl">典型例句</div><ul class="ex"><li><div class="jp">母と電話で話しました。</div><div class="zh">和母亲通了电话。</div></li><li><div class="jp">ゆっくり話してください。</div><div class="zh">请慢慢说。</div></li></ul></div>
+      <div class="sec"><div class="lbl">语境 / 语气</div><div class="note">「はなす」，五段动词，ます形为「話します」。</div></div>
+      <footer>n5-0050</footer>
+    </article>
+    <article class="card">
+      <header>
+        <div class="head-l">
+          <div class="word">忙しい</div>
+          <div class="kana">いそがしい</div>
+        </div>
+        <span class="chip" style="--c:#0e7c66">N5</span>
+      </header>
+      <div class="sec"><div class="lbl">词性</div><div class="tags"><span class="tag">い形容词</span></div></div>
+      <div class="sec"><div class="lbl">中文释义</div><ul class="mean"><li>忙碌的</li><li>繁忙的</li></ul></div>
+      <div class="sec"><div class="lbl">常见搭配</div><table class="coll"><tr><td class="ph">忙しい朝</td><td class="nt">忙碌的早晨</td></tr><tr><td class="ph">仕事が忙しい</td><td class="nt">工作忙</td></tr><tr><td class="ph">とても忙しい</td><td class="nt">非常忙</td></tr></table></div>
+      <div class="sec"><div class="lbl">典型例句</div><ul class="ex"><li><div class="jp">今週はとても忙しいです。</div><div class="zh">这周非常忙。</div></li><li><div class="jp">忙しいので、行けません。</div><div class="zh">因为忙，所以去不了。</div></li></ul></div>
+      <div class="sec"><div class="lbl">语境 / 语气</div><div class="note">い形容词，形容人或日程事务繁多；否定「忙しくない」。</div></div>
+      <footer>n5-0075</footer>
+    </article>
+    <article class="card">
+      <header>
+        <div class="head-l">
+          <div class="word">会う</div>
+          <div class="kana">あう</div>
+        </div>
+        <span class="chip" style="--c:#1c6fb0">N4</span>
+      </header>
+      <div class="sec"><div class="lbl">词性</div><div class="tags"><span class="tag">五段动词</span></div></div>
+      <div class="sec"><div class="lbl">中文释义</div><ul class="mean"><li>见面</li><li>碰面</li><li>会合</li></ul></div>
+      <div class="sec"><div class="lbl">常见搭配</div><table class="coll"><tr><td class="ph">友達に会う</td><td class="nt">见朋友</td></tr><tr><td class="ph">久しぶりに会う</td><td class="nt">久别重逢</td></tr></table></div>
+      <div class="sec"><div class="lbl">典型例句</div><ul class="ex"><li><div class="jp">昨日、大学の友達に会いました。</div><div class="zh">昨天我见到了大学的朋友。</div></li><li><div class="jp">たまには顔を会わせましょう。</div><div class="zh">偶尔也见个面吧。</div></li></ul></div>
+      <div class="sec"><div class="lbl">语境 / 语气</div><div class="note">自动词，表示人与人之间相遇；常见搭配助词「に」引出见面对象。</div></div>
+      <footer>n4-0001</footer>
+    </article>
+    <article class="card">
+      <header>
+        <div class="head-l">
+          <div class="word">裏</div>
+          <div class="kana">うら</div>
+        </div>
+        <span class="chip" style="--c:#1c6fb0">N4</span>
+      </header>
+      <div class="sec"><div class="lbl">词性</div><div class="tags"><span class="tag">名词</span></div></div>
+      <div class="sec"><div class="lbl">中文释义</div><ul class="mean"><li>背面</li><li>反面</li><li>里侧</li></ul></div>
+      <div class="sec"><div class="lbl">常见搭配</div><table class="coll"><tr><td class="ph">裏を見る</td><td class="nt">看背面</td></tr><tr><td class="ph">紙の裏</td><td class="nt">纸的背面</td></tr><tr><td class="ph">裏がある</td><td class="nt">有内幕/另有隐情</td></tr></table></div>
+      <div class="sec"><div class="lbl">典型例句</div><ul class="ex"><li><div class="jp">切手を紙の裏に貼ってください。</div><div class="zh">请把邮票贴在纸的背面。</div></li><li><div class="jp">この話には何か裏がありそうだ。</div><div class="zh">这件事好像另有隐情。</div></li></ul></div>
+      <div class="sec"><div class="lbl">语境 / 语气</div><div class="note">表“表面之反（背面）”；也引申为“背后、内幕”，反义是「表（おもて）」。</div></div>
+      <footer>n4-0025</footer>
+    </article>
+    <article class="card">
+      <header>
+        <div class="head-l">
+          <div class="word">お祭り</div>
+          <div class="kana">おまつり</div>
+        </div>
+        <span class="chip" style="--c:#1c6fb0">N4</span>
+      </header>
+      <div class="sec"><div class="lbl">词性</div><div class="tags"><span class="tag">名词</span></div></div>
+      <div class="sec"><div class="lbl">中文释义</div><ul class="mean"><li>祭典</li><li>庙会</li><li>节日活动</li></ul></div>
+      <div class="sec"><div class="lbl">常见搭配</div><table class="coll"><tr><td class="ph">お祭りに行く</td><td class="nt">去庙会</td></tr><tr><td class="ph">お祭りの日</td><td class="nt">庙会的日子</td></tr><tr><td class="ph">お祭りの準備</td><td class="nt">庙会的准备</td></tr></table></div>
+      <div class="sec"><div class="lbl">典型例句</div><ul class="ex"><li><div class="jp">夏のお祭りはとてもにぎやかです。</div><div class="zh">夏天的庙会非常热闹。</div></li><li><div class="jp">子供のとき、お祭りが楽しみでした。</div><div class="zh">小时候，我很期待庙会。</div></li></ul></div>
+      <div class="sec"><div class="lbl">语境 / 语气</div><div class="note">指传统节日活动、庙会，常伴烟花、摊位、舞蹈等，是带「お」的亲切说法。</div></div>
+      <footer>n4-0050</footer>
+    </article>
+    <article class="card">
+      <header>
+        <div class="head-l">
+          <div class="word">勝つ</div>
+          <div class="kana">かつ</div>
+        </div>
+        <span class="chip" style="--c:#1c6fb0">N4</span>
+      </header>
+      <div class="sec"><div class="lbl">词性</div><div class="tags"><span class="tag">五段动词</span></div></div>
+      <div class="sec"><div class="lbl">中文释义</div><ul class="mean"><li>获胜</li><li>战胜</li></ul></div>
+      <div class="sec"><div class="lbl">常见搭配</div><table class="coll"><tr><td class="ph">試合に勝つ</td><td class="nt">比赛获胜</td></tr><tr><td class="ph">戦いに勝つ</td><td class="nt">战胜</td></tr><tr><td class="ph">勝って嬉しい</td><td class="nt">获胜很高兴</td></tr></table></div>
+      <div class="sec"><div class="lbl">典型例句</div><ul class="ex"><li><div class="jp">昨日の試合で私たちのチームが勝ちました。</div><div class="zh">在昨天的比赛中我们队赢了。</div></li><li><div class="jp">努力すればきっと勝てます。</div><div class="zh">只要努力一定能赢。</div></li></ul></div>
+      <div class="sec"><div class="lbl">语境 / 语气</div><div class="note">自动词，与「～に／～と」搭配表示赢过某对象；反义词是「負ける」（输）。</div></div>
+      <footer>n4-0075</footer>
+    </article>
+    <article class="card">
+      <header>
+        <div class="head-l">
+          <div class="word">挨拶</div>
+          <div class="kana">あいさつ</div>
+        </div>
+        <span class="chip" style="--c:#8a5a00">N3</span>
+      </header>
+      <div class="sec"><div class="lbl">词性</div><div class="tags"><span class="tag">名词</span><span class="tag">サ变动词</span></div></div>
+      <div class="sec"><div class="lbl">中文释义</div><ul class="mean"><li>寒暄，问候</li><li>致辞，讲话</li></ul></div>
+      <div class="sec"><div class="lbl">常见搭配</div><table class="coll"><tr><td class="ph">挨拶をする</td><td class="nt">打招呼、寒暄</td></tr><tr><td class="ph">挨拶に行く</td><td class="nt">去问候、去拜访</td></tr><tr><td class="ph">丁寧な挨拶</td><td class="nt">礼貌的问候</td></tr><tr><td class="ph">挨拶状</td><td class="nt">问候信、致意函</td></tr></table></div>
+      <div class="sec"><div class="lbl">典型例句</div><ul class="ex"><li><div class="jp">朝、会社で上司に挨拶をしました。</div><div class="zh">早上在公司向领导打了招呼。</div></li><li><div class="jp">みんなにいい挨拶をしてください。</div><div class="zh">请和大家好好寒暄一下。</div></li></ul></div>
+      <div class="sec"><div class="lbl">语境 / 语气</div><div class="note">既指见面时的客套问候，也指仪式上的致辞；作为サ变动词使用时可说「挨拶する」。</div></div>
+      <footer>n3-0001</footer>
+    </article>
+    <article class="card">
+      <header>
+        <div class="head-l">
+          <div class="word">伺う</div>
+          <div class="kana">うかがう</div>
+        </div>
+        <span class="chip" style="--c:#8a5a00">N3</span>
+      </header>
+      <div class="sec"><div class="lbl">词性</div><div class="tags"><span class="tag">五段动词</span></div></div>
+      <div class="sec"><div class="lbl">中文释义</div><ul class="mean"><li>（自谦）拜访，造访</li><li>（自谦）请教，打听</li><li>窥探，伺机</li></ul></div>
+      <div class="sec"><div class="lbl">常见搭配</div><table class="coll"><tr><td class="ph">お宅に伺う</td><td class="nt">（自谦）去府上拜访</td></tr><tr><td class="ph">ご意見を伺う</td><td class="nt">（自谦）请教意见</td></tr><tr><td class="ph">都合を伺う</td><td class="nt">（自谦）打听方便的时间</td></tr></table></div>
+      <div class="sec"><div class="lbl">典型例句</div><ul class="ex"><li><div class="jp">明日、先生の研究室に伺ってもいいですか。</div><div class="zh">明天我可以去老师的研究室拜访吗？</div></li><li><div class="jp">お客様のご希望を伺いました。</div><div class="zh">我听取了客人的需求。</div></li></ul></div>
+      <div class="sec"><div class="lbl">语境 / 语气</div><div class="note">是「聞く/尋ねる/訪問する」的自谦语，用于向长辈、客户等礼貌地「拜访、请教、打听」。</div></div>
+      <footer>n3-0025</footer>
+    </article>
+    <article class="card">
+      <header>
+        <div class="head-l">
+          <div class="word">贈る</div>
+          <div class="kana">おくる</div>
+        </div>
+        <span class="chip" style="--c:#8a5a00">N3</span>
+      </header>
+      <div class="sec"><div class="lbl">词性</div><div class="tags"><span class="tag">五段动词</span></div></div>
+      <div class="sec"><div class="lbl">中文释义</div><ul class="mean"><li>赠送</li><li>馈赠</li><li>授予</li></ul></div>
+      <div class="sec"><div class="lbl">常见搭配</div><table class="coll"><tr><td class="ph">プレゼントを贈る</td><td class="nt">赠送礼物</td></tr><tr><td class="ph">花を贈る</td><td class="nt">送花</td></tr><tr><td class="ph">賞を贈る</td><td class="nt">授奖</td></tr></table></div>
+      <div class="sec"><div class="lbl">典型例句</div><ul class="ex"><li><div class="jp">誕生日に母に花を贈った。</div><div class="zh">妈妈生日时我送了花。</div></li><li><div class="jp">彼に感謝の言葉を贈る。</div><div class="zh">向他致以感谢之词。</div></li></ul></div>
+      <div class="sec"><div class="lbl">语境 / 语气</div><div class="note">他动词，表示赠送礼物或授予荣誉；区别于“送る（寄送/送行）”，强调“赠予”之意。</div></div>
+      <footer>n3-0050</footer>
+    </article>
+    <article class="card">
+      <header>
+        <div class="head-l">
+          <div class="word">破る</div>
+          <div class="kana">やぶる</div>
+        </div>
+        <span class="chip" style="--c:#8a5a00">N3</span>
+      </header>
+      <div class="sec"><div class="lbl">词性</div><div class="tags"><span class="tag">五段动词</span></div></div>
+      <div class="sec"><div class="lbl">中文释义</div><ul class="mean"><li>撕破</li><li>打破</li><li>破坏</li></ul></div>
+      <div class="sec"><div class="lbl">常见搭配</div><table class="coll"><tr><td class="ph">約束を破る</td><td class="nt">违背约定</td></tr><tr><td class="ph">記録を破る</td><td class="nt">打破纪录</td></tr><tr><td class="ph">紙を破る</td><td class="nt">撕破纸</td></tr></table></div>
+      <div class="sec"><div class="lbl">典型例句</div><ul class="ex"><li><div class="jp">彼は世界記録を破った。</div><div class="zh">他打破了世界纪录。</div></li><li><div class="jp">約束を破ってはいけない。</div><div class="zh">不能违背约定。</div></li></ul></div>
+      <div class="sec"><div class="lbl">语境 / 语气</div><div class="note">本义撕破，引申为「打破（纪录）、违背（约定）、击败（对手）」，是他动词。</div></div>
+      <footer>n3-0075</footer>
+    </article>
+    <article class="card">
+      <header>
+        <div class="head-l">
+          <div class="word">相変わらず</div>
+          <div class="kana">あいかわらず</div>
+        </div>
+        <span class="chip" style="--c:#9b2c6f">N2</span>
+      </header>
+      <div class="sec"><div class="lbl">词性</div><div class="tags"><span class="tag">副词</span></div></div>
+      <div class="sec"><div class="lbl">中文释义</div><ul class="mean"><li>依旧</li><li>照旧</li><li>仍然</li></ul></div>
+      <div class="sec"><div class="lbl">常见搭配</div><table class="coll"><tr><td class="ph">相変わらず元気だ</td><td class="nt">依旧很精神</td></tr><tr><td class="ph">相変わらず忙しい</td><td class="nt">还是那么忙</td></tr></table></div>
+      <div class="sec"><div class="lbl">典型例句</div><ul class="ex"><li><div class="jp">彼は相変わらず毎日遅くまで働いている。</div><div class="zh">他依旧每天工作到很晚。</div></li><li><div class="jp">久しぶりに会ったが、彼は相変わらずだ。</div><div class="zh">久别重逢，他还是老样子。</div></li></ul></div>
+      <div class="sec"><div class="lbl">语境 / 语气</div><div class="note">用于描述与过去相比没有变化的状态，口语和书面语均可用，语气中性。</div></div>
+      <footer>n2-0001</footer>
+    </article>
+    <article class="card">
+      <header>
+        <div class="head-l">
+          <div class="word">余る</div>
+          <div class="kana">あまる</div>
+        </div>
+        <span class="chip" style="--c:#9b2c6f">N2</span>
+      </header>
+      <div class="sec"><div class="lbl">词性</div><div class="tags"><span class="tag">五段动词</span></div></div>
+      <div class="sec"><div class="lbl">中文释义</div><ul class="mean"><li>剩余</li><li>有余</li><li>过剩</li></ul></div>
+      <div class="sec"><div class="lbl">常见搭配</div><table class="coll"><tr><td class="ph">時間が余る</td><td class="nt">时间有富余</td></tr><tr><td class="ph">食べても余る</td><td class="nt">吃也吃不完、剩下</td></tr></table></div>
+      <div class="sec"><div class="lbl">典型例句</div><ul class="ex"><li><div class="jp">ご飯がたくさん余ってしまった。</div><div class="zh">米饭剩下了很多。</div></li><li><div class="jp">彼は才能が余るほどある。</div><div class="zh">他的才华多得用不完。</div></li></ul></div>
+      <div class="sec"><div class="lbl">语境 / 语气</div><div class="note">表示数量超出所需而有剩余；与「足りる（够）」相对。注意「余る」读「あまる」，勿与「甘い」混淆。</div></div>
+      <footer>n2-0025</footer>
+    </article>
+    <article class="card">
+      <header>
+        <div class="head-l">
+          <div class="word">移転</div>
+          <div class="kana">いてん</div>
+        </div>
+        <span class="chip" style="--c:#9b2c6f">N2</span>
+      </header>
+      <div class="sec"><div class="lbl">词性</div><div class="tags"><span class="tag">名词</span><span class="tag">サ变动词</span></div></div>
+      <div class="sec"><div class="lbl">中文释义</div><ul class="mean"><li>迁移</li><li>搬迁</li><li>转移</li></ul></div>
+      <div class="sec"><div class="lbl">常见搭配</div><table class="coll"><tr><td class="ph">引越しで移転する</td><td class="nt">搬家搬迁</td></tr><tr><td class="ph">本社を移転する</td><td class="nt">总公司搬迁</td></tr><tr><td class="ph">移転先が決まる</td><td class="nt">确定搬迁地点</td></tr></table></div>
+      <div class="sec"><div class="lbl">典型例句</div><ul class="ex"><li><div class="jp">会社が来月郊外に移転する。</div><div class="zh">公司下个月要搬到郊区。</div></li><li><div class="jp">店の移転のお知らせを出した。</div><div class="zh">发布了店铺搬迁的通知。</div></li></ul></div>
+      <div class="sec"><div class="lbl">语境 / 语气</div><div class="note">指机关、店铺、住所等整体迁往别处，比「引越し」更正式。</div></div>
+      <footer>n2-0050</footer>
+    </article>
+    <article class="card">
+      <header>
+        <div class="head-l">
+          <div class="word">偉い</div>
+          <div class="kana">えらい</div>
+        </div>
+        <span class="chip" style="--c:#9b2c6f">N2</span>
+      </header>
+      <div class="sec"><div class="lbl">词性</div><div class="tags"><span class="tag">い形容词</span></div></div>
+      <div class="sec"><div class="lbl">中文释义</div><ul class="mean"><li>伟大的</li><li>了不起的</li></ul></div>
+      <div class="sec"><div class="lbl">常见搭配</div><table class="coll"><tr><td class="ph">偉い人</td><td class="nt">了不起的人</td></tr></table></div>
+      <div class="sec"><div class="lbl">典型例句</div><ul class="ex"><li><div class="jp">彼は偉い学者だ。</div><div class="zh">他是位伟大的学者。</div></li></ul></div>
+      <div class="sec"><div class="lbl">语境 / 语气</div><div class="note">也可口语夸人「真厉害」。</div></div>
+      <footer>n2-0075</footer>
+    </article>
+    <article class="card">
+      <header>
+        <div class="head-l">
+          <div class="word">曖昧</div>
+          <div class="kana">あいまい</div>
+        </div>
+        <span class="chip" style="--c:#a33b2a">N1</span>
+      </header>
+      <div class="sec"><div class="lbl">词性</div><div class="tags"><span class="tag">な形容词</span></div></div>
+      <div class="sec"><div class="lbl">中文释义</div><ul class="mean"><li>含糊的</li><li>模棱两可的</li><li>暧昧的</li></ul></div>
+      <div class="sec"><div class="lbl">常见搭配</div><table class="coll"><tr><td class="ph">曖昧な態度</td><td class="nt">态度含糊</td></tr><tr><td class="ph">曖昧にする</td><td class="nt">含糊其辞</td></tr></table></div>
+      <div class="sec"><div class="lbl">典型例句</div><ul class="ex"><li><div class="jp">彼の返事は曖昧だった。</div><div class="zh">他的回答很含糊。</div></li><li><div class="jp">その問題は曖昧にされたままだ。</div><div class="zh">那个问题至今仍被含糊带过。</div></li></ul></div>
+      <div class="sec"><div class="lbl">语境 / 语气</div><div class="note">多用于态度、表达不明确，含贬义。</div></div>
+      <footer>n1-0001</footer>
+    </article>
+    <article class="card">
+      <header>
+        <div class="head-l">
+          <div class="word">微か</div>
+          <div class="kana">かすか</div>
+        </div>
+        <span class="chip" style="--c:#a33b2a">N1</span>
+      </header>
+      <div class="sec"><div class="lbl">词性</div><div class="tags"><span class="tag">な形容词</span></div></div>
+      <div class="sec"><div class="lbl">中文释义</div><ul class="mean"><li>微弱</li><li>隐约</li><li>模糊</li></ul></div>
+      <div class="sec"><div class="lbl">常见搭配</div><table class="coll"><tr><td class="ph">微かな音</td><td class="nt">微弱声响</td></tr><tr><td class="ph">微かな記憶</td><td class="nt">模糊记忆</td></tr></table></div>
+      <div class="sec"><div class="lbl">典型例句</div><ul class="ex"><li><div class="jp">遠くで微かな音がした。</div><div class="zh">远处传来微弱的声音。</div></li><li><div class="jp">微かな期待を抱いていた。</div><div class="zh">曾怀着一丝隐约的期待。</div></li></ul></div>
+      <div class="sec"><div class="lbl">语境 / 语气</div><div class="note">形容声音、光线、记忆等微弱不清。</div></div>
+      <footer>n1-0025</footer>
+    </article>
+    <article class="card">
+      <header>
+        <div class="head-l">
+          <div class="word">区域</div>
+          <div class="kana">くいき</div>
+        </div>
+        <span class="chip" style="--c:#a33b2a">N1</span>
+      </header>
+      <div class="sec"><div class="lbl">词性</div><div class="tags"><span class="tag">名词</span></div></div>
+      <div class="sec"><div class="lbl">中文释义</div><ul class="mean"><li>区域</li><li>地段</li><li>地区</li></ul></div>
+      <div class="sec"><div class="lbl">常见搭配</div><table class="coll"><tr><td class="ph">特定の区域</td><td class="nt">特定区域</td></tr><tr><td class="ph">区域を分ける</td><td class="nt">划分区域</td></tr><tr><td class="ph">禁漁区域</td><td class="nt">禁渔区</td></tr></table></div>
+      <div class="sec"><div class="lbl">典型例句</div><ul class="ex"><li><div class="jp">この区域は立ち入り禁止です。</div><div class="zh">这一区域禁止入内。</div></li><li><div class="jp">市は区をいくつかの区域に分けている。</div><div class="zh">市把城区划分成了若干区域。</div></li></ul></div>
+      <div class="sec"><div class="lbl">语境 / 语气</div><div class="note">指按某种标准划定的范围、地段，多用于行政、地理或管理上的分区。</div></div>
+      <footer>n1-0050</footer>
+    </article>
+    <article class="card">
+      <header>
+        <div class="head-l">
+          <div class="word">探る</div>
+          <div class="kana">さぐる</div>
+        </div>
+        <span class="chip" style="--c:#a33b2a">N1</span>
+      </header>
+      <div class="sec"><div class="lbl">词性</div><div class="tags"><span class="tag">五段动词</span></div></div>
+      <div class="sec"><div class="lbl">中文释义</div><ul class="mean"><li>探寻</li><li>摸索</li><li>探听</li></ul></div>
+      <div class="sec"><div class="lbl">常见搭配</div><table class="coll"><tr><td class="ph">真相を探る</td><td class="nt">探寻真相</td></tr><tr><td class="ph">心を探る</td><td class="nt">揣摩心思</td></tr><tr><td class="ph">ポケットを探る</td><td class="nt">在口袋里摸索</td></tr></table></div>
+      <div class="sec"><div class="lbl">典型例句</div><ul class="ex"><li><div class="jp">事件の裏側を探っている。</div><div class="zh">正在探寻事件背后的内情。</div></li><li><div class="jp">彼の本心を探るのは難しい。</div><div class="zh">很难摸透他的真实想法。</div></li></ul></div>
+      <div class="sec"><div class="lbl">语境 / 语气</div><div class="note">用手或心思去摸索、探查，可指具体摸索口袋，也可指探听内心、真相，书面正式。</div></div>
+      <footer>n1-0075</footer>
+    </article></div>
+</div></body></html>

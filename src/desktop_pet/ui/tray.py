@@ -38,7 +38,9 @@ class TrayController(QObject):
     # —— 日语学习（ui 层只发信号，业务判定在 app/controller）——
     jp_enabled_toggled = Signal(bool)
     jp_level_selected = Signal(str)
-    jp_add_vocab_requested = Signal()
+    jp_duration_selected = Signal(int)
+    jp_daily_limit_selected = Signal(int)
+    jp_show_now_requested = Signal()
     jp_vocab_requested = Signal()
     jp_log_requested = Signal()
 
@@ -71,7 +73,13 @@ class TrayController(QObject):
         self._jp_level_menu: QMenu | None = None
         self._jp_level_group: QActionGroup | None = None
         self._jp_level_actions: dict[str, QAction] = {}
-        self._action_jp_add_vocab: QAction | None = None
+        self._jp_duration_menu: QMenu | None = None
+        self._jp_duration_group: QActionGroup | None = None
+        self._jp_duration_actions: dict[int, QAction] = {}
+        self._jp_daily_limit_menu: QMenu | None = None
+        self._jp_daily_limit_group: QActionGroup | None = None
+        self._jp_daily_limit_actions: dict[int, QAction] = {}
+        self._action_jp_show_now: QAction | None = None
         self._action_jp_vocab: QAction | None = None
         self._action_jp_log: QAction | None = None
 
@@ -151,26 +159,34 @@ class TrayController(QObject):
             action.blockSignals(False)
 
     def set_jp_enabled(self, enabled: bool) -> None:
-        """统一刷新日语菜单组：关闭时「难度」「加入生词本」置灰；生词本/学习记录始终可用。"""
+        """统一刷新日语菜单组：关闭时「难度/显示时长/每日数量/立即显示」置灰；
+        生词本/学习记录始终可用。"""
 
         enabled = bool(enabled)
         if self._jp_level_menu is not None:
             self._jp_level_menu.setEnabled(enabled)
-        if self._action_jp_add_vocab is not None:
-            self._action_jp_add_vocab.setEnabled(enabled)
+        if self._jp_duration_menu is not None:
+            self._jp_duration_menu.setEnabled(enabled)
+        if self._jp_daily_limit_menu is not None:
+            self._jp_daily_limit_menu.setEnabled(enabled)
+        if self._action_jp_show_now is not None:
+            self._action_jp_show_now.setEnabled(enabled)
 
-    def set_jp_current_word(self, word: str | None) -> None:
-        """把「加入生词本」项文字动态反映当前展示词（无当前词时回落常量文案）。"""
+    def set_jp_duration_checked(self, value: int) -> None:
+        """同步「显示时长」单选状态（不触发信号）。"""
 
-        if self._action_jp_add_vocab is None:
-            return
-        if word:
-            label = C.JP_MENU_ADD_VOCAB_TEMPLATE.format(word=word)
-        else:
-            label = C.JP_MENU_ADD_VOCAB
-        self._action_jp_add_vocab.blockSignals(True)
-        self._action_jp_add_vocab.setText(label)
-        self._action_jp_add_vocab.blockSignals(False)
+        for option, action in self._jp_duration_actions.items():
+            action.blockSignals(True)
+            action.setChecked(option == int(value))
+            action.blockSignals(False)
+
+    def set_jp_daily_limit_checked(self, value: int) -> None:
+        """同步「每日数量」单选状态（不触发信号）。"""
+
+        for option, action in self._jp_daily_limit_actions.items():
+            action.blockSignals(True)
+            action.setChecked(option == int(value))
+            action.blockSignals(False)
 
     # ------------------------------------------------------------------ #
     # 内部
@@ -191,7 +207,7 @@ class TrayController(QObject):
         self._action_bubble.setChecked(bool(self._cfg.bubble_enabled))
         self._action_bubble.toggled.connect(self.bubble_toggled.emit)
 
-        # —— 日语学习菜单组（开关 + 难度子菜单 + 记住当前单词 + 生词本…）——
+        # —— 日语学习菜单组（开关 + 难度/显示时长/每日数量子菜单 + 立即显示 + 生词本/记录）——
         self._action_jp = QAction(C.JP_MENU_TITLE, self._menu)
         self._action_jp.setCheckable(True)
         self._action_jp.setChecked(bool(self._cfg.jp_enabled))
@@ -211,9 +227,39 @@ class TrayController(QObject):
             self._jp_level_menu.addAction(action)
             self._jp_level_actions[level] = action
 
-        self._action_jp_add_vocab = QAction(C.JP_MENU_ADD_VOCAB, self._menu)
-        self._action_jp_add_vocab.triggered.connect(
-            lambda _checked=False: self.jp_add_vocab_requested.emit()
+        self._jp_duration_menu = QMenu(C.JP_MENU_DURATION, self._menu)
+        self._jp_duration_group = QActionGroup(self._menu)
+        self._jp_duration_group.setExclusive(True)
+        for option in C.JP_BUBBLE_DURATION_OPTIONS:
+            label = C.JP_BUBBLE_DURATION_LABELS.get(option, f"{option} 秒")
+            action = QAction(label, self._jp_duration_menu)
+            action.setCheckable(True)
+            action.setChecked(option == self._cfg.jp_bubble_duration_s)
+            action.triggered.connect(
+                lambda _checked=False, opt=option: self.jp_duration_selected.emit(opt)
+            )
+            self._jp_duration_group.addAction(action)
+            self._jp_duration_menu.addAction(action)
+            self._jp_duration_actions[option] = action
+
+        self._jp_daily_limit_menu = QMenu(C.JP_MENU_DAILY_LIMIT, self._menu)
+        self._jp_daily_limit_group = QActionGroup(self._menu)
+        self._jp_daily_limit_group.setExclusive(True)
+        for option in C.JP_DAILY_LIMIT_OPTIONS:
+            label = C.JP_DAILY_LIMIT_LABELS.get(option, f"{option} 个")
+            action = QAction(label, self._jp_daily_limit_menu)
+            action.setCheckable(True)
+            action.setChecked(option == self._cfg.jp_daily_limit)
+            action.triggered.connect(
+                lambda _checked=False, opt=option: self.jp_daily_limit_selected.emit(opt)
+            )
+            self._jp_daily_limit_group.addAction(action)
+            self._jp_daily_limit_menu.addAction(action)
+            self._jp_daily_limit_actions[option] = action
+
+        self._action_jp_show_now = QAction(C.JP_MENU_SHOW_NOW, self._menu)
+        self._action_jp_show_now.triggered.connect(
+            lambda _checked=False: self.jp_show_now_requested.emit()
         )
 
         self._action_jp_vocab = QAction(C.JP_MENU_VOCAB, self._menu)
@@ -255,7 +301,9 @@ class TrayController(QObject):
         self._menu.addSeparator()
         self._menu.addAction(self._action_jp)
         self._menu.addMenu(self._jp_level_menu)
-        self._menu.addAction(self._action_jp_add_vocab)
+        self._menu.addMenu(self._jp_duration_menu)
+        self._menu.addMenu(self._jp_daily_limit_menu)
+        self._menu.addAction(self._action_jp_show_now)
         self._menu.addAction(self._action_jp_vocab)
         self._menu.addAction(self._action_jp_log)
         self._menu.addSeparator()

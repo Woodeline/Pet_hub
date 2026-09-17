@@ -40,6 +40,9 @@ from desktop_pet.core.pet_model import PetModel
 from desktop_pet.core.vocab_store import VocabStore
 from desktop_pet.core.vocabulary import VocabEntry, WordBank
 from desktop_pet.core.weighted_picker import WeightedWordPicker
+from desktop_pet.core.word_detail import WordDetail
+from desktop_pet.core.word_detail_bank import WordDetailBank
+from desktop_pet.core.word_details_cache_store import WordDetailsCacheStore
 from desktop_pet.ui.bubble import BubbleWindow
 from desktop_pet.ui.bubble_button_bar import BubbleButtonBar
 from desktop_pet.ui.log_window import LogWindow
@@ -47,6 +50,8 @@ from desktop_pet.ui.pet_renderer import PetRenderer
 from desktop_pet.ui.pet_window import PetWindow
 from desktop_pet.ui.tray import TrayController
 from desktop_pet.ui.vocab_window import VocabWindow
+from desktop_pet.ui.word_detail_window import WordDetailWindow
+from desktop_pet.ui.word_detail_worker import WordDetailNetConfig
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +124,13 @@ class PetAppController(QObject):
         self._today_done_notified: bool = False
         self._level_done_notified: bool = False
 
+        # —— 单词详情（中文五要素）：打包详情库（只读）+ 用户缓存 + 详情窗口单例 ——
+        self._detail_bank: WordDetailBank = WordDetailBank.empty()
+        self._detail_cache: WordDetailsCacheStore = WordDetailsCacheStore(
+            WordDetailsCacheStore.default_path()
+        )
+        self._detail_window: WordDetailWindow | None = None
+
     # ------------------------------------------------------------------ #
     # 生命周期
     # ------------------------------------------------------------------ #
@@ -141,10 +153,12 @@ class PetAppController(QObject):
         self._tray.set_autostart_checked(self._cfg.autostart)
         self._tray.set_bubble_checked(self._cfg.bubble_enabled)
         self._load_japanese()
+        self._load_word_details()
         self._tray.set_jp_checked(self._cfg.jp_enabled)
         self._tray.set_jp_level_checked(self._cfg.jp_level)
+        self._tray.set_jp_duration_checked(self._cfg.jp_bubble_duration_s)
+        self._tray.set_jp_daily_limit_checked(self._cfg.jp_daily_limit)
         self._tray.set_jp_enabled(self._cfg.jp_enabled)
-        self._tray.set_jp_current_word(None)
         self._tray.show()
         self._notify_jp_startup_state()
 
@@ -224,7 +238,9 @@ class PetAppController(QObject):
         # 日语学习
         self._tray.jp_enabled_toggled.connect(self._on_jp_toggled)
         self._tray.jp_level_selected.connect(self._on_jp_level_selected)
-        self._tray.jp_add_vocab_requested.connect(self._on_jp_add_vocab)
+        self._tray.jp_duration_selected.connect(self._on_jp_duration_selected)
+        self._tray.jp_daily_limit_selected.connect(self._on_jp_daily_limit_selected)
+        self._tray.jp_show_now_requested.connect(self._on_jp_show_now)
         self._tray.jp_vocab_requested.connect(self._on_jp_vocab)
         self._tray.jp_log_requested.connect(self._on_jp_log)
 
@@ -445,6 +461,22 @@ class PetAppController(QObject):
             logger.exception("加载每日记录失败（已忽略，使用空表）")
             self._daily_log = DailyLogStore(DailyLogStore.default_path())
 
+    def _load_word_details(self) -> None:
+        """启动时加载打包详情库（只读）与用户缓存；损坏均优雅降级，绝不崩溃。"""
+
+        try:
+            self._detail_bank = WordDetailBank.load(paths.word_details_path())
+        except Exception:  # noqa: BLE001
+            logger.exception("加载中文详情库失败（已忽略，使用空详情库）")
+            self._detail_bank = WordDetailBank.empty()
+
+        try:
+            self._detail_cache = WordDetailsCacheStore(WordDetailsCacheStore.default_path())
+            self._detail_cache.load()
+        except Exception:  # noqa: BLE001
+            logger.exception("加载中文详情缓存失败（已忽略，使用空缓存）")
+            self._detail_cache = WordDetailsCacheStore(WordDetailsCacheStore.default_path())
+
     def _notify_jp_startup_state(self) -> None:
         """启动时若已开启学习：给一次状态提示（气泡总开关未开 / 词库不可用）。"""
 
@@ -466,8 +498,19 @@ class PetAppController(QObject):
         else:
             self._next_word_ts = float("inf")
 
-    def _show_word_bubble(self, now: float) -> None:
-        """记忆闭环：停止判定 → 加权抽取 → 展示学习泡泡 + 按钮条（受多重守卫约束）。"""
+    def _show_word_bubble(
+        self, now: float, *, bypass_gap: bool = False, ignore_daily_limit: bool = False
+    ) -> None:
+        """记忆闭环：停止判定 → 加权抽取 → 展示学习泡泡 + 按钮条（受多重守卫约束）。
+
+        Args:
+            now: 当前时刻（秒）。
+            bypass_gap: ``True`` 时跳过 ``BUBBLE_MIN_GAP_S`` 最小间隔（「立即显示」用），
+                仍保留睡觉 / 气泡关 / 词库空守卫。
+            ignore_daily_limit: ``True`` 时跳过「每日上限 / 当日全部掌握」停止判定。
+                **仅手动「立即显示」路径可传 True**（用户决策：手动点击为显式意图，
+                不受每日配额约束）；自动排期路径必须保持 ``False``，严格遵守上限。
+        """
 
         # 守卫：已有词在展示时不重复抽取；气泡关闭 / 睡觉 / 最小间隔不展示
         if self._current_word is not None:
@@ -476,14 +519,15 @@ class PetAppController(QObject):
             return
         if self._sm.mood == Mood.SLEEP:
             return
-        if (now - self._last_bubble_ts) < C.BUBBLE_MIN_GAP_S:
+        if not bypass_gap and (now - self._last_bubble_ts) < C.BUBBLE_MIN_GAP_S:
             return
 
         if not self._today_str:
             self._today_str = self._local_date_str()
 
         # 停止判定：达到每日上限 或 当日已展示词全部掌握 → 一次性通知后今日不再弹
-        if self._jp_stop_for_today():
+        # 仅自动路径受限；手动「立即显示」传 ignore_daily_limit=True 可突破（用户决策）
+        if not ignore_daily_limit and self._jp_stop_for_today():
             if not self._today_done_notified:
                 self._today_done_notified = True
                 self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_TODAY_DONE)
@@ -504,7 +548,6 @@ class PetAppController(QObject):
         self._current_word = entry
         self._word_deadline = now + self._cfg.jp_bubble_duration_s
         self._word_disposed = False
-        self._tray.set_jp_current_word(entry.word)
 
         anchor = self._bubble_anchor()
         self._bubble.set_anchor(anchor)
@@ -541,7 +584,6 @@ class PetAppController(QObject):
                 self._current_word = None
                 self._word_deadline = float("inf")
                 self._word_disposed = True
-                self._tray.set_jp_current_word(None)
         self._persist()
 
     def _on_jp_level_selected(self, level: str) -> None:
@@ -555,14 +597,64 @@ class PetAppController(QObject):
         self._level_done_notified = False
         self._persist()
 
-    def _on_jp_add_vocab(self) -> None:
-        """托盘「加入生词本」→ 把当前展示词处置为生词（等价气泡「新单词」按钮）。"""
+    def _on_jp_duration_selected(self, value: int) -> None:
+        """切换「显示时长」档位（单选，持久化，只信任档位值）。"""
 
-        if self._current_word is None:
-            if self._cfg.jp_enabled:
-                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_NO_WORD)
+        value = int(value)
+        if value not in C.JP_BUBBLE_DURATION_OPTIONS:
             return
-        self._dispose_word(C.DAILY_LOG_STATUS_VOCAB, time.monotonic())
+        self._cfg.jp_bubble_duration_s = value
+        self._tray.set_jp_duration_checked(value)
+        self._persist()
+
+    def _on_jp_daily_limit_selected(self, value: int) -> None:
+        """切换「每日数量」档位（单选，持久化，只信任档位值）。"""
+
+        value = int(value)
+        if value not in C.JP_DAILY_LIMIT_OPTIONS:
+            return
+        self._cfg.jp_daily_limit = value
+        self._tray.set_jp_daily_limit_checked(value)
+        self._persist()
+
+    def _on_jp_show_now(self) -> None:
+        """托盘「立即显示一个新单词」→ 先等价超时未处理当前词，再立即弹新词（方案 A）。"""
+
+        try:
+            now = time.monotonic()
+            if not self._cfg.jp_enabled:
+                return
+            if not self._cfg.bubble_enabled:
+                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_NEED_BUBBLE)
+                return
+            if self._sm.mood == Mood.SLEEP:
+                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_SHOW_NOW_BLOCKED)
+                return
+            if self._bank.is_empty():
+                if not self._bank_warned:
+                    self._bank_warned = True
+                    self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_BANK_UNAVAILABLE)
+                return
+            if self._jp_stop_for_today():
+                if not self._today_done_notified:
+                    self._today_done_notified = True
+                    self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_TODAY_DONE)
+                return
+
+            # 当前词在展示 → 先等价超时落「未处理」（shown_today +1）
+            if self._current_word is not None and not self._word_disposed:
+                self._dispose_word(C.DAILY_LOG_STATUS_UNPROCESSED, now)
+
+            self._show_word_bubble(now, bypass_gap=True)
+            if self._current_word is not None:
+                self._tray.notify(
+                    C.APP_DISPLAY_NAME,
+                    C.JP_NOTIFY_SHOW_NOW.format(
+                        word=self._current_word.word, kana=self._current_word.kana
+                    ),
+                )
+        except Exception:  # noqa: BLE001
+            logger.exception("立即显示单词异常（已忽略）")
 
     def _on_jp_log(self) -> None:
         """打开学习记录窗口（单例，喂入全部日期与当日记录，重开则前置）。"""
@@ -570,6 +662,7 @@ class PetAppController(QObject):
         try:
             if self._log_window is None:
                 self._log_window = LogWindow()
+                self._log_window.word_double_clicked.connect(self._on_log_word_double_clicked)
             days = self._daily_log.days()
             self._log_window.set_dates(days)
             limit = self._cfg.jp_daily_limit
@@ -592,6 +685,7 @@ class PetAppController(QObject):
                 self._vocab_window = VocabWindow()
                 self._vocab_window.remove_requested.connect(self._on_vocab_remove)
                 self._vocab_window.clear_requested.connect(self._on_vocab_clear)
+                self._vocab_window.word_double_clicked.connect(self._on_vocab_word_double_clicked)
             self._vocab_window.refresh(self._vocab.items())
             self._vocab_window.show()
             self._vocab_window.raise_()
@@ -690,7 +784,6 @@ class PetAppController(QObject):
         # 6) 清状态
         self._current_word = None
         self._word_deadline = float("inf")
-        self._tray.set_jp_current_word(None)
 
         # 7) 排期下一词
         self._schedule_next_word(now)
@@ -709,6 +802,100 @@ class PetAppController(QObject):
         """返回当前 UTC 墙钟时间的 ISO8601 字符串（仅 app 层生成，注入 core）。"""
 
         return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # ------------------------------------------------------------------ #
+    # 内部：单词详情（中文五要素）—— 打包库 / 用户缓存 / DeepSeek 联网 + 窗口单例
+    # ------------------------------------------------------------------ #
+    def _on_log_word_double_clicked(self, item_id: str) -> None:
+        """学习记录双击 → 按 id 还原词条并打开详情窗口。"""
+
+        entry = self._bank.entry_by_id(str(item_id))
+        if entry is not None:
+            self._open_word_detail(entry)
+
+    def _on_vocab_word_double_clicked(self, item_id: str) -> None:
+        """生词本双击 → 优先词库还原，找不到用 VocabItem 字段兜底（romaji=""）。"""
+
+        item_id = str(item_id)
+        entry = self._bank.entry_by_id(item_id)
+        if entry is None:
+            for item in self._vocab.items():
+                if item.id == item_id:
+                    entry = VocabEntry(
+                        id=item.id,
+                        level=item.level,
+                        word=item.word,
+                        kana=item.kana,
+                        translation=item.translation,
+                        meaning=item.meaning,
+                        romaji="",
+                    )
+                    break
+        if entry is not None:
+            self._open_word_detail(entry)
+
+    def _open_word_detail(self, entry: VocabEntry) -> None:
+        """打开中文详情窗口（单例）：打包库优先 → 缓存补充 → 联网兜底。"""
+
+        try:
+            if entry is None:
+                return
+            if self._detail_window is None:
+                self._detail_window = WordDetailWindow()
+                self._detail_window.detail_succeeded.connect(self._on_detail_succeeded)
+                self._detail_window.detail_failed.connect(self._on_detail_failed)
+            detail, source = self._lookup_word_detail(entry.id)
+            net = self._detail_net_config()
+            self._detail_window.show_entry(entry, detail, source, net)
+            self._detail_window.show()
+            self._detail_window.raise_()
+            self._detail_window.activateWindow()
+        except Exception:  # noqa: BLE001
+            logger.exception("打开单词详情窗口异常（已忽略）")
+
+    def _lookup_word_detail(self, item_id: str) -> tuple[WordDetail | None, str | None]:
+        """返回详情与来源：打包库优先（权威只读）→ 用户缓存补充。
+
+        打包库是经审核的权威版本，发布新版本即应生效，不被用户旧联网结果遮挡；
+        缓存只补充「打包库未收录」的冷门词。均未命中返回 ``(None, None)``。
+        """
+
+        item_id = str(item_id)
+        if not item_id:
+            return None, None
+        detail = self._detail_bank.get(item_id)
+        if detail is not None:
+            return detail, C.WORD_DETAIL_SOURCE_LOCAL
+        item = self._detail_cache.get(item_id)
+        if item is not None and not item.detail.is_empty():
+            return item.detail, C.WORD_DETAIL_SOURCE_CACHE
+        return None, None
+
+    def _detail_net_config(self) -> WordDetailNetConfig:
+        """从当前配置**现取现构**联网参数（保证运行时改配置即时生效）。"""
+
+        return WordDetailNetConfig(
+            api_key=self._cfg.deepseek_api_key,
+            base_url=self._cfg.deepseek_base_url,
+            model=self._cfg.deepseek_model,
+            timeout_s=self._cfg.word_detail_llm_timeout_s,
+            retries=self._cfg.word_detail_llm_retries,
+        )
+
+    def _on_detail_succeeded(self, item_id: str, detail: WordDetail) -> None:
+        """联网成功回调：写用户缓存（``fetched_at`` 由 app 层注入）并落盘。"""
+
+        try:
+            if detail is None or detail.is_empty():
+                return
+            self._detail_cache.put(str(item_id), detail, self._now_iso())
+        except Exception:  # noqa: BLE001
+            logger.exception("写入中文详情缓存异常（已忽略）")
+
+    def _on_detail_failed(self, item_id: str, msg: str) -> None:
+        """联网失败回调：仅记日志（窗口已做中文降级展示）。"""
+
+        logger.info("详情联网失败（%s）：%s", item_id, msg)
 
     # ------------------------------------------------------------------ #
     # 内部：应用迁移 / 帧率 / 气泡 / 缩放 / 持久化

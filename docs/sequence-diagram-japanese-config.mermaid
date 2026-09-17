@@ -1,0 +1,37 @@
+sequenceDiagram
+    participant U as 用户
+    participant LW as LogWindow
+    participant C as PetAppController
+    participant WB as WordBank
+    participant WD as WordDetailWindow
+    participant WRK as JishoWorker(后台线程)
+    participant JS as core.jisho
+    participant Cache as JishoCacheStore
+
+    U->>LW: 双击表格行
+    LW->>C: word_double_clicked(id)
+    C->>WB: entry_by_id(id)
+    WB-->>C: VocabEntry（含 meaning/romaji 兜底）
+    C->>C: _jisho_cached(word)：内存→持久(TTL7天判定在app)
+    C->>WD: show_entry(entry, cached?, source?)
+    WD->>WD: 即时渲染本地字段（word/kana/translation/meaning/level/romaji）
+    alt 缓存命中
+        WD->>WD: 渲染 Jisho 字段 + 来源「Jisho（缓存）」
+    else 缓存未命中
+        WD->>WD: set_loading「正在查询 Jisho 词典…」
+        WD->>WRK: 创建 JishoWorker 并 start()
+        WRK->>JS: fetch(word, timeout=5s)
+        alt 成功
+            JS-->>WRK: JishoResult
+            WRK-->>WD: signals.succeeded(word, result)
+            WD->>WD: set_jisho_result(word, result)
+            WD-->>C: jisho_succeeded(word, result)
+            C->>C: 内存缓存 + fetched_at=_now_iso()
+            C->>Cache: put(word, result, fetched_at)
+        else 失败/超时/断网
+            JS-->>WRK: JishoError
+            WRK-->>WD: signals.failed(word, msg)
+            WD->>WD: set_jisho_error（保留本地字段 + 重试按钮）
+            WD-->>C: jisho_failed(word, msg)
+        end
+    end

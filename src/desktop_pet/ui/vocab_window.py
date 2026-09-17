@@ -39,6 +39,7 @@ class VocabWindow(QWidget):
 
     remove_requested = Signal(str)  # 携带 item id
     clear_requested = Signal()      # 二次确认通过后发出
+    word_double_clicked = Signal(str)  # 携带 item.id（双击打开详情，P1）
 
     def __init__(self, parent: QWidget | None = None) -> None:
         """构造生词本窗口。"""
@@ -109,6 +110,7 @@ class VocabWindow(QWidget):
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self._table.cellDoubleClicked.connect(self._on_cell_double_clicked)
         header = self._table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
@@ -171,6 +173,12 @@ class VocabWindow(QWidget):
         """选中行变化 → 更新「删除选中」可用性。"""
 
         self._btn_remove.setEnabled(self._table.currentRow() >= 0)
+
+    def _on_cell_double_clicked(self, row: int, _column: int) -> None:
+        """双击表格行 → 发出该行生词 id（供 controller 打开详情窗口，P1）。"""
+
+        if 0 <= row < len(self._shown_items):
+            self.word_double_clicked.emit(self._shown_items[row].id)
 
     def _on_remove_clicked(self) -> None:
         """删除选中行：只发信号，由 controller 执行删除。"""

@@ -1,0 +1,54 @@
+sequenceDiagram
+    autonumber
+    participant U as User
+    participant E as EntryWin(Log/Vocab)
+    participant C as PetAppController
+    participant B as WordDetailBank
+    participant K as WordDetailsCacheStore
+    participant W as WordDetailWindow
+    participant R as WordDetailWorker
+    participant L as DeepSeekClient
+
+    U->>E: 双击某行
+    E-->>C: word_double_clicked(item_id)
+    C->>C: entry = WordBank.entry_by_id(id)
+    C->>B: get(id)
+    alt 打包库命中（非空）
+        B-->>C: WordDetail  (source=本地词库)
+    else 打包库未命中
+        C->>K: get(id)
+        alt 用户缓存命中
+            K-->>C: WordDetailsCacheItem  (source=用户缓存)
+        else 均未命中
+            K-->>C: None
+        end
+    end
+    C->>W: show_entry(entry, detail, source, net)
+    alt detail 命中（本地/缓存）
+        Note over W: 同步即时渲染（无加载态）
+        W-->>U: 五要素中文内容 + 来源标注
+    else 未命中
+        alt net 为空 或 api_key 为空
+            W->>W: set_detail_error("未配置密钥，联网后可获取")
+            W-->>U: 基础信息 + 重试
+        else 有密钥
+            W->>W: set_loading()
+            W->>R: pool.start(worker)
+            R->>L: fetch_word_detail(word,kana,level,translation)
+            alt 成功
+                L-->>R: WordDetail
+                R-->>W: succeeded(id, detail)  (QueuedConnection→主线程)
+                W->>W: 渲染五要素 + 来源=联网获取
+                W-->>C: detail_succeeded(id, detail)
+                C->>K: put(id, detail, fetched_at=now_iso)
+                Note over C,B: 打包库只读，不写回
+            else 失败（网络/超时/鉴权/解析）
+                L-->>R: raise LLMError(...)
+                R-->>W: failed(id, msg)  (QueuedConnection→主线程)
+                W->>W: 失败态 + 重试按钮
+                W-->>C: detail_failed(id, msg)
+                C->>C: logger.info(...)
+            end
+        end
+    end
+    Note over U,W: 点击「重试」→ 重新 show_entry(entry, None, None, net)

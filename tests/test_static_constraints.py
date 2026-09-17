@@ -96,6 +96,8 @@ def test_core_imports_without_loading_qt(project_root: Path) -> None:
         "import desktop_pet.core.mastered_store\n"
         "import desktop_pet.core.daily_log_store\n"
         "import desktop_pet.core.weighted_picker\n"
+        "import desktop_pet.core.jisho\n"
+        "import desktop_pet.core.jisho_cache_store\n"
         "loaded = [m for m in sys.modules if m.startswith('PySide6')]\n"
         "assert not loaded, 'core 导入过程加载了 Qt: %r' % loaded\n"
         "print('CORE_IS_QT_FREE')\n"
@@ -177,14 +179,17 @@ def test_no_image_assets(project_root: Path) -> None:
         ("BASE_W", 160),
         ("BASE_H", 180),
         ("CONFIG_VERSION", 1),
-        ("JP_BUBBLE_DURATION_S", 30.0),
+        ("JP_BUBBLE_DURATION_S", 30),
         ("JP_BUBBLE_MIN_DURATION_S", 2.0),
         ("JP_BUBBLE_MAX_DURATION_S", 300.0),
         ("JP_DAILY_LIMIT", 15),
-        ("JP_DAILY_LIMIT_MAX", 200),
         ("JP_VOCAB_WEIGHT", 3.0),
         ("MASTERED_VERSION", 1),
         ("DAILY_LOG_VERSION", 1),
+        ("JISHO_TIMEOUT_S", 5.0),
+        ("JISHO_MAX_DEFINITIONS", 6),
+        ("JISHO_CACHE_VERSION", 1),
+        ("JISHO_CACHE_TTL_DAYS", 7),
     ],
 )
 def test_constants_match_prd(attr: str, expected) -> None:
@@ -193,6 +198,25 @@ def test_constants_match_prd(attr: str, expected) -> None:
 
 def test_scales_match_prd() -> None:
     assert C.SCALES == (0.8, 1.0, 1.2)
+
+
+def test_jp_config_option_tiers_match_prd() -> None:
+    """B 版档位收敛：时长 {15,30,60}、每日数量 {5,10,15,20,30}，且默认值命中档位。"""
+
+    assert C.JP_BUBBLE_DURATION_OPTIONS == (15, 30, 60)
+    assert C.JP_DAILY_LIMIT_OPTIONS == (5, 10, 15, 20, 30)
+    assert C.JP_BUBBLE_DURATION_S in C.JP_BUBBLE_DURATION_OPTIONS
+    assert C.JP_DAILY_LIMIT in C.JP_DAILY_LIMIT_OPTIONS
+    assert set(C.JP_BUBBLE_DURATION_LABELS) == set(C.JP_BUBBLE_DURATION_OPTIONS)
+    assert set(C.JP_DAILY_LIMIT_LABELS) == set(C.JP_DAILY_LIMIT_OPTIONS)
+
+
+def test_jisho_url_and_cache_constants_defined() -> None:
+    """Jisho 联网 / 缓存常量存在且取值合理。"""
+
+    assert C.JISHO_API_URL.startswith("https://")
+    assert C.JISHO_CACHE_FILENAME.endswith(".json")
+    assert C.JISHO_CACHE_TTL_DAYS > 0
 
 
 def test_mood_has_four_states() -> None:
@@ -239,6 +263,12 @@ def test_color_palette_matches_prd() -> None:
         "log_status_mastered": "#7A9E7E",
         "log_status_vocab": "#5B8DB8",
         "log_status_unprocessed": "#B7A99A",
+        # —— B 版气泡质感 / 等级角标（设计 §A1.1）——
+        "bubble_shadow": "#C9B8A6",
+        "bubble_divider": "#EFE3D4",
+        "bubble_gradient_bottom": "#F7EEDF",
+        "jp_level_chip_bg": "#7A9E7E",
+        "jp_level_chip_text": "#FFFFFF",
     }
     assert C.COLORS == expected
 

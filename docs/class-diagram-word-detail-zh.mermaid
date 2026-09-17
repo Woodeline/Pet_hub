@@ -1,0 +1,137 @@
+classDiagram
+    class WordDetail {
+        +tuple~str~ meaning_zh
+        +tuple~str~ pos_zh
+        +tuple~Collocation~ collocations
+        +tuple~Example~ examples
+        +str usage_note_zh
+        +to_dict() dict
+        +from_dict(data)$ WordDetail|None
+        +is_empty() bool
+        +truncated(limits)$ WordDetail
+    }
+    class Collocation {
+        +str phrase
+        +str note
+        +to_dict() dict
+        +from_dict(data)$ Collocation|None
+    }
+    class Example {
+        +str jp
+        +str zh
+        +to_dict() dict
+        +from_dict(data)$ Example|None
+    }
+    class WordDetailBank {
+        -dict~str,WordDetail~ _details
+        +load(path)$ WordDetailBank
+        +empty()$ WordDetailBank
+        +get(item_id) WordDetail|None
+        +size() int
+        +is_empty() bool
+    }
+    class WordDetailsCacheItem {
+        +str fetched_at
+        +WordDetail detail
+        +to_dict() dict
+        +from_dict(data)$ WordDetailsCacheItem|None
+    }
+    class WordDetailsCacheStore {
+        -Path _path
+        -dict _items
+        +default_path()$ Path
+        +load() dict
+        +get(item_id) WordDetailsCacheItem|None
+        +put(item_id, detail, fetched_at) void
+        +save() void
+        +_backup_corrupt(reason) void
+    }
+    class LLMError
+    class LLMAuthError
+    class LLMNetworkError
+    class LLMParseError
+    class LLMConfigError
+    class DeepSeekClient {
+        -str _api_key
+        -str _base_url
+        -str _model
+        -float _timeout_s
+        -int _retries
+        +fetch_word_detail(word, kana, level, translation) WordDetail
+        -_post(payload) str
+        -_extract_json(text) dict
+        +build_prompt(word, kana, level, translation)$ str
+    }
+    class WordDetailSignals {
+        +Signal succeeded
+        +Signal failed
+    }
+    class WordDetailWorker {
+        +str item_id
+        +WordDetailNetConfig net
+        +Signal signals
+        +run() void
+    }
+    class WordDetailNetConfig {
+        +str api_key
+        +str base_url
+        +str model
+        +float timeout_s
+        +int retries
+    }
+    class WordDetailWindow {
+        +Signal detail_succeeded
+        +Signal detail_failed
+        +show_entry(entry, detail, source, net) void
+        +set_loading() void
+        +set_detail_result(item_id, detail) void
+        +set_detail_error(item_id, msg) void
+        +closeEvent(event) void
+    }
+    class AppConfig {
+        +str deepseek_api_key
+        +str deepseek_base_url
+        +str deepseek_model
+        +float word_detail_llm_timeout_s
+        +int word_detail_llm_retries
+    }
+    class PetAppController {
+        -WordDetailBank _detail_bank
+        -WordDetailsCacheStore _detail_cache
+        -WordDetailWindow _detail_window
+        +_load_word_details() void
+        +_lookup_word_detail(item_id) tuple
+        +_open_word_detail(entry) void
+        +_on_detail_succeeded(item_id, detail) void
+        +_on_detail_failed(item_id, msg) void
+    }
+    class VocabEntry {
+        +str id
+        +str level
+        +str word
+        +str kana
+        +str translation
+        +str meaning
+    }
+
+    WordDetail *-- Collocation
+    WordDetail *-- Example
+    WordDetailBank o-- WordDetail
+    WordDetailsCacheItem *-- WordDetail
+    WordDetailsCacheStore o-- WordDetailsCacheItem
+    LLMAuthError --|> LLMError
+    LLMNetworkError --|> LLMError
+    LLMParseError --|> LLMError
+    LLMConfigError --|> LLMError
+    DeepSeekClient ..> WordDetail : 返回
+    DeepSeekClient ..> LLMError : 抛
+    WordDetailWorker *-- WordDetailSignals
+    WordDetailWorker ..> WordDetailNetConfig
+    WordDetailWorker ..> DeepSeekClient : run 调用
+    WordDetailWindow ..> WordDetail
+    WordDetailWindow ..> WordDetailWorker
+    WordDetailWindow ..> WordDetailNetConfig
+    PetAppController o-- WordDetailBank
+    PetAppController o-- WordDetailsCacheStore
+    PetAppController o-- WordDetailWindow
+    PetAppController ..> VocabEntry

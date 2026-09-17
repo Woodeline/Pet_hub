@@ -94,18 +94,42 @@ def _coerce_level(value: Any, default: str) -> str:
     return default
 
 
-def _coerce_duration(value: Any, default: float) -> float:
-    """把学习泡泡时长安全转换为 float，并钳制到 ``[JP_BUBBLE_MIN, JP_BUBBLE_MAX]`` 秒。"""
+def _coerce_duration(value: Any, default: int) -> int:
+    """把学习泡泡时长收敛到档位 ``JP_BUBBLE_DURATION_OPTIONS``；非法值回落默认。"""
 
-    candidate = _coerce_float(value, default)
-    return min(C.JP_BUBBLE_MAX_DURATION_S, max(C.JP_BUBBLE_MIN_DURATION_S, candidate))
+    candidate = _coerce_int(value, default)
+    if candidate in C.JP_BUBBLE_DURATION_OPTIONS:
+        return candidate
+    return int(default)
 
 
 def _coerce_daily_limit(value: Any, default: int) -> int:
-    """把每日上限安全转换为 int，并钳制到 ``[1, JP_DAILY_LIMIT_MAX]``；bool 视为非法。"""
+    """把每日上限收敛到档位 ``JP_DAILY_LIMIT_OPTIONS``；非法值回落默认。"""
 
     candidate = _coerce_int(value, default)
-    return max(1, min(C.JP_DAILY_LIMIT_MAX, candidate))
+    if candidate in C.JP_DAILY_LIMIT_OPTIONS:
+        return candidate
+    return int(default)
+
+
+def _coerce_str(value: Any, default: str, allow_empty: bool = True) -> str:
+    """把任意值安全转换为字符串。
+
+    Args:
+        value: 待转换的原始值。
+        default: 非法 / 空（且不允许空）时回落的默认值。
+        allow_empty: ``True``（默认）时允许返回空串；``False`` 时空串回落默认值。
+
+    Returns:
+        去除首尾空白后的字符串；``value`` 非字符串时回落默认值。
+    """
+
+    if not isinstance(value, str):
+        return default
+    text = value.strip()
+    if not text and not allow_empty:
+        return default
+    return text
 
 
 @dataclass
@@ -122,8 +146,13 @@ class AppConfig:
         autostart: 开机自启开关。
         jp_enabled: 日语学习开关（JP-02，默认关闭）。
         jp_level: 日语难度等级（JP-06，默认 ``N5``，取值 ``N5..N1``）。
-        jp_bubble_duration_s: 学习泡泡停留时长（秒，默认 30，钳制 2~300）。
-        jp_daily_limit: 每日展示上限（默认 15，钳制 1~200）。
+        jp_bubble_duration_s: 学习泡泡停留时长（秒，默认 30，取值 15/30/60）。
+        jp_daily_limit: 每日展示上限（默认 15，取值 5/10/15/20/30）。
+        deepseek_api_key: DeepSeek API Key（默认空 ⇒ 直接离线降级，不发请求）。
+        deepseek_base_url: DeepSeek OpenAI 兼容接口地址（默认 ``LLM_ENDPOINT``）。
+        deepseek_model: 模型名（默认 ``deepseek-chat``）。
+        word_detail_llm_timeout_s: 联网超时（秒，默认 10.0）。
+        word_detail_llm_retries: 网络类失败重试次数（默认 1）。
     """
 
     version: int = C.CONFIG_VERSION
@@ -135,8 +164,13 @@ class AppConfig:
     autostart: bool = False
     jp_enabled: bool = False
     jp_level: str = C.JP_DEFAULT_LEVEL
-    jp_bubble_duration_s: float = C.JP_BUBBLE_DURATION_S
+    jp_bubble_duration_s: int = C.JP_BUBBLE_DURATION_S
     jp_daily_limit: int = C.JP_DAILY_LIMIT
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = C.LLM_ENDPOINT
+    deepseek_model: str = C.LLM_MODEL
+    word_detail_llm_timeout_s: float = C.LLM_TIMEOUT_S
+    word_detail_llm_retries: int = C.LLM_RETRIES
 
     def to_dict(self) -> dict[str, Any]:
         """序列化为可 JSON 化的字典。"""
@@ -151,8 +185,13 @@ class AppConfig:
             "autostart": bool(self.autostart),
             "jp_enabled": bool(self.jp_enabled),
             "jp_level": str(self.jp_level),
-            "jp_bubble_duration_s": float(self.jp_bubble_duration_s),
+            "jp_bubble_duration_s": int(self.jp_bubble_duration_s),
             "jp_daily_limit": int(self.jp_daily_limit),
+            "deepseek_api_key": str(self.deepseek_api_key),
+            "deepseek_base_url": str(self.deepseek_base_url),
+            "deepseek_model": str(self.deepseek_model),
+            "word_detail_llm_timeout_s": float(self.word_detail_llm_timeout_s),
+            "word_detail_llm_retries": int(self.word_detail_llm_retries),
         }
 
     @classmethod
@@ -184,6 +223,21 @@ class AppConfig:
                 get("jp_bubble_duration_s"), defaults.jp_bubble_duration_s
             ),
             jp_daily_limit=_coerce_daily_limit(get("jp_daily_limit"), defaults.jp_daily_limit),
+            deepseek_api_key=_coerce_str(
+                get("deepseek_api_key"), defaults.deepseek_api_key, allow_empty=True
+            ),
+            deepseek_base_url=_coerce_str(
+                get("deepseek_base_url"), defaults.deepseek_base_url, allow_empty=False
+            ),
+            deepseek_model=_coerce_str(
+                get("deepseek_model"), defaults.deepseek_model, allow_empty=False
+            ),
+            word_detail_llm_timeout_s=_coerce_float(
+                get("word_detail_llm_timeout_s"), defaults.word_detail_llm_timeout_s
+            ),
+            word_detail_llm_retries=_coerce_int(
+                get("word_detail_llm_retries"), defaults.word_detail_llm_retries
+            ),
         )
 
 

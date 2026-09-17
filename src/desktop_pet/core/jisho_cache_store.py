@@ -1,0 +1,236 @@
+"""core.jisho_cache_store —— Jisho 查询结果持久缓存（原子写 + 逐字段容错 + 损坏备份）。
+
+**本模块禁止 import 任何图形界面（Qt/GUI）库，亦不得调用 ``time`` / ``datetime``。**
+
+设计要点（架构 §B8）：
+- 完全复刻 :class:`~desktop_pet.core.vocab_store.VocabStore` 的 store 范式（刻意复制而非抽取
+  共享工具，避免触碰既有测试）：
+  - 读 = 逐字段容错（非法记录跳过、合法记录保留）。
+  - 写 = ``tempfile.mkstemp`` 同目录 + ``flush/fsync`` + ``os.replace`` 原子替换。
+  - 用户数据损坏 = 先 ``os.replace`` 备份为 ``<name>.corrupt-<mtime>`` 再以空缓存继续，
+    **绝不静默清空**。
+- ``fetched_at`` 由调用方（``app`` 层）注入 ISO8601 UTC 字符串；本模块**不解析时间戳**，
+  **TTL 判定在 app 层**（与 :class:`DailyLogStore` 的 ``day`` 注入约定一致）。
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import tempfile
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from desktop_pet.core import constants as C
+from desktop_pet.core.jisho import JishoResult
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class JishoCacheItem:
+    """一条 Jisho 缓存记录（抓取时间 + 结果快照）。"""
+
+    fetched_at: str
+    result: JishoResult
+
+    def to_dict(self) -> dict[str, Any]:
+        """序列化为可 JSON 化的字典。"""
+
+        return {"fetched_at": self.fetched_at, "result": self.result.to_dict()}
+
+    @classmethod
+    def from_dict(cls, data: Any) -> "JishoCacheItem | None":
+        """逐字段容错构造缓存记录；任一必填非法则返回 ``None``。"""
+
+        if not isinstance(data, dict):
+            return None
+        fetched_at = data.get("fetched_at")
+        if not isinstance(fetched_at, str) or not fetched_at.strip():
+            return None
+        result = JishoResult.from_dict(data.get("result"))
+        if result is None:
+            return None
+        return cls(fetched_at=fetched_at.strip(), result=result)
+
+
+class JishoCacheStore:
+    """负责 ``jisho_cache.json`` 的容错读取、按词写入与原子保存。"""
+
+    def __init__(self, path: Path) -> None:
+        """创建 Jisho 缓存存储。
+
+        Args:
+            path: 缓存文件绝对路径。
+        """
+
+        self._path: Path = Path(path)
+        self._items: dict[str, JishoCacheItem] = {}
+
+    # ------------------------------------------------------------------ #
+    # 路径
+    # ------------------------------------------------------------------ #
+    @property
+    def path(self) -> Path:
+        """缓存文件路径。"""
+
+        return self._path
+
+    @staticmethod
+    def default_path() -> Path:
+        """返回默认缓存路径 ``%APPDATA%\\desktop-pet\\jisho_cache.json``。
+
+        ``APPDATA`` 不可用时回落到用户主目录，保证任何环境下都返回一个可写路径。
+        """
+
+        appdata = os.environ.get("APPDATA")
+        base = Path(appdata) if appdata else Path.home()
+        return base / C.CONFIG_DIR_NAME / C.JISHO_CACHE_FILENAME
+
+    # ------------------------------------------------------------------ #
+    # 读
+    # ------------------------------------------------------------------ #
+    def load(self) -> dict[str, JishoCacheItem]:
+        """容错加载缓存。
+
+        - 文件缺失 / 为空 → 以空缓存启动（不备份）。
+        - 结构损坏（JSON 解析失败 / 根非对象 / ``items`` 非对象）→ **先备份**再以空缓存继续。
+        - 逐条非法记录跳过，保留合法记录。
+        """
+
+        try:
+            if not self._path.exists():
+                self._items = {}
+                return {}
+            text = self._path.read_text(encoding="utf-8")
+            if not text.strip():
+                logger.warning("Jisho 缓存文件为空：%s（以空缓存启动）", self._path)
+                self._items = {}
+                return {}
+
+            data = json.loads(text)
+            if not isinstance(data, dict):
+                self._backup_corrupt("根节点不是对象")
+                self._items = {}
+                return {}
+
+            raw_items = data.get("items")
+            if not isinstance(raw_items, dict):
+                self._backup_corrupt("items 字段不是对象")
+                self._items = {}
+                return {}
+
+            items: dict[str, JishoCacheItem] = {}
+            skipped = 0
+            for word, raw in raw_items.items():
+                item = JishoCacheItem.from_dict(raw)
+                if item is None:
+                    skipped += 1
+                    continue
+                items[word] = item
+
+            if skipped:
+                logger.warning("Jisho 缓存 %s 中有 %d 条非法记录被跳过", self._path, skipped)
+
+            self._items = items
+            logger.info("Jisho 缓存加载完成：%s（%d 条）", self._path, len(items))
+            return dict(items)
+        except json.JSONDecodeError as exc:
+            self._backup_corrupt(f"JSON 解析失败：{exc}")
+            self._items = {}
+            return {}
+        except OSError as exc:
+            logger.warning("读取 Jisho 缓存失败（%s）：%s（以空缓存启动）", self._path, exc)
+            self._items = {}
+            return {}
+        except Exception:  # noqa: BLE001 —— 边界处绝不冒泡崩溃
+            logger.exception("加载 Jisho 缓存时发生未预期异常（%s），以空缓存启动", self._path)
+            self._items = {}
+            return {}
+
+    # ------------------------------------------------------------------ #
+    # 查询 / 写
+    # ------------------------------------------------------------------ #
+    def get(self, word: str) -> JishoCacheItem | None:
+        """按词条返回缓存记录；不存在返回 ``None``。"""
+
+        return self._items.get(word)
+
+    def put(self, word: str, result: JishoResult, fetched_at: str) -> None:
+        """写入（或覆盖）一条缓存并落盘；空词 / 空结果忽略。"""
+
+        if not word or result is None:
+            return
+        self._items[word] = JishoCacheItem(fetched_at=str(fetched_at), result=result)
+        self.save()
+
+    def save(self) -> None:
+        """原子保存缓存（``mkstemp`` + ``fsync`` + ``os.replace``）；失败仅记 warning。"""
+
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            payload = json.dumps(
+                {
+                    "version": C.JISHO_CACHE_VERSION,
+                    "items": {word: item.to_dict() for word, item in self._items.items()},
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            fd, tmp_name = tempfile.mkstemp(
+                prefix="jisho-cache-", suffix=".tmp", dir=str(self._path.parent)
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    handle.write(payload)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(tmp_name, self._path)
+            except Exception:
+                # 清理残留临时文件后继续抛出到外层统一处理
+                try:
+                    if os.path.exists(tmp_name):
+                        os.remove(tmp_name)
+                except OSError:
+                    pass
+                raise
+            logger.info("Jisho 缓存已保存：%s（%d 条）", self._path, len(self._items))
+        except Exception:  # noqa: BLE001 —— 边界处绝不冒泡崩溃
+            logger.exception("保存 Jisho 缓存失败（%s），忽略本次保存", self._path)
+
+    # ------------------------------------------------------------------ #
+    # 内部
+    # ------------------------------------------------------------------ #
+    def _backup_corrupt(self, reason: str) -> None:
+        """把损坏的缓存 ``os.replace`` 为 ``<name>.corrupt-<时间戳>``（绝不覆盖旧备份）。"""
+
+        try:
+            if not self._path.exists():
+                return
+            suffix = self._corrupt_suffix()
+            target = self._path.with_name(f"{self._path.name}.corrupt-{suffix}")
+            counter = 1
+            while target.exists():
+                target = self._path.with_name(f"{self._path.name}.corrupt-{suffix}-{counter}")
+                counter += 1
+            os.replace(self._path, target)
+            logger.warning("Jisho 缓存损坏（%s）：%s 已备份为 %s", reason, self._path, target)
+        except Exception:  # noqa: BLE001 —— 备份失败也不能让程序崩溃
+            logger.exception("备份损坏的 Jisho 缓存失败（%s）", self._path)
+
+    def _corrupt_suffix(self) -> str:
+        """生成备份文件名后缀（取损坏文件 mtime 的整数秒）。
+
+        刻意**不 import** ``time`` / ``datetime``（core 时钟无关约定），
+        改由 ``os.stat`` 读取文件自身的 mtime 作为确定性时间戳来源。
+        """
+
+        try:
+            return str(int(os.stat(self._path).st_mtime))
+        except OSError:
+            return "unknown"
+
+
+__all__ = ["JishoCacheItem", "JishoCacheStore"]

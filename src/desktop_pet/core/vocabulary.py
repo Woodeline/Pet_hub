@@ -169,6 +169,16 @@ class WordBank:
     # ------------------------------------------------------------------ #
     # 查询
     # ------------------------------------------------------------------ #
+    def entry_by_id(self, item_id: str) -> VocabEntry | None:
+        """按全局唯一 ``id`` 查找词条；找不到返回 ``None``。"""
+
+        if not item_id:
+            return None
+        for entry in self._entries:
+            if entry.id == item_id:
+                return entry
+        return None
+
     def entries_for(self, level: str) -> list[VocabEntry]:
         """返回指定等级的全部词条（不存在的等级返回空列表）。"""
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final
 
-from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QTimer
+from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer
 from PySide6.QtGui import (
     QColor,
     QFont,
@@ -70,6 +70,7 @@ class BubbleWindow(QWidget):
         self._line_kana: str = ""
         self._line_translation: str = ""
         self._line_meaning: str = ""
+        self._line_level: str = ""  # 学习泡泡右上角等级 chip（N5..N1）
 
         self._font = QFont("Microsoft YaHei")
         self._font.setPointSize(C.BUBBLE_FONT_SIZE)
@@ -141,6 +142,7 @@ class BubbleWindow(QWidget):
         self._line_kana = entry.kana
         self._line_translation = entry.translation
         self._line_meaning = entry.meaning
+        self._line_level = entry.level
         self._duration = min(
             C.JP_BUBBLE_MAX_DURATION_S, max(C.JP_BUBBLE_MIN_DURATION_S, float(duration))
         )
@@ -180,7 +182,6 @@ class BubbleWindow(QWidget):
             else:
                 body = QRectF(0.0, tail_h, self.width(), self.height() - tail_h)
 
-            bg = QColor(C.COLORS["bubble_bg"])
             border = QColor(C.COLORS["warm_brown"])
 
             path = QPainterPath()
@@ -201,14 +202,25 @@ class BubbleWindow(QWidget):
             tail.closeSubpath()
             path = path.united(tail)
 
+            # 底部柔和阴影（多层半透明圆角矩形错位，画在 body 之前）
+            self._paint_shadow(painter, body)
+
+            # body 三段垂直渐变：顶高光 → 奶白 → 底部略深
+            body_fill = QLinearGradient(body.topLeft(), body.bottomLeft())
+            body_fill.setColorAt(0.0, QColor(C.COLORS["bubble_gradient_hi"]))
+            body_fill.setColorAt(0.5, QColor(C.COLORS["bubble_bg"]))
+            body_fill.setColorAt(1.0, QColor(C.COLORS["bubble_gradient_bottom"]))
+
             painter.setPen(QPen(border, 1.8))
-            painter.setBrush(bg)
+            painter.setBrush(body_fill)
             painter.drawPath(path)
 
             # 文字
             if self._mode == _MODE_WORD:
                 self._paint_highlight(painter, body)
+                self._paint_divider(painter, body)
                 self._paint_word(painter, body)
+                self._paint_level_chip(painter, body)
             else:
                 painter.setPen(QPen(QColor(C.COLORS["bubble_text"])))
                 painter.setFont(self._font)
@@ -244,6 +256,71 @@ class BubbleWindow(QWidget):
             max(0.0, C.BUBBLE_CORNER_RADIUS - 2.0),
             max(0.0, C.BUBBLE_CORNER_RADIUS - 2.0),
         )
+        painter.restore()
+
+    def _paint_shadow(self, painter: QPainter, body: QRectF) -> None:
+        """在 body 下方绘制多层半透明圆角矩形错位阴影（底部柔和阴影，设计 §A1.1）。"""
+
+        base = QColor(C.COLORS["bubble_shadow"])
+        # (向下偏移量, 透明度) —— 越远越淡，形成柔和渐变阴影
+        layers: tuple[tuple[float, int], ...] = ((4.0, 20), (2.5, 14), (1.0, 9))
+        painter.save()
+        painter.setPen(Qt.PenStyle.NoPen)
+        for offset, alpha in layers:
+            shadow_rect = QRectF(
+                body.left(), body.top() + offset, body.width(), body.height()
+            )
+            painter.setBrush(QColor(base.red(), base.green(), base.blue(), alpha))
+            painter.drawRoundedRect(
+                shadow_rect, C.BUBBLE_CORNER_RADIUS, C.BUBBLE_CORNER_RADIUS
+            )
+        painter.restore()
+
+    def _paint_divider(self, painter: QPainter, body: QRectF) -> None:
+        """在「单词/假名」与「翻译/释义」之间绘制一条浅色分割线。"""
+
+        wrap_w = C.JP_BUBBLE_MAX_WIDTH
+        layout = self._word_layout(wrap_w)
+        if len(layout) < 3:
+            return
+        content = body.adjusted(
+            C.BUBBLE_PAD_X, C.BUBBLE_PAD_Y, -C.BUBBLE_PAD_X, -C.BUBBLE_PAD_Y
+        )
+        spacing = C.BUBBLE_LINE_SPACING
+        total_h = sum(rect.height() for _f, _c, _t, rect in layout) + spacing * (len(layout) - 1)
+        left = content.left() + max(0.0, (content.width() - wrap_w) / 2.0)
+        y = content.top() + max(0.0, (content.height() - total_h) / 2.0)
+        # 前两行（单词 + 假名）结束后，再往下偏移半行距即分割线
+        y += layout[0][3].height() + spacing + layout[1][3].height() + spacing / 2.0
+
+        painter.save()
+        painter.setPen(QPen(QColor(C.COLORS["bubble_divider"]), 1.0))
+        painter.drawLine(QPointF(left + 4.0, y), QPointF(left + wrap_w - 4.0, y))
+        painter.restore()
+
+    def _paint_level_chip(self, painter: QPainter, body: QRectF) -> None:
+        """在 body 右上角绘制等级 chip（N5..N1）。"""
+
+        level = self._line_level
+        if not level:
+            return
+        font = QFont(C.JP_BUBBLE_FONT_FAMILY)
+        font.setPointSize(9)
+        font.setBold(True)
+        painter.save()
+        painter.setFont(font)
+        metrics = QFontMetricsF(font)
+        text_w = metrics.horizontalAdvance(level)
+        chip_w = text_w + 12.0
+        chip_h = 18.0
+        chip_rect = QRectF(
+            body.right() - chip_w - 6.0, body.top() + 6.0, chip_w, chip_h
+        )
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(C.COLORS["jp_level_chip_bg"]))
+        painter.drawRoundedRect(chip_rect, 8.0, 8.0)
+        painter.setPen(QPen(QColor(C.COLORS["jp_level_chip_text"])))
+        painter.drawText(chip_rect, int(Qt.AlignmentFlag.AlignCenter), level)
         painter.restore()
 
     def _paint_word(self, painter: QPainter, body: QRectF) -> None:

@@ -48,4 +48,14 @@ def word_bank_path() -> Path:
     return package_data_dir() / C.WORD_BANK_FILE_NAME
 
 
-__all__ = ["is_frozen", "package_data_dir", "word_bank_path"]
+def word_details_path() -> Path:
+    """返回内置中文详情库 JSON 的意图路径（始终返回，不因文件缺失而抛）。
+
+    文件缺失时由 :meth:`~desktop_pet.core.word_detail_bank.WordDetailBank.load`
+    优雅降级为空库，不影响启动。
+    """
+
+    return package_data_dir() / C.WORD_DETAILS_FILE_NAME
+
+
+__all__ = ["is_frozen", "package_data_dir", "word_bank_path", "word_details_path"]

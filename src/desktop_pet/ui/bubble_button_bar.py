@@ -15,7 +15,7 @@ from typing import Final
 
 from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPen
-from PySide6.QtWidgets import QHBoxLayout, QPushButton, QWidget
+from PySide6.QtWidgets import QGraphicsDropShadowEffect, QHBoxLayout, QPushButton, QWidget
 
 from desktop_pet.core import constants as C
 
@@ -70,6 +70,15 @@ class BubbleButtonBar(QWidget):
         self._btn_vocab.clicked.connect(self.vocab_clicked.emit)
 
         self.setStyleSheet(self._build_qss())
+
+        # 轻投影：主按钮底部柔和阴影（微交互质感，设计 §A1.1）
+        shadow_color = QColor(C.COLORS["bubble_shadow"])
+        shadow_color.setAlpha(70)
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(10)
+        shadow.setOffset(0, 2)
+        shadow.setColor(shadow_color)
+        self._btn_mastered.setGraphicsEffect(shadow)
 
         # 相位机（与气泡一致的淡入/停留/淡出）
         self._phase: int = _PHASE_HIDDEN
@@ -142,7 +151,7 @@ class BubbleButtonBar(QWidget):
     # 内部
     # ------------------------------------------------------------------ #
     def _build_qss(self) -> str:
-        """构造两按钮的胶囊 QSS（含悬停 / 按下反馈，色值取自 ``C.COLORS``/``C.JP_BUTTON_*``）。"""
+        """构造两按钮的胶囊 QSS（渐变填充 + 悬停 / 按下反馈，色值取自 ``C.COLORS``/``C.JP_BUTTON_*``）。"""
 
         radius = C.JP_BUTTON_RADIUS
         pad_x = C.JP_BUTTON_PAD_X
@@ -150,16 +159,33 @@ class BubbleButtonBar(QWidget):
         font_size = C.JP_BUTTON_FONT_SIZE
         font_family = C.JP_BUBBLE_FONT_FAMILY
 
+        primary_top = C.COLORS["jp_button_primary_hover"]
+        primary_mid = C.COLORS["jp_button_primary_bg"]
+        primary_bottom = C.COLORS["jp_button_primary_pressed"]
+
+        mastered_normal = (
+            "qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            f"stop:0 {primary_top}, stop:0.5 {primary_mid}, stop:1 {primary_bottom})"
+        )
+        mastered_hover = (
+            "qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            f"stop:0 {primary_top}, stop:1 {primary_mid})"
+        )
+        mastered_pressed = (
+            "qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            f"stop:0 {primary_mid}, stop:1 {primary_bottom})"
+        )
+
         return (
             f"#masteredButton {{"
-            f"background-color: {C.COLORS['jp_button_primary_bg']};"
+            f"background: {mastered_normal};"
             f"color: {C.COLORS['jp_button_primary_text']};"
             f"border: none; border-radius: {radius}px;"
             f"padding: {pad_y}px {pad_x}px;"
             f"font-size: {font_size}px; font-family: \"{font_family}\";"
             f"}}"
-            f"#masteredButton:hover {{ background-color: {C.COLORS['jp_button_primary_hover']}; }}"
-            f"#masteredButton:pressed {{ background-color: {C.COLORS['jp_button_primary_pressed']}; }}"
+            f"#masteredButton:hover {{ background: {mastered_hover}; }}"
+            f"#masteredButton:pressed {{ background: {mastered_pressed}; }}"
             f"#vocabButton {{"
             f"background-color: transparent;"
             f"color: {C.COLORS['jp_button_secondary_text']};"

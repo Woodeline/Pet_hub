@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QComboBox,
@@ -45,6 +45,8 @@ _STATUS_COLOR_KEYS: dict[str, str] = {
 
 class LogWindow(QWidget):
     """学习记录回查窗口（普通顶层窗口，纯展示）。"""
+
+    word_double_clicked = Signal(str)  # 携带 entry.id
 
     def __init__(self, parent: QWidget | None = None) -> None:
         """构造学习记录窗口。"""
@@ -136,6 +138,7 @@ class LogWindow(QWidget):
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self._table.cellDoubleClicked.connect(self._on_cell_double_clicked)
         header = self._table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
@@ -156,6 +159,12 @@ class LogWindow(QWidget):
     # ------------------------------------------------------------------ #
     # 内部
     # ------------------------------------------------------------------ #
+    def _on_cell_double_clicked(self, row: int, _column: int) -> None:
+        """双击表格行 → 发出该行词条 id（供 controller 打开详情窗口）。"""
+
+        if 0 <= row < len(self._shown_entries):
+            self.word_double_clicked.emit(self._shown_entries[row].id)
+
     def _ensure_date(self, day: str) -> None:
         """确保日期下拉中存在 ``day``（不在 ``set_dates`` 列表里时补入）。"""
 

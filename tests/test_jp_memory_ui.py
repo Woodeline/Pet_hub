@@ -25,6 +25,9 @@ from desktop_pet.core.mastered_store import MasteredStore
 from desktop_pet.core.vocab_store import VocabStore
 from desktop_pet.core.vocabulary import VocabEntry, WordBank
 from desktop_pet.core.weighted_picker import WeightedWordPicker
+from desktop_pet.core.word_detail import Example, WordDetail
+from desktop_pet.core.word_detail_bank import WordDetailBank
+from desktop_pet.core.word_details_cache_store import WordDetailsCacheStore
 from desktop_pet.ui.bubble import BubbleWindow
 from desktop_pet.ui.bubble_button_bar import BubbleButtonBar
 from desktop_pet.ui.log_window import LogWindow
@@ -215,7 +218,7 @@ def controller(qapp: QApplication, tmp_path: Path) -> PetAppController:
     ctrl._cfg.bubble_enabled = True
     ctrl._cfg.jp_level = "N5"
     ctrl._cfg.jp_daily_limit = 5
-    ctrl._cfg.jp_bubble_duration_s = 30.0
+    ctrl._cfg.jp_bubble_duration_s = 30
 
     entries = tuple(_entry(i) for i in range(1, 4))
     ctrl._bank = WordBank(entries)
@@ -227,6 +230,11 @@ def controller(qapp: QApplication, tmp_path: Path) -> PetAppController:
     ctrl._mastered.load()
     ctrl._daily_log.load()
     ctrl._vocab.load()
+
+    # 详情数据层：隔离到 tmp_path，避免污染真实 APPDATA
+    ctrl._detail_cache = WordDetailsCacheStore(tmp_path / "word_details_cache.json")
+    ctrl._detail_cache.load()
+    ctrl._detail_bank = WordDetailBank.empty()
 
     ctrl._today_str = "2025-01-01"
     ctrl._last_bubble_ts = float("-inf")
@@ -304,3 +312,104 @@ def test_controller_local_date_str_format(controller: PetAppController) -> None:
     import re
 
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", value), f"非法日期 key：{value}"
+
+
+# --------------------------------------------------------------------------- #
+# 5. B 版：配置切换 + 立即显示（方案 A）
+# --------------------------------------------------------------------------- #
+def test_controller_duration_and_daily_limit_slots(controller: PetAppController) -> None:
+    controller._on_jp_duration_selected(60)
+    assert controller._cfg.jp_bubble_duration_s == 60
+    controller._on_jp_daily_limit_selected(20)
+    assert controller._cfg.jp_daily_limit == 20
+
+    # 非法档位 → no-op（保留原值）
+    controller._on_jp_duration_selected(45)
+    assert controller._cfg.jp_bubble_duration_s == 60
+    controller._on_jp_daily_limit_selected(7)
+    assert controller._cfg.jp_daily_limit == 20
+
+
+def test_controller_show_now_disposes_current_and_shows_new(controller: PetAppController) -> None:
+    """方案 A：立即显示时若当前词在展示，先未处理当前词再弹新词（shown_today +1）。"""
+
+    controller._show_word_bubble(0.0)
+    first = controller._current_word
+    assert first is not None
+    assert controller._daily_log.count_for("2025-01-01") == 0
+
+    controller._on_jp_show_now()
+
+    assert controller._current_word is not None
+    assert controller._current_word.id != first.id
+    assert controller._daily_log.count_for("2025-01-01") == 1
+    assert controller._daily_log.unprocessed_count_for("2025-01-01") == 1
+
+
+def test_controller_show_now_bypasses_gap(controller: PetAppController) -> None:
+    """立即显示跳过 BUBBLE_MIN_GAP_S 最小间隔守卫。"""
+
+    controller._last_bubble_ts = 100.0
+    controller._show_word_bubble(100.0)  # 间隔不足 → 不展示
+    assert controller._current_word is None
+
+    controller._show_word_bubble(100.0, bypass_gap=True)  # 立即显示 → 展示
+    assert controller._current_word is not None
+
+
+# --------------------------------------------------------------------------- #
+# 6. 中文详情数据层（打包库优先 → 缓存补充）与窗口单例
+# --------------------------------------------------------------------------- #
+def _detail(meaning: str = "我") -> WordDetail:
+    return WordDetail(
+        meaning_zh=(meaning,),
+        pos_zh=("代词",),
+        examples=(Example("私は学生です。", "我是学生。"),),
+        usage_note_zh="正式、通用。",
+    )
+
+
+def test_controller_detail_bank_priority_over_cache(controller: PetAppController) -> None:
+    bank_detail = _detail("库")
+    cache_detail = _detail("缓存")
+    controller._detail_bank = WordDetailBank({"n5-0001": bank_detail})
+    controller._detail_cache.put("n5-0001", cache_detail, controller._now_iso())
+
+    detail, source = controller._lookup_word_detail("n5-0001")
+    assert detail == bank_detail        # 打包库权威优先
+    assert source == C.WORD_DETAIL_SOURCE_LOCAL
+
+
+def test_controller_detail_cache_fallback(controller: PetAppController) -> None:
+    cache_detail = _detail("缓存")
+    controller._detail_bank = WordDetailBank.empty()
+    controller._detail_cache.put("n5-0001", cache_detail, controller._now_iso())
+
+    detail, source = controller._lookup_word_detail("n5-0001")
+    assert detail == cache_detail
+    assert source == C.WORD_DETAIL_SOURCE_CACHE
+
+
+def test_controller_detail_miss_returns_none(controller: PetAppController) -> None:
+    controller._detail_bank = WordDetailBank.empty()
+    detail, source = controller._lookup_word_detail("n5-0001")
+    assert detail is None and source is None
+    assert controller._lookup_word_detail("") == (None, None)
+
+
+def test_controller_detail_cache_empty_detail_is_miss(controller: PetAppController) -> None:
+    controller._detail_cache.put("n5-0001", WordDetail(), controller._now_iso())
+    detail, source = controller._lookup_word_detail("n5-0001")
+    assert detail is None and source is None
+
+
+def test_controller_open_word_detail_singleton(controller: PetAppController) -> None:
+    controller._detail_cache.put("n5-0001", _detail("我"), controller._now_iso())
+    controller._detail_cache.put("n5-0002", _detail("你"), controller._now_iso())
+
+    controller._open_word_detail(_entry(1))
+    assert controller._detail_window is not None
+    first = controller._detail_window
+
+    controller._open_word_detail(_entry(2))
+    assert controller._detail_window is first  # 复用单例
