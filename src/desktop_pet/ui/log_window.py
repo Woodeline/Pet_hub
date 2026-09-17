@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 
 from desktop_pet.core import constants as C
 from desktop_pet.core.daily_log_store import DailyLogEntry
+from desktop_pet.ui import motion_ui, theme
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +36,13 @@ _STATUS_LABELS: dict[str, str] = {
     C.DAILY_LOG_STATUS_VOCAB: C.JP_LOG_STATUS_VOCAB,
     C.DAILY_LOG_STATUS_UNPROCESSED: C.JP_LOG_STATUS_UNPROCESSED,
 }
-#: 状态 → 标签颜色 key
+#: 状态 → 语义色 key（指向 ``SEMANTIC_COLORS``）。
+# P1 三态映射依据（计划 §3）：已掌握=信息色 ``info``；生词从「蓝」改为琥珀 ``warning``
+# 以与信息色解耦；未处理=辅助灰 ``muted``。
 _STATUS_COLOR_KEYS: dict[str, str] = {
-    C.DAILY_LOG_STATUS_MASTERED: "log_status_mastered",
-    C.DAILY_LOG_STATUS_VOCAB: "log_status_vocab",
-    C.DAILY_LOG_STATUS_UNPROCESSED: "log_status_unprocessed",
+    C.DAILY_LOG_STATUS_MASTERED: "info",
+    C.DAILY_LOG_STATUS_VOCAB: "warning",
+    C.DAILY_LOG_STATUS_UNPROCESSED: "muted",
 }
 
 
@@ -59,6 +62,8 @@ class LogWindow(QWidget):
         self._entries_by_day: dict[str, list[DailyLogEntry]] = {}
         self._shown_entries: list[DailyLogEntry] = []
         self._limit: int = C.JP_DAILY_LIMIT
+        #: 「减少动效」开关（由 controller 在窗口显示前经 :meth:`set_reduce_motion` 注入）。
+        self._reduce_motion: bool = False
 
         self._build_ui()
 
@@ -98,11 +103,29 @@ class LogWindow(QWidget):
         data = self._combo_status.currentData()
         return str(data) if data else C.JP_LOG_FILTER_ALL
 
+    def set_reduce_motion(self, flag: bool) -> None:
+        """注入「减少动效」开关（由 controller 在窗口显示前调用）。"""
+
+        self._reduce_motion = bool(flag)
+
+    def closeEvent(self, event) -> None:  # noqa: N802 —— Qt 命名约定
+        """关闭：开启动效且窗口可见时先淡出再隐藏，否则沿用默认关闭。"""
+
+        if motion_ui.motion_enabled(self._reduce_motion) and self.isVisible():
+            event.ignore()
+            motion = motion_ui.create_window_motion(self, self._reduce_motion)
+            motion.fade_out(on_finished=self.hide)
+            return
+        super().closeEvent(event)
+
     # ------------------------------------------------------------------ #
     # UI 构建
     # ------------------------------------------------------------------ #
     def _build_ui(self) -> None:
         """构建界面元素与布局。"""
+
+        # 统一接入语义 token（QSS 由 theme 生成）。
+        theme.apply_theme(self)
 
         root = QVBoxLayout(self)
 
@@ -125,6 +148,7 @@ class LogWindow(QWidget):
 
         # 中部：表格
         self._table = QTableWidget(0, 5, self)
+        self._table.setAlternatingRowColors(True)
         self._table.setHorizontalHeaderLabels(
             [
                 C.JP_LOG_COL_WORD,
@@ -196,7 +220,7 @@ class LogWindow(QWidget):
                 if col == 4:
                     color_key = _STATUS_COLOR_KEYS.get(entry.status)
                     if color_key:
-                        cell.setForeground(QColor(C.COLORS[color_key]))
+                        cell.setForeground(QColor(C.SEMANTIC_COLORS[color_key]))
                 self._table.setItem(row, col, cell)
 
         # 统计栏以「当日全量」计（不受状态筛选影响）

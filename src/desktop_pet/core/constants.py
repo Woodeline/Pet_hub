@@ -417,6 +417,12 @@ BUBBLE_TEXTS: Final[dict[Expression | Mood, list[str]]] = {
 TRAY_TOOLTIP: Final[str] = f"{APP_DISPLAY_NAME} · 桌面宠物"
 BUBBLE_MAX_WIDTH_PX: Final[float] = BUBBLE_MAX_WIDTH
 
+# —— 托盘通用菜单文案（减少动效开关：对应 prefers-reduced-motion）——
+TRAY_MENU_REDUCE_MOTION: Final[str] = "减少动效"
+TRAY_MENU_REDUCE_MOTION_TIP: Final[str] = "关闭窗口淡入淡出与加载动画，对动效敏感时更友好"
+TRAY_NOTIFY_REDUCE_MOTION_ON: Final[str] = "已开启「减少动效」"
+TRAY_NOTIFY_REDUCE_MOTION_OFF: Final[str] = "已关闭「减少动效」"
+
 # --------------------------------------------------------------------------- #
 # 10. 日语学习（JP-01~JP-16）—— 难度 / 节奏 / 排版 / 文件 / 文案
 # --------------------------------------------------------------------------- #
@@ -713,6 +719,10 @@ __all__ = [
     "JP_MENU_DURATION",
     "JP_MENU_DAILY_LIMIT",
     "JP_MENU_SHOW_NOW",
+    "TRAY_MENU_REDUCE_MOTION",
+    "TRAY_MENU_REDUCE_MOTION_TIP",
+    "TRAY_NOTIFY_REDUCE_MOTION_ON",
+    "TRAY_NOTIFY_REDUCE_MOTION_OFF",
     "JP_NOTIFY_MASTERED_ADDED",
     "JP_NOTIFY_MASTERED_DUPLICATE",
     "JP_NOTIFY_LEVEL_DONE",

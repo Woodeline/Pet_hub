@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 
 from desktop_pet.core import constants as C
 from desktop_pet.core.vocab_store import VocabItem
+from desktop_pet.ui import motion_ui, theme
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,8 @@ class VocabWindow(QWidget):
 
         self._all_items: list[VocabItem] = []
         self._shown_items: list[VocabItem] = []
+        #: 「减少动效」开关（由 controller 在窗口显示前经 :meth:`set_reduce_motion` 注入）。
+        self._reduce_motion: bool = False
 
         self._build_ui()
 
@@ -68,11 +71,29 @@ class VocabWindow(QWidget):
         data = self._combo.currentData()
         return str(data) if data else C.JP_VOCAB_FILTER_ALL
 
+    def set_reduce_motion(self, flag: bool) -> None:
+        """注入「减少动效」开关（由 controller 在窗口显示前调用）。"""
+
+        self._reduce_motion = bool(flag)
+
+    def closeEvent(self, event) -> None:  # noqa: N802 —— Qt 命名约定
+        """关闭：开启动效且窗口可见时先淡出再隐藏，否则沿用默认关闭。"""
+
+        if motion_ui.motion_enabled(self._reduce_motion) and self.isVisible():
+            event.ignore()
+            motion = motion_ui.create_window_motion(self, self._reduce_motion)
+            motion.fade_out(on_finished=self.hide)
+            return
+        super().closeEvent(event)
+
     # ------------------------------------------------------------------ #
     # UI 构建
     # ------------------------------------------------------------------ #
     def _build_ui(self) -> None:
         """构建界面元素与布局。"""
+
+        # 统一接入语义 token（QSS 由 theme 生成）。
+        theme.apply_theme(self)
 
         root = QVBoxLayout(self)
 
@@ -87,10 +108,12 @@ class VocabWindow(QWidget):
         top.addWidget(self._combo)
         top.addStretch(1)
         self._btn_remove = QPushButton(C.JP_VOCAB_BTN_REMOVE, self)
+        theme.set_variant(self._btn_remove, "secondary")
         self._btn_remove.clicked.connect(self._on_remove_clicked)
         self._btn_remove.setEnabled(False)
         top.addWidget(self._btn_remove)
         self._btn_clear = QPushButton(C.JP_VOCAB_BTN_CLEAR, self)
+        theme.set_variant(self._btn_clear, "destructive")
         self._btn_clear.clicked.connect(self._on_clear_clicked)
         top.addWidget(self._btn_clear)
         root.addLayout(top)
@@ -98,6 +121,7 @@ class VocabWindow(QWidget):
         # 中部：表格 / 空态 二选一
         self._stack = QStackedWidget(self)
         self._table = QTableWidget(0, 4, self)
+        self._table.setAlternatingRowColors(True)
         self._table.setHorizontalHeaderLabels(
             [
                 C.JP_VOCAB_COL_WORD,
@@ -131,6 +155,7 @@ class VocabWindow(QWidget):
         bottom.addWidget(self._status)
         bottom.addStretch(1)
         self._btn_close = QPushButton(C.JP_VOCAB_BTN_CLOSE, self)
+        theme.set_variant(self._btn_close, "ghost")
         self._btn_close.clicked.connect(self.close)
         bottom.addWidget(self._btn_close)
         root.addLayout(bottom)
@@ -151,7 +176,8 @@ class VocabWindow(QWidget):
         self._shown_items = shown
 
         self._table.setRowCount(len(shown))
-        level_color = QColor(C.COLORS["vocab_level_tag"])
+        # 等级列改用中性次级色（不再用绿色标签色，避免与正向绿撞车）。
+        level_color = QColor(C.SEMANTIC_COLORS["text_secondary"])
         for row, item in enumerate(shown):
             cells = (item.word, item.kana, item.translation, item.level)
             for col, text in enumerate(cells):

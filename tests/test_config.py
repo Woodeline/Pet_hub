@@ -175,6 +175,8 @@ def test_load_after_save_is_json_readable(config_store: ConfigStore, config_path
     assert set(data) == {
         "version", "window_x", "window_y", "scale",
         "listen_enabled", "bubble_enabled", "autostart",
+        # 增量改造：新增「减少动效」开关（UI 视觉升级 P2；CONFIG_VERSION 保持 1）
+        "reduce_motion",
         "jp_enabled", "jp_level",
         "jp_bubble_duration_s", "jp_daily_limit",
         # 增量改造：DeepSeek 联网 / 中文详情配置（CONFIG_VERSION 保持 1）
@@ -315,3 +317,40 @@ def test_missing_jp_memory_fields_use_defaults() -> None:
     assert cfg.jp_level == "N4"
     assert cfg.jp_bubble_duration_s == C.JP_BUBBLE_DURATION_S
     assert cfg.jp_daily_limit == C.JP_DAILY_LIMIT
+
+
+# --------------------------------------------------------------------------- #
+# 8. 「减少动效」开关容错（UI 视觉升级 P2；CONFIG_VERSION 保持 1）
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        (None, False),          # 缺字段 → 默认（不减少动效）
+        (True, True),
+        (False, False),
+        ("yes", True),          # 常见真字面量
+        ("ON", True),
+        ("no", False),
+        ("off", False),
+        ("maybe", False),       # 无法识别字符串 → 默认 False
+        ([1, 2], False),        # 非法类型（list）→ 默认 False
+        ({"a": 1}, False),      # 非法类型（dict）→ 默认 False
+        (123, True),            # 数值走 _coerce_bool 语义：非零 → True
+        (0, False),
+    ],
+)
+def test_reduce_motion_coercion(raw, expected) -> None:
+    """复用既有 ``_coerce_bool`` 容错器；缺失 / 非法类型回落 False。"""
+
+    cfg = AppConfig.from_dict({"reduce_motion": raw})
+    assert cfg.reduce_motion is expected
+
+
+def test_reduce_motion_default_and_roundtrip(config_store: ConfigStore) -> None:
+    """默认关闭；显式开启后可往返序列化。"""
+
+    assert AppConfig().reduce_motion is False
+    config_store.save(AppConfig(reduce_motion=True))
+    loaded = config_store.load()
+    assert loaded.reduce_motion is True
+    assert loaded.to_dict()["reduce_motion"] is True

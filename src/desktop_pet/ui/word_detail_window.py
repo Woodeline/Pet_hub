@@ -26,6 +26,8 @@ from PySide6.QtWidgets import (
 from desktop_pet.core import constants as C
 from desktop_pet.core.vocabulary import VocabEntry
 from desktop_pet.core.word_detail import WordDetail
+from desktop_pet.ui import motion_ui, theme
+from desktop_pet.ui.spinner import Spinner
 from desktop_pet.ui.word_detail_worker import (
     WordDetailNetConfig,
     WordDetailSignals,
@@ -64,6 +66,8 @@ class WordDetailWindow(QWidget):
         self._net: WordDetailNetConfig | None = None
         self._active_signals: WordDetailSignals | None = None
         self._closed: bool = False
+        #: 「减少动效」开关（由 controller 在 show 之前经 :meth:`set_reduce_motion` 注入）。
+        self._reduce_motion: bool = False
 
         self._build_ui()
 
@@ -101,6 +105,7 @@ class WordDetailWindow(QWidget):
             self._status_label.setText("")
             self._status_label.setVisible(False)
             self._retry_btn.setVisible(False)
+            self._hide_spinner()
             return
 
         # 本地词库 / 用户缓存均未命中
@@ -113,12 +118,15 @@ class WordDetailWindow(QWidget):
         self._start_worker()
 
     def set_loading(self) -> None:
-        """进入「联网查询中」态（隐藏重试）。"""
+        """进入「联网查询中」态（隐藏重试；spinner 旋转 + 状态标签淡入）。"""
 
         self._status_label.setText(C.WORD_DETAIL_LOADING)
         self._status_label.setVisible(True)
         self._retry_btn.setVisible(False)
         self._retry_btn.setEnabled(True)
+        self._spinner.setVisible(True)
+        self._spinner.start()
+        motion_ui.fade_label_in(self._status_label, self._reduce_motion)
 
     def set_detail_result(self, item_id: str, detail: WordDetail) -> None:
         """回填联网成功结果（来源 = 联网获取）。
@@ -136,6 +144,7 @@ class WordDetailWindow(QWidget):
         self._status_label.setVisible(False)
         self._retry_btn.setVisible(False)
         self._retry_btn.setEnabled(True)
+        self._hide_spinner()
 
     def set_detail_error(self, item_id: str, msg: str) -> None:
         """进入失败态：显示中文提示并给出重试（离线降级文案原样展示）。
@@ -153,16 +162,36 @@ class WordDetailWindow(QWidget):
         self._status_label.setVisible(True)
         self._retry_btn.setVisible(True)
         self._retry_btn.setEnabled(True)
+        self._hide_spinner()
+
+    def set_reduce_motion(self, flag: bool) -> None:
+        """注入「减少动效」开关（由 controller 在窗口显示前调用）。"""
+
+        self._reduce_motion = bool(flag)
+        self._spinner.set_reduce_motion(self._reduce_motion)
 
     # ------------------------------------------------------------------ #
     # Qt 事件
     # ------------------------------------------------------------------ #
     def closeEvent(self, event) -> None:  # noqa: N802 —— Qt 命名约定
-        """关闭：清空线程池 + 断开信号 + 置 ``_closed`` 守卫，杜绝回调已销毁对象。"""
+        """关闭：清空线程池 + 断开信号 + 置 ``_closed`` 守卫，杜绝回调已销毁对象。
+
+        动效（P2）：先**同步**完成既有收尾（置守卫 / 清池 / 断连 / 停 spinner）；
+        仅当开启动效且窗口**当前可见**时才改为「淡出后再隐藏」（``event.ignore()`` ),
+        未显示过的窗口（如单测直接 ``close()``）一律走原始路径。
+        """
 
         self._closed = True
         self._pool.clear()
         self._disconnect_active()
+        self._spinner.stop()
+
+        if motion_ui.motion_enabled(self._reduce_motion) and self.isVisible():
+            event.ignore()
+            motion = motion_ui.create_window_motion(self, self._reduce_motion)
+            motion.fade_out(on_finished=self.hide)
+            return
+
         super().closeEvent(event)
 
     # ------------------------------------------------------------------ #
@@ -171,21 +200,28 @@ class WordDetailWindow(QWidget):
     def _build_ui(self) -> None:
         """构建界面元素与布局。"""
 
+        # 统一接入语义 token（QSS 由 theme 生成，组件内只引用 token 色值）。
+        theme.apply_theme(self)
+
         root = QVBoxLayout(self)
 
         # 头部：大号单词 + 等级 chip
         header = QHBoxLayout()
         self._word_label = QLabel("", self)
         self._word_label.setStyleSheet(
-            f"font-size: 24px; font-weight: bold; color: {C.COLORS['vocab_text']};"
+            f"font-size: {C.FONT_SIZE['display']}px; font-weight: bold;"
+            f" color: {C.SEMANTIC_COLORS['text_primary']};"
         )
         header.addWidget(self._word_label)
+        # 等级 chip：从中性绿填充改为「描边 chip」，消除与「记住了」按钮的绿色撞车。
         self._level_chip = QLabel("", self)
         self._level_chip.setStyleSheet(
-            f"background: {C.COLORS['jp_level_chip_bg']};"
-            f"color: {C.COLORS['jp_level_chip_text']};"
-            "border-radius: 6px; padding: 2px 8px; font-weight: bold;"
+            "background: transparent;"
+            f" color: {C.SEMANTIC_COLORS['text_secondary']};"
+            f" border: 1px solid {C.SEMANTIC_COLORS['border']};"
+            f" border-radius: {C.RADIUS['sm']}px; padding: 2px 8px; font-weight: bold;"
         )
+        theme.set_role(self._level_chip, "chip")
         header.addWidget(self._level_chip)
         header.addStretch(1)
         root.addLayout(header)
@@ -193,7 +229,9 @@ class WordDetailWindow(QWidget):
         # 基础信息：假名 + 来源标注
         self._kana_label = self._add_field(root, C.WORD_DETAIL_LABEL_KANA)
         self._source_label = QLabel("", self)
-        self._source_label.setStyleSheet(f"color: {C.COLORS['bubble_sub_text']}; margin-top: 2px;")
+        self._source_label.setStyleSheet(
+            f"color: {C.SEMANTIC_COLORS['text_secondary']}; margin-top: 2px;"
+        )
         root.addWidget(self._source_label)
 
         # 五要素分组
@@ -204,19 +242,26 @@ class WordDetailWindow(QWidget):
         self._examples_label.setTextFormat(Qt.TextFormat.RichText)
         self._usage_label = self._add_group(root, C.WORD_DETAIL_LABEL_USAGE)
 
-        # 状态 / 重试
+        # 状态 / 重试（spinner 与状态标签同行；状态标签文本/可见性逻辑保持不变）
+        status_row = QHBoxLayout()
+        self._spinner = Spinner(self, reduce_motion=self._reduce_motion)
+        self._spinner.setVisible(False)
+        status_row.addWidget(self._spinner)
         self._status_label = QLabel("", self)
         self._status_label.setWordWrap(True)
         self._status_label.setVisible(False)
-        root.addWidget(self._status_label)
+        status_row.addWidget(self._status_label, 1)
+        root.addLayout(status_row)
 
         bottom = QHBoxLayout()
         self._retry_btn = QPushButton(C.WORD_DETAIL_RETRY, self)
+        theme.set_variant(self._retry_btn, "primary")
         self._retry_btn.clicked.connect(self._on_retry)
         self._retry_btn.setVisible(False)
         bottom.addWidget(self._retry_btn)
         bottom.addStretch(1)
         self._close_btn = QPushButton(C.WORD_DETAIL_CLOSE, self)
+        theme.set_variant(self._close_btn, "ghost")
         self._close_btn.clicked.connect(self.close)
         bottom.addWidget(self._close_btn)
         root.addLayout(bottom)
@@ -228,7 +273,10 @@ class WordDetailWindow(QWidget):
 
         row = QHBoxLayout()
         caption_label = QLabel(caption, self)
-        caption_label.setStyleSheet(f"color: {C.COLORS['bubble_sub_text']};")
+        caption_label.setStyleSheet(
+            f"color: {C.SEMANTIC_COLORS['text_secondary']};"
+            f" font-size: {C.FONT_SIZE['caption']}px;"
+        )
         caption_label.setFixedWidth(72)
         row.addWidget(caption_label)
         value_label = QLabel("", self)
@@ -243,7 +291,9 @@ class WordDetailWindow(QWidget):
 
         caption_label = QLabel(caption, self)
         caption_label.setStyleSheet(
-            f"color: {C.COLORS['bubble_sub_text']}; font-weight: bold; margin-top: 6px;"
+            f"color: {C.SEMANTIC_COLORS['text_secondary']};"
+            f" font-size: {C.FONT_SIZE['body']}px;"
+            f" font-weight: bold; margin-top: {C.SPACING['sm']}px;"
         )
         root.addWidget(caption_label)
         value_label = QLabel("", self)
@@ -274,6 +324,12 @@ class WordDetailWindow(QWidget):
             self._usage_label,
         ):
             label.setText("")
+
+    def _hide_spinner(self) -> None:
+        """停止并隐藏联网 spinner（进入非加载态时调用）。"""
+
+        self._spinner.stop()
+        self._spinner.setVisible(False)
 
     def _render_detail(self, detail: WordDetail, source: str) -> None:
         """按展示上限渲染五要素与来源标注（空分组显示「暂无」）。"""

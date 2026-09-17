@@ -46,6 +46,7 @@ from desktop_pet.core.word_details_cache_store import WordDetailsCacheStore
 from desktop_pet.ui.bubble import BubbleWindow
 from desktop_pet.ui.bubble_button_bar import BubbleButtonBar
 from desktop_pet.ui.log_window import LogWindow
+from desktop_pet.ui.motion_ui import show_window_animated
 from desktop_pet.ui.pet_renderer import PetRenderer
 from desktop_pet.ui.pet_window import PetWindow
 from desktop_pet.ui.tray import TrayController
@@ -152,6 +153,7 @@ class PetAppController(QObject):
         self._tray.set_scale_checked(self._cfg.scale)
         self._tray.set_autostart_checked(self._cfg.autostart)
         self._tray.set_bubble_checked(self._cfg.bubble_enabled)
+        self._tray.set_reduce_motion_checked(self._cfg.reduce_motion)
         self._load_japanese()
         self._load_word_details()
         self._tray.set_jp_checked(self._cfg.jp_enabled)
@@ -233,6 +235,7 @@ class PetAppController(QObject):
         self._tray.minimize_requested.connect(self._on_minimize)
         self._tray.restore_requested.connect(self._on_restore)
         self._tray.autostart_toggled.connect(self._set_autostart)
+        self._tray.reduce_motion_toggled.connect(self._on_reduce_motion_toggled)
         self._tray.quit_requested.connect(self.shutdown)
 
         # 日语学习
@@ -400,6 +403,35 @@ class PetAppController(QObject):
         if not checked:
             self._bubble.hide_bubble()
         self._persist()
+
+    def _on_reduce_motion_toggled(self, checked: bool) -> None:
+        """切换「减少动效」开关（对应 prefers-reduced-motion）。
+
+        配置为**唯一真相源**：三个业务窗口在每次 ``show`` 前都会读取
+        ``self._cfg.reduce_motion``，此处只需更新配置、落地并同步**已存在**的窗口，
+        保证开关即时生效而不必重开窗口。
+        """
+
+        enabled = bool(checked)
+        self._cfg.reduce_motion = enabled
+        self._tray.set_reduce_motion_checked(enabled)
+        self._apply_reduce_motion_to_windows(enabled)
+        self._persist()
+        self._tray.notify(
+            C.APP_DISPLAY_NAME,
+            C.TRAY_NOTIFY_REDUCE_MOTION_ON if enabled else C.TRAY_NOTIFY_REDUCE_MOTION_OFF,
+        )
+
+    def _apply_reduce_motion_to_windows(self, enabled: bool) -> None:
+        """把「减少动效」同步到已创建的业务窗口（未创建则跳过，show 时会再读配置）。"""
+
+        for window in (self._vocab_window, self._log_window, self._detail_window):
+            if window is None:
+                continue
+            try:
+                window.set_reduce_motion(bool(enabled))
+            except Exception:  # noqa: BLE001 —— 单个窗口同步失败不应中断开关切换
+                logger.exception("同步「减少动效」到窗口失败：%r", window)
 
     def _on_minimize(self) -> None:
         """最小化到托盘（FR-22）。"""
@@ -671,7 +703,8 @@ class PetAppController(QObject):
                 self._log_window.refresh(day, self._daily_log.entries_for(day), limit)
             # 保证「今天」始终可选中（即使今日暂无记录）
             self._log_window.refresh(today, self._daily_log.entries_for(today), limit)
-            self._log_window.show()
+            self._log_window.set_reduce_motion(self._cfg.reduce_motion)
+            show_window_animated(self._log_window, self._cfg.reduce_motion)
             self._log_window.raise_()
             self._log_window.activateWindow()
         except Exception:  # noqa: BLE001
@@ -687,7 +720,8 @@ class PetAppController(QObject):
                 self._vocab_window.clear_requested.connect(self._on_vocab_clear)
                 self._vocab_window.word_double_clicked.connect(self._on_vocab_word_double_clicked)
             self._vocab_window.refresh(self._vocab.items())
-            self._vocab_window.show()
+            self._vocab_window.set_reduce_motion(self._cfg.reduce_motion)
+            show_window_animated(self._vocab_window, self._cfg.reduce_motion)
             self._vocab_window.raise_()
             self._vocab_window.activateWindow()
         except Exception:  # noqa: BLE001
@@ -846,8 +880,12 @@ class PetAppController(QObject):
                 self._detail_window.detail_failed.connect(self._on_detail_failed)
             detail, source = self._lookup_word_detail(entry.id)
             net = self._detail_net_config()
+            # 动效开关须在 show_entry **之前**注入：show_entry 的加载分支（联网态）会读取
+            # _reduce_motion 决定 set_loading 是否创建标签淡入动画。顺序与 _on_jp_log /
+            # _on_jp_vocab 保持一致；否则 reduce_motion=True 时首开详情窗仍会创建一个动画。
+            self._detail_window.set_reduce_motion(self._cfg.reduce_motion)
             self._detail_window.show_entry(entry, detail, source, net)
-            self._detail_window.show()
+            show_window_animated(self._detail_window, self._cfg.reduce_motion)
             self._detail_window.raise_()
             self._detail_window.activateWindow()
         except Exception:  # noqa: BLE001

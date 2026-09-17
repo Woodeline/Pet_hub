@@ -1,7 +1,7 @@
 """ui.tray —— 系统托盘（图标 + 右键菜单 + 信号）。
 
 仅负责展示与发信号，**不含业务判定逻辑**（架构 §1.2）。
-菜单项：恢复显示 / 暂停监听 / 缩放三档 / 最小化到托盘 / 开机自启 / 退出。
+菜单项：恢复显示 / 暂停监听 / 缩放三档 / 最小化到托盘 / 开机自启 / 减少动效 / 退出。
 """
 
 from __future__ import annotations
@@ -33,6 +33,7 @@ class TrayController(QObject):
     minimize_requested = Signal()
     restore_requested = Signal()
     autostart_toggled = Signal(bool)
+    reduce_motion_toggled = Signal(bool)
     quit_requested = Signal()
     bubble_toggled = Signal(bool)
     # —— 日语学习（ui 层只发信号，业务判定在 app/controller）——
@@ -65,6 +66,7 @@ class TrayController(QObject):
         self._action_bubble: QAction | None = None
         self._action_minimize: QAction | None = None
         self._action_autostart: QAction | None = None
+        self._action_reduce_motion: QAction | None = None
         self._action_quit: QAction | None = None
         self._scale_group: QActionGroup | None = None
         self._scale_actions: dict[float, QAction] = {}
@@ -141,6 +143,14 @@ class TrayController(QObject):
             self._action_bubble.blockSignals(True)
             self._action_bubble.setChecked(bool(checked))
             self._action_bubble.blockSignals(False)
+
+    def set_reduce_motion_checked(self, checked: bool) -> None:
+        """同步「减少动效」勾选状态（不触发信号）。"""
+
+        if self._action_reduce_motion is not None:
+            self._action_reduce_motion.blockSignals(True)
+            self._action_reduce_motion.setChecked(bool(checked))
+            self._action_reduce_motion.blockSignals(False)
 
     def set_jp_checked(self, checked: bool) -> None:
         """同步「日语学习」开关勾选状态（不触发信号）。"""
@@ -292,6 +302,12 @@ class TrayController(QObject):
         self._action_autostart.setChecked(bool(self._cfg.autostart))
         self._action_autostart.toggled.connect(self.autostart_toggled.emit)
 
+        self._action_reduce_motion = QAction(C.TRAY_MENU_REDUCE_MOTION, self._menu)
+        self._action_reduce_motion.setCheckable(True)
+        self._action_reduce_motion.setChecked(bool(self._cfg.reduce_motion))
+        self._action_reduce_motion.setToolTip(C.TRAY_MENU_REDUCE_MOTION_TIP)
+        self._action_reduce_motion.toggled.connect(self.reduce_motion_toggled.emit)
+
         self._action_quit = QAction("退出", self._menu)
         self._action_quit.triggered.connect(self.quit_requested.emit)
 
@@ -311,6 +327,7 @@ class TrayController(QObject):
         self._menu.addAction(self._action_minimize)
         self._menu.addSeparator()
         self._menu.addAction(self._action_autostart)
+        self._menu.addAction(self._action_reduce_motion)
         self._menu.addSeparator()
         self._menu.addAction(self._action_quit)
 

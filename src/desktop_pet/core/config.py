@@ -144,6 +144,7 @@ class AppConfig:
         listen_enabled: 全局键盘监听开关。
         bubble_enabled: 气泡提示开关（PRD Q-01 的"静音"含义）。
         autostart: 开机自启开关。
+        reduce_motion: 减少动效（对应 prefers-reduced-motion），默认 ``False``。
         jp_enabled: 日语学习开关（JP-02，默认关闭）。
         jp_level: 日语难度等级（JP-06，默认 ``N5``，取值 ``N5..N1``）。
         jp_bubble_duration_s: 学习泡泡停留时长（秒，默认 30，取值 15/30/60）。
@@ -162,6 +163,7 @@ class AppConfig:
     listen_enabled: bool = True
     bubble_enabled: bool = True
     autostart: bool = False
+    reduce_motion: bool = False
     jp_enabled: bool = False
     jp_level: str = C.JP_DEFAULT_LEVEL
     jp_bubble_duration_s: int = C.JP_BUBBLE_DURATION_S
@@ -183,6 +185,7 @@ class AppConfig:
             "listen_enabled": bool(self.listen_enabled),
             "bubble_enabled": bool(self.bubble_enabled),
             "autostart": bool(self.autostart),
+            "reduce_motion": bool(self.reduce_motion),
             "jp_enabled": bool(self.jp_enabled),
             "jp_level": str(self.jp_level),
             "jp_bubble_duration_s": int(self.jp_bubble_duration_s),
@@ -217,6 +220,7 @@ class AppConfig:
             listen_enabled=_coerce_bool(get("listen_enabled"), defaults.listen_enabled),
             bubble_enabled=_coerce_bool(get("bubble_enabled"), defaults.bubble_enabled),
             autostart=_coerce_bool(get("autostart"), defaults.autostart),
+            reduce_motion=_coerce_bool(get("reduce_motion"), defaults.reduce_motion),
             jp_enabled=_coerce_bool(get("jp_enabled"), defaults.jp_enabled),
             jp_level=_coerce_level(get("jp_level"), defaults.jp_level),
             jp_bubble_duration_s=_coerce_duration(

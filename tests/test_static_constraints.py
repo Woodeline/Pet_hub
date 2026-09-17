@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import pytest
@@ -125,6 +126,57 @@ def test_no_print_calls_in_src(src_root: Path) -> None:
             ):
                 offenders.append(f"{path.relative_to(src_root.parent)}:{node.lineno}")
     assert not offenders, f"src 下存在 print 调用（应使用 logging）：{offenders}"
+
+
+# --------------------------------------------------------------------------- #
+# 2b. UI 层不得出现裸十六进制色值（色值必须走 COLORS / SEMANTIC_COLORS）
+# --------------------------------------------------------------------------- #
+#: 合法 ``#RRGGBB`` 色值（``#RRGGBB`` 这类占位因 R/G/B 非十六进制字符而不会被命中）。
+_HEX_LITERAL_RE = re.compile(r"#[0-9A-Fa-f]{6}")
+
+
+def _docstring_constant_ids(path: Path) -> set[int]:
+    """返回模块 / 类 / 函数级 docstring 对应 ``ast.Constant`` 节点的 id 集合。"""
+
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    ids: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = node.body
+            if not body:
+                continue
+            first = body[0]
+            if (
+                isinstance(first, ast.Expr)
+                and isinstance(first.value, ast.Constant)
+                and isinstance(first.value.value, str)
+            ):
+                ids.add(id(first.value))
+    return ids
+
+
+def test_ui_has_no_bare_hex_color_literals(src_root: Path) -> None:
+    """``src/desktop_pet/ui/`` 下字符串字面量不得含 ``#RRGGBB`` 裸色值（docstring 除外）。
+
+    色值统一由 ``core.constants`` 的 ``COLORS`` / ``SEMANTIC_COLORS`` 提供；QSS 里的色值
+    也必须由 token 拼装，不得写死。任何裸色值都应改用 token 取值。
+    """
+
+    ui = src_root / "ui"
+    offenders: list[str] = []
+    for path in _iter_py_files(ui):
+        skip_ids = _docstring_constant_ids(path)
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and id(node) not in skip_ids
+            ):
+                match = _HEX_LITERAL_RE.search(node.value)
+                if match:
+                    offenders.append(f"{path.name}:{node.lineno}: 裸色值 {match.group(0)}")
+    assert not offenders, f"UI 层出现裸十六进制色值（应改用 token）：{offenders}"
 
 
 # --------------------------------------------------------------------------- #
