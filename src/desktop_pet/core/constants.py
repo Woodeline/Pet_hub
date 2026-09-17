@@ -180,6 +180,47 @@ BODY_GRADIENT_STOPS: Final[tuple[tuple[float, str], ...]] = (
 OUTLINE_W: Final[float] = 3.2
 
 # --------------------------------------------------------------------------- #
+# 4b. Design Token（UI 视觉升级 P0）—— 语义色 / 间距 / 字号 / 圆角
+# --------------------------------------------------------------------------- #
+# 说明：本段为**纯加法**（新字典），**不修改**上方 ``COLORS`` / ``BODY_GRADIENT_STOPS`` /
+# ``OUTLINE_W`` 的任何键值（``test_color_palette_matches_prd`` 为 ``==`` 全等断言）。
+# ``SEMANTIC_COLORS`` 是面向组件的**语义层**：UI 组件只引用语义名（primary / success …），
+# 由语义名到具体色值的映射集中在此，未来换肤只改这一处。其值与既有 ``COLORS`` 保持映射
+# 关系（见 ``tests/test_design_tokens.py``），保证渐变过程「改色不改结构」。
+#
+# P0 只沉淀 token；把它翻译成 QSS / QIcon 由 P1 的 ``ui.theme`` / ``ui.icon_factory`` 负责。
+SEMANTIC_COLORS: Final[dict[str, str]] = {
+    "primary": "#7A5A42",        # 品牌主色（暖棕，= 气泡正文色）
+    "primary_hover": "#8B6B4F",  # 悬停 +8%
+    "primary_pressed": "#6B4E3A",# 按下 -8%
+    "success": "#7A9E7E",        # 正向操作（「记住了」）
+    "success_hover": "#8FB090",
+    "success_pressed": "#6B8E6F",
+    "info": "#5B8DB8",           # 信息/已掌握状态
+    "warning": "#C99A5B",        # 生词状态（从「蓝」改为琥珀，与 info 解耦）
+    "muted": "#B7A99A",          # 未处理/辅助
+    "destructive": "#C05B5B",    # 危险操作（清空）
+    "destructive_hover": "#CE6B6B",
+    "surface": "#FFFDF8",        # 卡片/窗口底
+    "surface_alt": "#F7EEDF",    # 斑马纹/次级底
+    "border": "#EFE3D4",         # 边框
+    "text_primary": "#5A4636",   # 正文
+    "text_secondary": "#9C8570", # 次级
+    "text_faint": "#B7A99A",     # 最淡
+}
+
+# 间距刻度（4px 基线：``xs``/``md`` 为 4 的倍数，``sm``/``lg``/``xl`` 命中 8 的倍数）。
+SPACING: Final[dict[str, int]] = {"xs": 4, "sm": 8, "md": 12, "lg": 16, "xl": 24}
+
+# 字号刻度（``display > title > body > caption > small`` 严格单调递减）。
+FONT_SIZE: Final[dict[str, int]] = {
+    "display": 24, "title": 16, "body": 12, "caption": 11, "small": 9,
+}
+
+# 圆角刻度（``pill`` 用于胶囊/药丸形控件）。
+RADIUS: Final[dict[str, int]] = {"sm": 6, "md": 8, "lg": 12, "pill": 16}
+
+# --------------------------------------------------------------------------- #
 # 5. 尺寸 / 缩放（架构 §9.3）
 # --------------------------------------------------------------------------- #
 BASE_W: Final[int] = 160
@@ -613,6 +654,11 @@ __all__ = [
     "Gesture",
     "KeystrokeOutcome",
     "COLORS",
+    # Design Token（UI 视觉升级 P0）
+    "SEMANTIC_COLORS",
+    "SPACING",
+    "FONT_SIZE",
+    "RADIUS",
     "EXPRESSION_POSES",
     "NEUTRAL_POSE",
     "BUBBLE_TEXTS",
