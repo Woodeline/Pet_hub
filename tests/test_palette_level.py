@@ -60,8 +60,8 @@ def test_glow_for_theme_default_literal_values() -> None:
     默认皮肤色值随 B1-2 降饱和而变，故本锚点亦随之更新（其余 6 套皮肤色值稳定）。
     """
 
-    assert glow_for_theme("default", False) == "#EBCCB6"
-    assert glow_for_theme("default", True) == "#CBDBE3"
+    assert glow_for_theme("default", False) == "#EACCB7"
+    assert glow_for_theme("default", True) == "#CCDBE2"
 
 
 @pytest.mark.parametrize("name", _ALL_THEMES)
