@@ -139,9 +139,67 @@ def breath_offset(
     period: float = C.BREATH_PERIOD_S,
     amplitude: float = C.BREATH_AMPLITUDE_PX,
 ) -> float:
-    """呼吸起伏偏移（正负摆动的位移，单位像素）。"""
+    """呼吸起伏偏移（正负摆动的位移，单位像素）。
+
+    .. note::
+       本函数是**无状态**的（``phase = now / period mod 1``），保留原签名与行为不动。
+       周期中途变更会相位跳变，因此「周期微随机」改由 :func:`breath_offset_phased`
+       + ``PetModel`` 的有状态累计相位实现（阶段 A5-1，v1.1 R2）。
+    """
 
     return amplitude * math.sin(_TWO_PI * cycle_phase(now, period))
+
+
+def breath_offset_phased(
+    phase: float, amplitude: float = C.BREATH_AMPLITUDE_PX,
+) -> float:
+    """由**已累计的相位** ``phase`` 求呼吸偏移：``amplitude * sin(2π·phase)``。
+
+    供 :class:`~desktop_pet.core.pet_model.PetModel` 逐帧以 ``phase += dt / period``
+    累计（回绕时重抽周期）——**相位连续**，消除「周期中途变更 → 打嗝」的跳变（v1.1 R2）。
+
+    Args:
+        phase: 周期相位（通常位于 ``[0, 1)``；允许任意实数，正弦天然周期性）。
+        amplitude: 起伏幅度（像素）。
+
+    Returns:
+        ``amplitude * sin(2π·phase)``。
+    """
+
+    return amplitude * math.sin(_TWO_PI * phase)
+
+
+def surprise_envelope(elapsed: float, duration: float) -> float:
+    """偶发小动作的时间包络（缓出-保持-回弹），峰值 ≈ 1.0。
+
+    时间线（三段，比例 0.3 / 0.3 / 0.4）：
+
+    * ``[0, 0.3·d)`` —— 缓出上升 ``0 → 1``（复用 :func:`ease_out_cubic`）；
+    * ``[0.3·d, 0.6·d)`` —— 保持峰值 ``1.0``；
+    * ``[0.6·d, d)`` —— 回弹 ``1 → 0``（复用 :func:`ease_in_out`）。
+
+    Args:
+        elapsed: 自本次动作开始的秒数。
+        duration: 单次动作总时长。
+
+    Returns:
+        ``[0, 1]`` 的包络系数。端点严格：``elapsed <= 0 → 0.0``、
+        ``elapsed >= duration → 0.0``；``duration <= 0`` 亦返回 ``0.0``。
+    """
+
+    if duration <= 0.0 or elapsed <= 0.0 or elapsed >= duration:
+        return 0.0
+
+    attack = duration * 0.3
+    hold = duration * 0.3
+    release = duration * 0.4
+
+    if elapsed < attack:
+        return ease_out_cubic(elapsed / attack)
+    if elapsed < attack + hold:
+        return 1.0
+    u = (elapsed - attack - hold) / release
+    return 1.0 - ease_in_out(u)
 
 
 def tail_angle(
@@ -448,6 +506,8 @@ __all__ = [
     "ease_out_bounce",
     "interpolate_pose",
     "breath_offset",
+    "breath_offset_phased",
+    "surprise_envelope",
     "tail_angle",
     "ear_twitch",
     "blink_curve",

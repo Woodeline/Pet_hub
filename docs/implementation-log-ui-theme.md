@@ -101,3 +101,69 @@ commit：`94561fe feat(theme): resolve_theme 纯函数 + 渲染取色 + 托盘�
 | 1 | `set_theme_checked` 改用 `action.trigger()`（会发信号） | `test_set_theme_checked_is_silent` **FAIL** | 已还原 |
 | 2 | `_on_theme_selected` 去掉 `_apply_theme()` | `test_on_theme_selected_applies_and_persists`、`test_tray_theme_click_reaches_controller` **FAIL** | 已还原 |
 | 3 | 主题项初值改为恒 `default`（忽略 `cfg.theme`） | `test_theme_default_checked_follows_config` **FAIL** | 已还原 |
+
+commit：`1c17072 feat(theme): 托盘「主题」子菜单（含「自动」）`
+
+---
+
+## A5 · 动效节奏去机械化（呼吸微随机 + SurpriseKind 小动作 + 不对称眨眼）
+
+| 项 | 内容 |
+|---|---|
+| 文件 | `core/constants.py`（`BLINK_EYE_DELAY_S`/`BREATH_JITTER`/`SURPRISE_MIN_S`/`SURPRISE_MAX_S`/`SURPRISE_DURATION_S`/`SURPRISE_POSES` + `__all__`）、`core/motion.py`（`breath_offset_phased`/`surprise_envelope`；`breath_offset` 原签名与行为不动 + `__all__`）、`core/pet_model.py`（`SurpriseKind` 独立枚举、`_breath_epoch`/`_breath_period` epoch 锚定相位、`_breath_phase_for`、`_surprise_allowed`/`_pick_surprise`/`_advance_surprise`、`set_reduce_motion`、右眼延迟眨眼）、`app/controller.py`（`self._model.set_reduce_motion(cfg.reduce_motion)` 注入）、`tests/test_motion_rhythm.py`（新，29 条） |
+| 结果 | 全量 **975 passed / rc=0**（+29 `test_motion_rhythm`；`test_static_constraints.py`+`test_design_tokens.py` 共 81 passed） |
+| 结论 | 呼吸相位改成 `now` 的纯函数；`Expression` 仍 == 8；`SURPRISE_POSES` 只用既有通道；`COLORS`/`SEMANTIC_COLORS`/`SPACING`/`FONT_SIZE`/`RADIUS` 键值未动。 |
+
+### ⚠️ 与方案原文的偏离（唯一一处，已上报）
+
+方案 §3 A5-1 原文要求 `_apply_life_signs` **按 `phase += dt / period` 累加**。实测该取向会让呼吸变成「dt 驱动」：
+`now` 冻结时相位仍在推进 → 「目标恒定」前提失效 → 破坏 **FR-34 守卫** `test_model_frame_rate_independent_frozen_clock`
+（实测 `body_y` 差 0.037 > 1e-6，全量 rc=1）。
+
+**改法（经 team-lead 指定）**：把相位从「dt 累加」改为 **epoch 锚定**，即
+
+```
+phase = ((now - epoch) / period) mod 1
+```
+
+* 相位是 `(now, 状态)` 的**纯函数** → `now` 冻结 ⇒ 相位恒定 ⇒ FR-34 恢复绿；
+* 周期**只在 `delta >= period` 的回绕点**（相位 ≈ 0/1、`sin` ≈ 0）重抽 → 相位值与导数连续，
+  **R2 的原始缺陷（周期中途变更 → 相位瞬跳「打嗝」）依然被根治**，且比原方案更强；
+* `breath_offset_phased(phase, amplitude)` 保持纯函数形态；`breath_offset` 一字未动。
+
+**二次细化（本工程师主动，比 team-lead 原稿更稳）**：首帧锚点取
+`epoch = now - cycle_phase(now, period) * period`（即「不大于 `now` 的最近整周期边界」），
+而非直接 `epoch = now`。原因见变异 **I**——直接以 `now` 锚定会让两个「时钟不同但各自冻结」的
+实例相位都归零，**连带打挂既有测试** `test_pet_model.py::test_life_signs_change_over_time`；
+取整周期边界可让首帧相位等于旧 `cycle_phase(now, period)`（保持既有语义），
+同时 `delta` 恒落在 `[0, period)`，避免 `time.monotonic()` 绝对数值较大时每帧误触发回绕。
+
+**变异验证（A5）** —— 每条新断言均先破坏源码确认 FAIL 再还原：
+
+| # | 怎么破坏 | 观察到 | 还原 |
+|---|---|---|---|
+| A | `_breath_phase_for` 相位改按「调用次数」推进（模拟 dt 累加） | `test_frozen_clock_frame_rate_independence_regression`、`test_motion.py::test_model_frame_rate_independent_frozen_clock` 双 **FAIL**（差 5.14） | 已还原 |
+| B | 回绕时**不**推进 `epoch`（制造相位瞬跳） | `test_breath_phase_continuous_across_period_wrap` **FAIL**（回绕帧增量 6.96px ≫ 单帧上限 0.271px） | 已还原 |
+| C | 重抽抖动改 ±50%（越过 ±10% 带） | `test_breath_resampled_period_within_jitter_band` **FAIL** | 已还原 |
+| D | 重抽改用全局 `random` 而非 `self._rng` | `test_breath_randomization_reproducible_with_fixed_seed` **FAIL**（index 90 分叉） | 已还原 |
+| E | `_surprise_allowed` 整体恒 `return True` | 四条抑制测试（SLEEPING/拖拽/临时表情/reduce_motion）全 **FAIL** | 已还原 |
+| F | `surprise_envelope` 端点守卫误 `return 1.0` | `test_surprise_envelope_endpoint_literals` **FAIL** | 已还原 |
+| G | 右眼去掉 `BLINK_EYE_DELAY_S` 延迟 | `test_blink_delay_affects_only_right_eye`、`..._makes_right_eye_lag_behind_left` 双 **FAIL** | 已还原 |
+| H | `SURPRISE_POSES["STRETCH"]` 加不存在的 `magic_channel` | `test_surprise_poses_only_use_existing_channels` **FAIL** | 已还原 |
+| I | 首帧锚点改成直接 `epoch = now`（team-lead 原稿字面量） | `test_first_frame_phase_matches_legacy_cycle_phase[1.5/10.0/123.75]` + 既有 `test_life_signs_change_over_time` 共 **4 FAIL** → 证明本工程师取整周期边界细化**必要** | 已还原 |
+
+> 要点：变异 **A** 证明 FR-34 守卫非恒绿；**B/C/E/F/G/H** 证明新增断言均能捕获对应缺陷；
+> **I** 证明对 team-lead 原稿的二次细化是由既有测试**强制**的，而非随意偏离。
+
+**遗留 / 诚实说明**
+
+1. `_draw_glow` 仍为阶段 A 简版（按皮肤端点取色），阶段 B 的 `glow_for_theme` 会再精修（A3 已记）。
+2. `time.monotonic()` 为绝对数值：首帧取整周期边界后 `delta ∈ [0, period)`，正常；
+   仅当进程长时间卡顿（单帧跨度 > 1 个呼吸周期）时相位会取模跳一次（单 `if`、无 `while` 兜底，按 team-lead 指定）。
+3. 小动作门控复用 `REST_THRESHOLD_S`（=120s）；即「安静在场 ≥120s 后」才进入 40–80s 的触发倒计时，
+   真实观感下触发较稀疏，属设计取舍（阶段 C 游走会共用该门控）。
+4. `PetModel` 未暴露呼吸相位/周期的公共只读接口；`test_motion_rhythm.py` 按本仓库既有惯例
+   （如 `test_pet_model.py` 读 `_blinking`/`_temp_expression`）白盒读取 `_breath_phase`/`_breath_period`。
+
+commit：`feat(motion): 呼吸相位随机化 + SurpriseKind 小动作 + 不对称眨眼`
+

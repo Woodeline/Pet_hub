@@ -66,7 +66,14 @@ SURPRISED_IDLE_S: Final[float] = 120.0      # 长空闲后单次敲键→惊讶 
 BLINK_MIN_S: Final[float] = 3.0             # 眨眼间隔下限              FR-14
 BLINK_MAX_S: Final[float] = 6.0             # 眨眼间隔上限              FR-14
 BLINK_DURATION_S: Final[float] = 0.15       # 单次眨眼时长
+#: 右眼相对左眼的眨眼相位延迟（秒）——制造「不对称眨眼」的生命感（阶段 A5-3）。
+#: 必须 < ``BLINK_DURATION_S`` 的一半（0.075），否则两眼会跨过 `_draw_eye` 的
+#: ``openness < 0.18`` 弧线眼阈值、视觉上像「两种眼睛」。
+BLINK_EYE_DELAY_S: Final[float] = 0.05
 BREATH_PERIOD_S: Final[float] = 3.0         # 呼吸周期                  FR-14
+#: 呼吸周期抖动幅度（±比例）——回绕时以 ``BREATH_PERIOD_S * (1 ± J)`` 重抽周期（阶段 A5-1）。
+#: ``BREATH_PERIOD_S`` 本身是 PRD 锁定值，**不动**；抖动只作用于每次回绕后的重抽。
+BREATH_JITTER: Final[float] = 0.10
 TAIL_MIN_S: Final[float] = 2.0              # 尾巴摆动周期下限          FR-13
 TAIL_MAX_S: Final[float] = 4.0              # 尾巴摆动周期上限          FR-13
 EAR_TWITCH_MIN_S: Final[float] = 4.0        # 耳朵抖动间隔下限          FR-13
@@ -83,6 +90,11 @@ BUBBLE_MIN_GAP_S: Final[float] = 3.0        # 相邻气泡最小间隔          
 # 临时动作时长
 TEMP_EXPRESSION_S: Final[float] = 2.0       # 默认临时表情时长
 SURPRISED_ANIM_S: Final[float] = 1.2        # 惊讶表情时长
+
+# 偶发小动作（阶段 A5-2）——间隔区间（秒）与单次动作时长（秒）
+SURPRISE_MIN_S: Final[float] = 40.0
+SURPRISE_MAX_S: Final[float] = 80.0
+SURPRISE_DURATION_S: Final[float] = 1.2
 
 # 敲键盘动画时间线（FR-02）——单次敲击拆为「落指 → 回弹」两段。
 # 左右分工（最接近真实打字）：**活动侧落指**（arm_*_press / finger_*_curl），
@@ -447,6 +459,35 @@ EXPRESSION_POSES: Final[dict[Expression, dict[str, float]]] = {
     },
 }
 
+# --------------------------------------------------------------------------- #
+# 8b. 偶发小动作 → 姿态增量表（阶段 A5-2）
+# --------------------------------------------------------------------------- #
+# 每种小动作 = 一组**姿态增量**（相对当前目标姿态叠加），仅使用既有姿态通道
+# （body_y / body_squash / head_tilt / ear_*_tilt / tail_angle / tail_curve / look_x / look_y）。
+# 键为 :class:`desktop_pet.core.pet_model.SurpriseKind` 的**成员名**（字符串）——
+# constants 不能 import pet_model（会形成循环依赖），故以 ``.name`` 为键；pet_model 侧
+# 用 ``SurpriseKind.name`` 查表。增量会被 ``motion.surprise_envelope`` 包络加权。
+SURPRISE_POSES: Final[dict[str, dict[str, float]]] = {
+    # 伸懒腰：身体上提拉伸、耳朵前倾、尾巴上抬
+    "STRETCH": {
+        "body_y": -5.0, "body_squash": -0.10,
+        "ear_l_tilt": -3.0, "ear_r_tilt": -3.0,
+        "tail_angle": -8.0, "tail_curve": 0.15,
+    },
+    # 甩尾：尾巴快速摆一下、视线微偏
+    "TAIL_FLICK": {
+        "tail_angle": 22.0, "tail_curve": 0.5, "look_x": -2.0,
+    },
+    # 抖耳：两耳一高一低抖动、头部微倾
+    "EAR_FLICK": {
+        "ear_l_tilt": -12.0, "ear_r_tilt": 9.0, "head_tilt": 3.0,
+    },
+    # 看角落：瞳孔与头一起偏向一角
+    "GLANCE_CORNER": {
+        "look_x": 3.0, "look_y": -2.0, "head_tilt": -4.0,
+    },
+}
+
 # 中性姿态（Idle 常态）基线值
 NEUTRAL_POSE: Final[dict[str, float]] = {
     "body_y": 0.0,
@@ -751,6 +792,13 @@ __all__ = [
     "NEUTRAL_POSE",
     "BUBBLE_TEXTS",
     "interval_for_fps",
+    # 动效去机械化（阶段 A5）
+    "BREATH_JITTER",
+    "BLINK_EYE_DELAY_S",
+    "SURPRISE_MIN_S",
+    "SURPRISE_MAX_S",
+    "SURPRISE_DURATION_S",
+    "SURPRISE_POSES",
     # 日语学习
     "JP_LEVELS",
     "JP_DEFAULT_LEVEL",

@@ -179,6 +179,7 @@ class PetAppController(QObject):
         self._window.raise_()
 
         self._model.set_base_expression(expression_for_mood(self._sm.mood))
+        self._model.set_reduce_motion(self._cfg.reduce_motion)
         self._window.set_fps(C.FPS_IDLE)
         self._window.start_animation()
 
@@ -434,6 +435,7 @@ class PetAppController(QObject):
         self._cfg.reduce_motion = enabled
         self._tray.set_reduce_motion_checked(enabled)
         self._apply_reduce_motion_to_windows(enabled)
+        self._model.set_reduce_motion(enabled)
         self._persist()
         self._tray.notify(
             C.APP_DISPLAY_NAME,

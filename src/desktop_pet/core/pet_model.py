@@ -15,6 +15,7 @@ import logging
 import math
 import random
 from dataclasses import dataclass, fields
+from enum import Enum, auto
 from typing import Optional
 
 from desktop_pet.core import constants as C
@@ -22,6 +23,20 @@ from desktop_pet.core import motion
 from desktop_pet.core.constants import Expression
 
 logger = logging.getLogger(__name__)
+
+
+class SurpriseKind(Enum):
+    """偶发「小动作」枚举（阶段 A5-2）。
+
+    **独立于** :class:`~desktop_pet.core.constants.Expression`（后者成员数被
+    ``test_expression_count_matches_prd`` 锁定 == 8，绝不可扩展）。每种小动作对应
+    ``constants.SURPRISE_POSES`` 中的一组姿态增量，仅复用现有姿态通道。
+    """
+
+    STRETCH = auto()        # 伸懒腰
+    TAIL_FLICK = auto()     # 甩尾
+    EAR_FLICK = auto()      # 抖耳
+    GLANCE_CORNER = auto()  # 看角落
 
 
 @dataclass
@@ -115,6 +130,25 @@ class PetModel:
         self._base_expression: Expression = Expression.HAPPY
         self._rng: random.Random = random.Random()
 
+        # 呼吸：**epoch 锚定相位**（阶段 A5-1，v1.1 R2）
+        #   phase = ((now - epoch) / period) mod 1 —— 是 ``(now, 状态)`` 的**纯函数**：
+        #   ``now`` 冻结时相位恒定（FR-34「恒定时钟帧率无关」不被破坏）；周期**只在
+        #   回绕点**变更（该处相位 ≈ 0/1、``sin`` ≈ 0），相位值与导数均连续 →
+        #   根治「周期中途变更 → 相位瞬跳（打嗝）」。
+        self._breath_period: float = C.BREATH_PERIOD_S
+        self._breath_epoch: Optional[float] = None  # 本轮呼吸周期锚点（首帧惰性锚定）
+        self._breath_phase: float = 0.0             # 最近一帧相位（供测试/调试观察）
+
+        # 偶发小动作（阶段 A5-2）：下一次触发倒计时 / 当前动作 / 已进行时长 / 平静累计
+        self._surprise_timer: float = motion.random_interval(
+            C.SURPRISE_MIN_S, C.SURPRISE_MAX_S, self._rng
+        )
+        self._surprise_kind: Optional[SurpriseKind] = None
+        self._surprise_elapsed: float = 0.0
+        self._calm_seconds: float = 0.0
+        # 「减少动效」开关（由 UI/app 层写入；开启时不调度、不叠加小动作）
+        self._reduce_motion: bool = False
+
     # ------------------------------------------------------------------ #
     # 外部设置接口
     # ------------------------------------------------------------------ #
@@ -154,6 +188,15 @@ class PetModel:
         """设置悬停抚摸状态（FR-28，眯眼 + 腮红加深）。"""
 
         self._hovering = bool(active)
+
+    def set_reduce_motion(self, active: bool) -> None:
+        """设置「减少动效」开关（对应 prefers-reduced-motion）。
+
+        开启时**不调度、不叠加**偶发小动作（阶段 A5-2）；呼吸/尾摆等常态生命体征照旧。
+        由 app 层（``PetAppController``）随配置注入，与既有 ``ui.motion_ui`` 的做法一致。
+        """
+
+        self._reduce_motion = bool(active)
 
     def set_tail_evade(self, amount: float, dir_x: float, dir_y: float) -> None:
         """设置尾巴**避让**目标（鼠标靠近 / 触碰尾巴时的反应）。
@@ -309,12 +352,120 @@ class PetModel:
         step = motion.exponential_smoothing_t(evade_rate, dt)
         self._tail_evade += (self._tail_evade_target - self._tail_evade) * step
 
+        # 偶发小动作调度（受门控约束）
+        self._advance_surprise(dt)
+
+    # ------------------------------------------------------------------ #
+    # 偶发小动作调度（阶段 A5-2）
+    # ------------------------------------------------------------------ #
+    def _surprise_allowed(self) -> bool:
+        """当前是否允许推进 / 触发小动作（门控，v1.1 G3）。
+
+        仅当**全部**满足时才允许：非 ``reduce_motion``、非拖拽、无临时表情、
+        基础表情属 IDLE / REST 对应态（``HAPPY`` / ``SLEEPY``）——即「安静地在场」。
+
+        ``HAPPY`` / ``SLEEPY`` 正是状态机按 ``IDLE_START_S`` / ``REST_THRESHOLD_S``
+        判定 IDLE / REST 后给出的基础表情，故此处**复用同一空闲定义**，不再另设阈值，
+        避免与阶段 C 的游走出现两套「空闲」口径漂移。
+        """
+
+        if self._reduce_motion or self._dragging:
+            return False
+        if self._temp_expression is not None:
+            return False
+        return self._base_expression in (Expression.HAPPY, Expression.SLEEPY)
+
+    def _pick_surprise(self) -> SurpriseKind:
+        """随机挑一种小动作（走注入的 ``_rng``，可复现）。"""
+
+        return self._rng.choice(list(SurpriseKind))
+
+    def _advance_surprise(self, dt: float) -> None:
+        """推进小动作调度：累计平静时长、倒计时触发、换帧推进、收尾重排。"""
+
+        if not self._surprise_allowed():
+            # 门控失效：立即取消进行中的动作，避免「不该动时残留姿态」；平静计时清零
+            self._calm_seconds = 0.0
+            if self._surprise_kind is not None:
+                self._surprise_kind = None
+                self._surprise_elapsed = 0.0
+            return
+
+        # 平静时长达到 REST_THRESHOLD_S 后才开始进入触发倒计时（复用同一空闲阈值）
+        if self._calm_seconds < C.REST_THRESHOLD_S:
+            self._calm_seconds += dt
+            return
+
+        if self._surprise_kind is None:
+            self._surprise_timer -= dt
+            if self._surprise_timer <= 0.0:
+                self._surprise_kind = self._pick_surprise()
+                self._surprise_elapsed = 0.0
+            return
+
+        self._surprise_elapsed += dt
+        if self._surprise_elapsed >= C.SURPRISE_DURATION_S:
+            self._surprise_kind = None
+            self._surprise_elapsed = 0.0
+            self._surprise_timer = motion.random_interval(
+                C.SURPRISE_MIN_S, C.SURPRISE_MAX_S, self._rng
+            )
+
+    def _breath_phase_for(self, now: float) -> float:
+        """按 **epoch 锚定** 求当前呼吸相位 ``[0, 1)``（阶段 A5-1，v1.1 R2）。
+
+        相位 = ``((now - epoch) / period) mod 1``，``epoch`` 为当前呼吸周期的锚点、
+        ``period`` 为本轮周期（回绕时以 ``BREATH_PERIOD_S·(1 ± BREATH_JITTER)`` 重抽）。
+        两个关键性质：
+
+        * **纯函数性**：相位只依赖 ``now`` 与内部状态，``now`` 冻结时相位恒定 →
+          FR-34「恒定时钟下 30fps/60fps 精确一致」不被破坏。
+        * **无瞬跳**：周期**只在** ``delta >= period`` 的回绕点重抽，而该处相位 ≈ 0/1、
+          ``sin`` ≈ 0，故呼吸位移的**值与导数都连续** —— 恰是旧实现（周期中途变更 →
+          相位瞬跳「打嗝」）的反面。
+
+        首帧惰性锚定：``epoch`` 取「不大于 ``now`` 的最近整周期边界」，令首帧相位等于旧
+        ``cycle_phase(now, period)``（保持既有首帧语义），且 ``delta`` 恒落在 ``[0, period)``
+        内 —— 避免 ``time.monotonic()`` 绝对数值较大时每帧都误触发回绕。
+
+        Args:
+            now: 当前时刻（秒）。
+
+        Returns:
+            本轮相位，值域 ``[0, 1)``。
+        """
+
+        if self._breath_period <= 0.0:  # 防御：避免除零
+            self._breath_period = C.BREATH_PERIOD_S
+        if self._breath_epoch is None:
+            offset = motion.cycle_phase(now, self._breath_period) * self._breath_period
+            self._breath_epoch = now - offset
+        delta = now - self._breath_epoch
+        if delta < 0.0:  # now 回退（含负 dt 场景）→ 重锚，防负相位
+            self._breath_epoch = now
+            self._breath_period = C.BREATH_PERIOD_S
+            delta = 0.0
+        if delta >= self._breath_period:  # 仅在回绕点变更周期 → 相位值与导数连续
+            self._breath_epoch += self._breath_period
+            self._breath_period = motion.random_interval(
+                C.BREATH_PERIOD_S * (1.0 - C.BREATH_JITTER),
+                C.BREATH_PERIOD_S * (1.0 + C.BREATH_JITTER),
+                self._rng,
+            )
+            delta = now - self._breath_epoch
+        if self._breath_period <= 0.0:  # 重抽后仍防御
+            self._breath_period = C.BREATH_PERIOD_S
+        self._breath_phase = (delta / self._breath_period) % 1.0
+        return self._breath_phase
+
     def _apply_life_signs(self, target: PetPose, now: float) -> None:
         """在目标姿态上叠加呼吸 / 尾巴摆动 / 耳朵抖动 / 眨眼 / 张望。"""
 
-        # 呼吸起伏（FR-14）——幅度随睡姿更柔
+        # 呼吸起伏（FR-14）——由 epoch 锚定相位求得（周期微随机、相位连续，A5-1）
         breath_amplitude = C.BREATH_AMPLITUDE_PX
-        breath = motion.breath_offset(now, C.BREATH_PERIOD_S, breath_amplitude)
+        breath = motion.breath_offset_phased(
+            self._breath_phase_for(now), breath_amplitude
+        )
         target.body_y += breath
         target.head_y += breath * 0.5
 
@@ -350,11 +501,14 @@ class PetModel:
         if self._base_expression in (Expression.HAPPY,) and self._temp_expression is None:
             target.look_x += motion.look_around_offset(now)
 
-        # 眨眼（FR-14）——仅对睁眼状态生效
+        # 眨眼（FR-14）——仅对睁眼状态生效；右眼比左眼晚 BLINK_EYE_DELAY_S 起闭（A5-3）
         if self._blinking:
-            openness = motion.blink_curve(self._blink_elapsed, C.BLINK_DURATION_S)
-            target.eye_open_l *= openness
-            target.eye_open_r *= openness
+            openness_l = motion.blink_curve(self._blink_elapsed, C.BLINK_DURATION_S)
+            openness_r = motion.blink_curve(
+                max(0.0, self._blink_elapsed - C.BLINK_EYE_DELAY_S), C.BLINK_DURATION_S
+            )
+            target.eye_open_l *= openness_l
+            target.eye_open_r *= openness_r
 
     def _apply_actions(self, target: PetPose) -> None:
         """在目标姿态上叠加**非瞬时**动作：点击弹跳 / 拖拽下垂 / 悬停腮红 / 身体下沉。
@@ -388,6 +542,15 @@ class PetModel:
         # 悬停抚摸：腮红加深（FR-28）
         if self._hovering:
             target.blush_alpha = min(1.0, target.blush_alpha + 0.25)
+
+        # 偶发小动作（阶段 A5-2）：按包络把姿态增量叠加到目标姿态
+        if self._surprise_kind is not None:
+            envelope = motion.surprise_envelope(
+                self._surprise_elapsed, C.SURPRISE_DURATION_S
+            )
+            for channel, delta in C.SURPRISE_POSES.get(self._surprise_kind.name, {}).items():
+                if hasattr(target, channel):
+                    setattr(target, channel, getattr(target, channel) + delta * envelope)
 
     def keystroke_state(self) -> tuple[float, float, float, bool]:
         """返回当前敲击包络 ``(press, lift, curl, active)``。
@@ -484,4 +647,4 @@ class PetModel:
         return press, lift * C.PRESS_LIFT_PEAK, curl * C.PRESS_CURL_PEAK
 
 
-__all__ = ["PetPose", "PetModel"]
+__all__ = ["SurpriseKind", "PetPose", "PetModel"]
