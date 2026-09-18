@@ -1,5 +1,7 @@
 # desktop-pet · 大圣喵风格桌面宠物
 
+**当前版本：v0.5.0** ｜ Python 3.13 + PySide6 ｜ 839 项自动化测试全绿
+
 一只常驻 Windows 桌面、会"陪你敲键盘"的治愈系程序化猫咪。
 监听全局键盘敲击并同步做出"敲键盘"动画，在**空闲 / 专注 / 休息 / 睡觉**四态间
 自动切换并给出不同情绪反馈。**程序化矢量绘制，零外部图片素材。**
@@ -15,6 +17,9 @@ desktop-pet\dist\desktop-pet\desktop-pet.exe
 ```
 
 或者双击项目根目录的 **`run.bat`**（自动挑选可用运行时）。
+
+> 注：`dist/` 是**本地打包产物**，已在 `.gitignore` 中排除，因此从仓库克隆下来并不会自带
+> 该 exe。需要独立程序时请按下方「重新打包为独立程序」自行生成；只想跑起来则用方式 B（源码运行）。
 
 启动后猫咪会出现在屏幕右下角。**退出方式**：右键猫咪 → 退出。
 内存占用约 **50 MB**。
@@ -35,6 +40,10 @@ desktop-pet\dist\desktop-pet\desktop-pet.exe
 | 交互反馈 | 点击弹跳、悬停抚摸、拖拽被拎起姿态、气泡对话 | FR-27~30 |
 | 轻量省电 | 活跃 30 / 空闲 15 / 睡眠 8 FPS，脏区局部刷新 | FR-31~35 |
 | 配置持久化 | JSON 配置，损坏自动回落默认 | FR-36~39 |
+| 日语学习 | 单词泡泡 + 「记住了 / 新单词」按钮 + 生词本 / 学习记录窗；每日配额与泡泡时长可调 | JP-01~19 |
+| 释义查询 | 「纯中文五要素」详情窗；查找链 = 打包词库 → 本地缓存 → LLM 联网兜底，**离线可用** | — |
+| 视觉设计系统 | 语义色 / 间距 / 字号 / 圆角四组设计 token + QSS 主题生成器 + 程序化图标工厂 | — |
+| 无障碍 | 「减少动效」开关（托盘与配置均可切换），降低动画幅度 | — |
 
 ---
 
@@ -144,6 +153,14 @@ pytest -q
 | `listen_enabled` | bool | `true` | 全局键盘监听开关 |
 | `bubble_enabled` | bool | `true` | 气泡提示开关 |
 | `autostart` | bool | `false` | 开机自启 |
+| `reduce_motion` | bool | `false` | 减少动效开关 |
+| `jp_enabled` | bool | `false` | 日语学习模块开关 |
+| `jp_level` | str | `"N5"` | 日语等级（JLPT） |
+| `jp_bubble_duration_s` | int | `30` | 单词泡泡显示时长（秒），可选 10/30/60/120 |
+| `jp_daily_limit` | int | `15` | 每日展示单词配额，可选 5/10/15/20/50 |
+| `deepseek_api_key` | str | `""` | 释义联网兜底所用的 LLM 密钥；留空则**完全离线**运行 |
+| `deepseek_base_url` | str | `https://api.deepseek.com/v1/chat/completions` | 兜底接口地址 |
+| `deepseek_model` | str | `"deepseek-chat"` | 兜底模型名 |
 
 > 配置损坏 / 字段缺失 / 类型错误 / 数值越界时，会**逐字段回落默认值**并记录日志，
 > 程序不会崩溃。删除配置文件后重新启动即可以默认值重建。
@@ -168,28 +185,47 @@ pytest -q
 ```text
 desktop-pet/
 ├─ run.bat                     # ★ 双击启动（自动挑选可用运行时）
-├─ dist/desktop-pet/
-│  └─ desktop-pet.exe          # ★ 打包好的独立程序，无需 Python
-├─ docs/                       # PRD / 架构 / 类图 / 时序图
-├─ overview.md                 # 交付总览
 ├─ src/desktop_pet/
 │  ├─ main.py                  # 入口
-│  ├─ core/                    # 纯逻辑层（零 Qt 依赖，可无头单测）
-│  │  ├─ constants.py          # 枚举 / 阈值 / 配色 / 文案 唯一来源
+│  ├─ core/                    # 纯逻辑层（零 Qt / 零 time / 零 print，可无头单测）
+│  │  ├─ constants.py          # 枚举 / 阈值 / 配色 / 设计 token / 文案 唯一来源
 │  │  ├─ config.py             # 配置读写（容错 + 原子保存）
 │  │  ├─ event_aggregator.py   # 敲击聚合与高频判定
 │  │  ├─ mood_state_machine.py # 四态情绪状态机
 │  │  ├─ motion.py             # 缓动 / 插值 / 周期动画 / 屏幕钳制
-│  │  └─ pet_model.py          # 姿态模型
+│  │  ├─ pet_model.py          # 姿态模型
+│  │  ├─ vocabulary.py         # 词条模型
+│  │  ├─ vocab_store.py        # 生词本持久化
+│  │  ├─ mastered_store.py     # 「记住了」集合持久化
+│  │  ├─ daily_log_store.py    # 每日学习记录持久化
+│  │  ├─ weighted_picker.py    # 加权抽样
+│  │  ├─ word_detail.py        # 释义聚合与降级
+│  │  ├─ word_detail_bank.py   # 打包词库读取
+│  │  ├─ word_details_cache_store.py  # 释义本地缓存
+│  │  ├─ llm_client.py         # 联网兜底客户端
+│  │  └─ paths.py              # 用户数据目录解析
 │  ├─ ui/                      # 渲染层（PySide6）
-│  │  ├─ pet_renderer.py       # QPainter 矢量猫咪 + 托盘图标
+│  │  ├─ pet_renderer.py       # QPainter 矢量猫咪
 │  │  ├─ pet_window.py         # 无边框透明置顶窗口
 │  │  ├─ bubble.py             # 气泡浮层
-│  │  └─ tray.py               # 系统托盘
+│  │  ├─ bubble_button_bar.py  # 泡泡下方按钮条
+│  │  ├─ tray.py               # 系统托盘
+│  │  ├─ theme.py              # 设计 token → QSS 主题生成器
+│  │  ├─ icon_factory.py       # 程序化矢量图标工厂
+│  │  ├─ motion_ui.py          # UI 动效（含减少动效）
+│  │  ├─ spinner.py            # 加载指示器
+│  │  ├─ log_window.py         # 日志窗口
+│  │  ├─ vocab_window.py       # 生词本 / 学习记录窗
+│  │  ├─ word_detail_window.py # 释义详情窗
+│  │  └─ word_detail_worker.py # 释义请求线程
+│  ├─ data/                    # 打包词库与释义数据（离线可用）
 │  └─ app/                     # 组装层
 │     ├─ keyboard_listener.py  # pynput 守护线程 + 跨线程信号桥
 │     └─ controller.py         # 装配 / 接线 / 生命周期
-├─ tests/                      # 248 个测试 + 人工验收清单
+├─ tests/                      # 39 个测试文件 / 839 项用例 + 人工验收清单
+├─ tools/                      # 词库与审阅页构建脚本
+├─ docs/                       # PRD / 架构 / 类图 / 时序图 / 参数总表
+├─ overview.md                 # 交付总览
 ├─ requirements.txt
 ├─ requirements-dev.txt
 └─ pyproject.toml
