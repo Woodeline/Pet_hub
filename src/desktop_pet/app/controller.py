@@ -251,6 +251,7 @@ class PetAppController(QObject):
         self._tray.restore_requested.connect(self._on_restore)
         self._tray.autostart_toggled.connect(self._set_autostart)
         self._tray.reduce_motion_toggled.connect(self._on_reduce_motion_toggled)
+        self._tray.theme_selected.connect(self._on_theme_selected)
         self._tray.quit_requested.connect(self.shutdown)
 
         # 日语学习
@@ -449,6 +450,20 @@ class PetAppController(QObject):
                 window.set_reduce_motion(bool(enabled))
             except Exception:  # noqa: BLE001 —— 单个窗口同步失败不应中断开关切换
                 logger.exception("同步「减少动效」到窗口失败：%r", window)
+
+    def _on_theme_selected(self, value: str) -> None:
+        """切换主题皮肤（托盘「主题」子菜单，单选）。
+
+        写 ``cfg.theme`` → 应用（渲染器取色 + 托盘图标 + 托盘勾选）→ 落地配置。
+        整窗 ``update()`` 已在 :meth:`_apply_theme` 内完成（防脏区残留，v1.1 风险 11）。
+        """
+
+        value = str(value)
+        if value not in C.THEME_ALLOWED:
+            return
+        self._cfg.theme = value
+        self._apply_theme()
+        self._persist()
 
     def _on_minimize(self) -> None:
         """最小化到托盘（FR-22）。"""
@@ -1030,6 +1045,7 @@ class PetAppController(QObject):
             self._current_theme = name
             self._renderer.set_theme(name)
             self._refresh_tray_icon(name)
+            self._tray.set_theme_checked(self._cfg.theme)
             self._window.update()
         except Exception:  # noqa: BLE001
             logger.exception("应用主题失败（已忽略）")

@@ -34,6 +34,7 @@ class TrayController(QObject):
     restore_requested = Signal()
     autostart_toggled = Signal(bool)
     reduce_motion_toggled = Signal(bool)
+    theme_selected = Signal(str)
     quit_requested = Signal()
     bubble_toggled = Signal(bool)
     # —— 日语学习（ui 层只发信号，业务判定在 app/controller）——
@@ -70,6 +71,10 @@ class TrayController(QObject):
         self._action_quit: QAction | None = None
         self._scale_group: QActionGroup | None = None
         self._scale_actions: dict[float, QAction] = {}
+        # 主题皮肤菜单组（「自动」+ 7 套皮肤，单选）
+        self._theme_menu: QMenu | None = None
+        self._theme_group: QActionGroup | None = None
+        self._theme_actions: dict[str, QAction] = {}
         # 日语学习菜单组
         self._action_jp: QAction | None = None
         self._jp_level_menu: QMenu | None = None
@@ -157,6 +162,20 @@ class TrayController(QObject):
             self._action_reduce_motion.blockSignals(True)
             self._action_reduce_motion.setChecked(bool(checked))
             self._action_reduce_motion.blockSignals(False)
+
+    def set_theme_checked(self, value: str) -> None:
+        """同步「主题」单选勾选状态（``blockSignals``，**不触发信号**）。
+
+        Args:
+            value: 用户选择的主题取值（``auto`` 或某套皮肤名）。
+        """
+
+        target = str(value)
+        for key, action in self._theme_actions.items():
+            action.blockSignals(True)
+            action.setChecked(key == target)
+            action.blockSignals(False)
+
 
     def set_jp_checked(self, checked: bool) -> None:
         """同步「日语学习」开关勾选状态（不触发信号）。"""
@@ -300,6 +319,22 @@ class TrayController(QObject):
             scale_menu.addAction(action)
             self._scale_actions[value] = action
 
+        # —— 主题子菜单（「自动」+ 7 套皮肤，单选；照 scale_menu 先例）——
+        self._theme_menu = QMenu(C.TRAY_MENU_THEME, self._menu)
+        self._theme_group = QActionGroup(self._menu)
+        self._theme_group.setExclusive(True)
+        for value in (C.AUTO_THEME, *C.THEMES):
+            label = C.THEME_NAMES.get(value, value)
+            action = QAction(label, self._theme_menu)
+            action.setCheckable(True)
+            action.setChecked(value == self._cfg.theme)
+            action.triggered.connect(
+                lambda _checked=False, v=value: self.theme_selected.emit(v)
+            )
+            self._theme_group.addAction(action)
+            self._theme_menu.addAction(action)
+            self._theme_actions[value] = action
+
         self._action_minimize = QAction("最小化到托盘", self._menu)
         self._action_minimize.triggered.connect(self.minimize_requested.emit)
 
@@ -330,6 +365,7 @@ class TrayController(QObject):
         self._menu.addAction(self._action_jp_log)
         self._menu.addSeparator()
         self._menu.addMenu(scale_menu)
+        self._menu.addMenu(self._theme_menu)
         self._menu.addAction(self._action_minimize)
         self._menu.addSeparator()
         self._menu.addAction(self._action_autostart)

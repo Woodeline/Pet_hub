@@ -81,3 +81,23 @@ commit：`f3c5dc7 feat(theme): 主题渐变表 + AppConfig.theme + _coerce_theme
 > 说明：`_draw_glow` 阶段 A 简版按「清醒取深端 / 睡觉取亮端」从 `self._stops` 派生；
 > 阶段 B 的 `glow_for_theme` 会再精修。跨月换肤 = 每日 `QTimer` **叠加** `_on_frame_tick`
 > 既有跨日检测（保证零点精度，而非最多滞后一天）。
+
+commit：`94561fe feat(theme): resolve_theme 纯函数 + 渲染取色 + 托盘图标跟随`
+
+---
+
+## A4 · 托盘「主题」子菜单（含「自动」）
+
+| 项 | 内容 |
+|---|---|
+| 文件 | `ui/tray.py`（`theme_selected = Signal(str)` + `_theme_menu`/`_theme_group`/`_theme_actions` + `set_theme_checked`）、`app/controller.py`（接线 `_on_theme_selected`；`_apply_theme` 同步勾选）、`tests/test_tray.py`（新） |
+| 结果 | 全量 **946 passed / rc=0**（+12 `test_tray`） |
+| 结论 | 子菜单含「自动」+ 7 套皮肤（单选 `QActionGroup`）；沿用 `scale_menu` 先例用 `triggered` 连接（避免单选组取消勾选时误发信号）；`set_theme_checked` 走 `blockSignals` 静默同步。 |
+
+**变异验证（A4）**
+
+| # | 怎么破坏 | 观察到 | 还原 |
+|---|---|---|---|
+| 1 | `set_theme_checked` 改用 `action.trigger()`（会发信号） | `test_set_theme_checked_is_silent` **FAIL** | 已还原 |
+| 2 | `_on_theme_selected` 去掉 `_apply_theme()` | `test_on_theme_selected_applies_and_persists`、`test_tray_theme_click_reaches_controller` **FAIL** | 已还原 |
+| 3 | 主题项初值改为恒 `default`（忽略 `cfg.theme`） | `test_theme_default_checked_follows_config` **FAIL** | 已还原 |
