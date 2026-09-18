@@ -19,7 +19,7 @@ import sys
 import time
 from datetime import datetime, timezone
 
-from PySide6.QtCore import QObject, QPoint
+from PySide6.QtCore import QObject, QPoint, QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication
 
@@ -28,6 +28,7 @@ from desktop_pet.core import constants as C
 from desktop_pet.core import motion, paths
 from desktop_pet.core.config import AppConfig, ConfigStore
 from desktop_pet.core.constants import Expression, Gesture, Mood
+from desktop_pet.core.theme import resolve_theme, theme_stops
 from desktop_pet.core.event_aggregator import KeystrokeAggregator
 from desktop_pet.core.mood_state_machine import (
     MoodStateMachine,
@@ -132,6 +133,12 @@ class PetAppController(QObject):
         )
         self._detail_window: WordDetailWindow | None = None
 
+        # —— 主题皮肤：当前生效皮肤名 + 每日重估定时器（挂 parent，随控制器销毁）——
+        self._current_theme: str = C.DEFAULT_THEME
+        self._theme_timer: QTimer = QTimer(self)
+        self._theme_timer.setInterval(C.THEME_RECHECK_MS)
+        self._theme_timer.timeout.connect(self._recheck_theme)
+
     # ------------------------------------------------------------------ #
     # 生命周期
     # ------------------------------------------------------------------ #
@@ -140,6 +147,10 @@ class PetAppController(QObject):
 
         logger.info("桌面宠物启动中……")
         self._connect_signals()
+
+        # 主题：启动即按「用户选择 + 当前月份」解析并应用（渲染器取色 + 托盘图标）
+        self._apply_theme()
+        self._theme_timer.start()
 
         self._apply_scale(self._cfg.scale, persist=False)
 
@@ -194,6 +205,10 @@ class PetAppController(QObject):
             return
         self._shutting_down = True
         logger.info("开始退出流程……")
+        try:
+            self._theme_timer.stop()
+        except Exception:  # noqa: BLE001
+            logger.exception("停止主题重估定时器失败")
         try:
             self._keyboard.stop()
         except Exception:  # noqa: BLE001
@@ -299,6 +314,8 @@ class PetAppController(QObject):
                 self._today_str = today
                 self._today_done_notified = False
                 self._next_word_ts = now
+                # 跨日 → 顺带重估主题（保证跨月零点自动换肤，而非最多等一天）
+                self._recheck_theme()
 
             # ② 超时检测：当前词到点未处置 → 记「未处理」（与按钮点击单飞互斥）
             if (
@@ -999,6 +1016,47 @@ class PetAppController(QObject):
         width = self._window.width()
         height = self._window.height()
         return self._window.mapToGlobal(QPoint(int(width * 0.5), int(height * 0.06)))
+
+    def _apply_theme(self) -> None:
+        """按「用户选择 + 当前月份」解析并应用主题（渲染器取色 + 托盘图标）。
+
+        这是 **app 层唯一的月份来源**（``time.localtime().tm_mon``）——core 层零 ``time``，
+        月份在此注入 :func:`resolve_theme`。切换后整窗 ``update()`` 一次（非脏区），
+        防止主题变更瞬间脏区残留（v1.1 风险 11）。
+        """
+
+        try:
+            name = resolve_theme(time.localtime().tm_mon, self._cfg.theme)
+            self._current_theme = name
+            self._renderer.set_theme(name)
+            self._refresh_tray_icon(name)
+            self._window.update()
+        except Exception:  # noqa: BLE001
+            logger.exception("应用主题失败（已忽略）")
+
+    def _recheck_theme(self) -> None:
+        """周期重估主题（每日定时器 + 跨日检测调用）；仅当生效皮肤变化时才更新。
+
+        这样 ``auto`` 档在跨月后会自动换肤（月份由 app 层读取并注入）。
+        """
+
+        try:
+            name = resolve_theme(time.localtime().tm_mon, self._cfg.theme)
+            if name == self._current_theme:
+                return
+            self._current_theme = name
+            self._renderer.set_theme(name)
+            self._refresh_tray_icon(name)
+            self._window.update()
+        except Exception:  # noqa: BLE001
+            logger.exception("重估主题失败（已忽略）")
+
+    def _refresh_tray_icon(self, name: str) -> None:
+        """按主题停靠点重建托盘图标并应用到托盘（P1：托盘跟随换肤）。"""
+
+        icon = PetRenderer.build_tray_icon(theme_stops(name))
+        self._icon = icon
+        self._tray.set_icon(icon)
 
     def _apply_scale(self, scale: float, persist: bool = True) -> None:
         """应用缩放档（FR-20/37）。"""

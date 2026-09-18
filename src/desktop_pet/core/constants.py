@@ -263,6 +263,9 @@ THEME_ALLOWED: Final[frozenset[str]] = frozenset(THEMES) | {AUTO_THEME}
 #: 托盘「主题」子菜单标题。
 TRAY_MENU_THEME: Final[str] = "主题"
 
+#: 主题重估间隔（毫秒）：每日一次（配合 app 层跨日检测，跨月零点自动换肤）。
+THEME_RECHECK_MS: Final[int] = 24 * 60 * 60 * 1000
+
 # --------------------------------------------------------------------------- #
 # 4b. Design Token（UI 视觉升级 P0）—— 语义色 / 间距 / 字号 / 圆角
 # --------------------------------------------------------------------------- #
@@ -738,6 +741,7 @@ __all__ = [
     "THEME_SEASON_MAP",
     "THEME_ALLOWED",
     "TRAY_MENU_THEME",
+    "THEME_RECHECK_MS",
     # Design Token（UI 视觉升级 P0）
     "SEMANTIC_COLORS",
     "SPACING",

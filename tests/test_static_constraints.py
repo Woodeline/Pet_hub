@@ -92,6 +92,7 @@ def test_core_imports_without_loading_qt(project_root: Path) -> None:
         "import desktop_pet.core.mood_state_machine\n"
         "import desktop_pet.core.pet_model\n"
         "import desktop_pet.core.paths\n"
+        "import desktop_pet.core.theme\n"
         "import desktop_pet.core.vocabulary\n"
         "import desktop_pet.core.vocab_store\n"
         "import desktop_pet.core.mastered_store\n"

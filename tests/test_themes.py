@@ -164,7 +164,7 @@ def test_theme_names_cover_themes_and_auto() -> None:
     [
         "THEMES", "DEFAULT_THEME", "AUTO_THEME",
         "THEME_NAMES", "THEME_SEASON_MAP", "THEME_ALLOWED",
-        "TRAY_MENU_THEME",
+        "TRAY_MENU_THEME", "THEME_RECHECK_MS",
     ],
 )
 def test_theme_constants_exported_in_all(name: str) -> None:

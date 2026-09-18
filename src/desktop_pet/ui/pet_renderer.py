@@ -207,6 +207,10 @@ class PetRenderer:
 
         ink = QColor(C.COLORS["ink"])
 
+        #: 当前主题的渐变停靠点（实例状态；默认 ``default`` 皮肤）。
+        #: 主题**绝不**进姿态通道（``PetPose`` 全 float，见 v1.1 R1）——它是渲染器实例状态。
+        self._stops: tuple[tuple[float, str], ...] = C.THEMES[C.DEFAULT_THEME]
+
         self._outline = QPen(ink)
         self._outline.setWidthF(_STROKE_W)
         self._outline.setCapStyle(Qt.PenCapStyle.RoundCap)
@@ -244,6 +248,23 @@ class PetRenderer:
     # ------------------------------------------------------------------ #
     # 公共入口
     # ------------------------------------------------------------------ #
+    def set_theme(self, name: str) -> None:
+        """切换当前主题皮肤（非法名称回落默认皮肤，不抛异常）。
+
+        主题是**渲染器实例状态**，与 :class:`~desktop_pet.core.pet_model.PetPose`
+        完全解耦 —— 因此 ``lerp_to`` / ``EXPRESSION_POSES`` 一行不用动（v1.1 R1）。
+
+        Args:
+            name: 主题名（``THEMES`` 的键之一；未知名称回落 ``default``）。
+        """
+
+        self._stops = C.THEMES.get(name, C.THEMES[C.DEFAULT_THEME])
+
+    def theme_stops(self) -> tuple[tuple[float, str], ...]:
+        """返回当前主题的渐变停靠点（供托盘图标等外部取色复用）。"""
+
+        return self._stops
+
     def paint(
         self,
         painter: QPainter,
@@ -413,9 +434,17 @@ class PetRenderer:
     # 托盘图标（团子猫脸小图标，透明背景，PRD §4.4 / FR-25）
     # ------------------------------------------------------------------ #
     @staticmethod
-    def build_tray_icon() -> QIcon:
-        """用 QPainter 现画猫脸小图标（16/32px），返回 ``QIcon``。"""
+    def build_tray_icon(
+        stops: tuple[tuple[float, str], ...] | None = None,
+    ) -> QIcon:
+        """用 QPainter 现画猫脸小图标（16/32px），返回 ``QIcon``。
 
+        Args:
+            stops: 渐变停靠点（跟随主题，P1）；``None`` 时使用默认皮肤
+                （``THEMES[DEFAULT_THEME]``，即品牌彩虹）。
+        """
+
+        resolved = C.THEMES[C.DEFAULT_THEME] if stops is None else stops
         icon = QIcon()
         for px_size in (16, 32):
             pixmap = QPixmap(px_size, px_size)
@@ -425,15 +454,17 @@ class PetRenderer:
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
                 s = px_size / 32.0
                 painter.scale(s, s)
-                PetRenderer._paint_tray_face(painter)
+                PetRenderer._paint_tray_face(painter, resolved)
             finally:
                 painter.end()
             icon.addPixmap(pixmap)
         return icon
 
     @staticmethod
-    def _paint_tray_face(painter: QPainter) -> None:
-        """在 32×32 逻辑坐标内绘制团子猫脸图标。"""
+    def _paint_tray_face(
+        painter: QPainter, stops: tuple[tuple[float, str], ...],
+    ) -> None:
+        """在 32×32 逻辑坐标内绘制团子猫脸图标（``stops`` 为皮肤渐变停靠点）。"""
 
         ink = QPen(QColor(C.COLORS["ink"]))
         ink.setWidthF(2.2)
@@ -441,7 +472,7 @@ class PetRenderer:
         ink.setCapStyle(Qt.PenCapStyle.RoundCap)
 
         gradient = QLinearGradient(QPointF(4.0, 4.0), QPointF(28.0, 28.0))
-        for pos, hexv in C.BODY_GRADIENT_STOPS:
+        for pos, hexv in stops:
             gradient.setColorAt(pos, QColor(hexv))
 
         # 耳 + 圆脸合并为一个轮廓
@@ -479,12 +510,11 @@ class PetRenderer:
     # ------------------------------------------------------------------ #
     # 渐变 / 轮廓辅助
     # ------------------------------------------------------------------ #
-    @staticmethod
-    def _body_gradient(x0: float, y0: float, x1: float, y1: float) -> QLinearGradient:
-        """构造「左上 → 右下」的柔和全息彩虹对角渐变。"""
+    def _body_gradient(self, x0: float, y0: float, x1: float, y1: float) -> QLinearGradient:
+        """构造「左上 → 右下」的当前皮肤对角渐变。"""
 
         gradient = QLinearGradient(QPointF(x0, y0), QPointF(x1, y1))
-        for pos, hexv in C.BODY_GRADIENT_STOPS:
+        for pos, hexv in self._stops:
             gradient.setColorAt(pos, QColor(hexv))
         return gradient
 
@@ -519,13 +549,16 @@ class PetRenderer:
     # 各部件绘制
     # ------------------------------------------------------------------ #
     def _draw_glow(self, painter: QPainter, pose: PetPose) -> None:
-        """专注/兴奋的暖黄光晕 或 睡觉的淡蓝柔光（PRD §4.2）。"""
+        """专注/兴奋的光晕 或 睡觉的柔光（PRD §4.2）—— 颜色随当前皮肤派生（阶段 A3）。
+
+        取色规则（阶段 A 简版；阶段 B 再按 `glow_for_theme` 精修）：清醒取暖/深端
+        （末尾停靠点），睡觉取冷/亮端（首个停靠点）——保持「睡觉更淡更柔」的语义。
+        """
 
         if pose.glow_alpha <= self.GLOW_ALPHA_EPSILON:
             return
-        base = QColor(
-            C.COLORS["glow_blue"] if pose.zzz_alpha > 0.05 else C.COLORS["glow_yellow"]
-        )
+        hexv = self._stops[0][1] if pose.zzz_alpha > 0.05 else self._stops[-1][1]
+        base = QColor(hexv)
         base.setAlphaF(min(1.0, max(0.0, pose.glow_alpha)) * 0.55)
         trans = QColor(base)
         trans.setAlpha(0)
@@ -854,11 +887,10 @@ class PetRenderer:
         half = top_hw + (bot_hw - top_hw) * t
         return QPointF(x * half / top_hw, y)
 
-    @staticmethod
-    def _sample_gradient(frac: float) -> str:
-        """按 ``frac``（0→1）在彩虹渐变停靠点间取色，用于键帽轮换。"""
+    def _sample_gradient(self, frac: float) -> str:
+        """按 ``frac``（0→1）在**当前皮肤**渐变停靠点间取色，用于键帽轮换 / 尾巴取色。"""
 
-        stops = C.BODY_GRADIENT_STOPS
+        stops = self._stops
         f = min(1.0, max(0.0, frac))
         for i in range(len(stops) - 1):
             p0, c0 = stops[i]

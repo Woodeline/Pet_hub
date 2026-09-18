@@ -38,3 +38,46 @@ PYTHONPATH=src QT_QPA_PLATFORM=offscreen "$VENV" -m pytest tests/ -p no:cachepro
 
 > 环境备注：本机 `pytest -q`（叠加 `addopts=-q`）不打印汇总行；改用 `-o addopts=""`
 > 可稳定读到 `N passed`。据此得到基线 839（与方案 §0 抬头一致）。
+
+---
+
+## A1 + A2 · 主题渐变表 + AppConfig.theme + `_coerce_theme`
+
+| 项 | 内容 |
+|---|---|
+| 文件 | `core/constants.py`（`THEMES`/`DEFAULT_THEME`/`AUTO_THEME`/`THEME_NAMES`/`THEME_SEASON_MAP`/`THEME_ALLOWED`/`TRAY_MENU_THEME`/`THEME_RECHECK_MS` + `__all__`）、`core/config.py`（`_coerce_theme` + `theme` 字段 + `to_dict`/`from_dict`）、`tests/test_themes.py`（新）、`tests/test_config.py`（扩） |
+| 结果 | 全量 **898 passed / rc=0**（+49 `test_themes`，+10 `test_config`） |
+| 结论 | `default` 以 `is` 引用 `BODY_GRADIENT_STOPS`；`THEME_ALLOWED` 8 成员；`_coerce_theme` 白名单。`COLORS`/`SEMANTIC_COLORS`/`SPACING`/`FONT_SIZE`/`RADIUS` 键值未动。 |
+
+**变异验证（A1/A2）**
+
+| # | 怎么破坏 | 观察到 | 还原 |
+|---|---|---|---|
+| 1 | `_coerce_theme` 去掉白名单（`if True: return candidate`） | `test_theme_coercion[banana-default]`、`[-default]` **FAIL** | 已还原 |
+| 2 | `THEMES["default"]` 改为复制 `tuple(...)` | `test_default_theme_is_body_gradient_stops_object` **FAIL** | 已还原 |
+| 3 | `THEME_ALLOWED` 去掉 `| {AUTO_THEME}` | `test_theme_allowed_has_eight_members` **FAIL** | 已还原 |
+| 4 | `spring` 位置 `0.25→0.20` 且色值改小写 | 位置/大小写两条 **FAIL** | 已还原 |
+
+commit：`f3c5dc7 feat(theme): 主题渐变表 + AppConfig.theme + _coerce_theme`
+
+---
+
+## A3 · `resolve_theme` 纯函数 + 渲染取色 + 托盘图标跟随
+
+| 项 | 内容 |
+|---|---|
+| 文件 | `core/theme.py`（新，纯逻辑零 Qt/零 time）、`ui/pet_renderer.py`（`set_theme`/`theme_stops` 实例状态；`_body_gradient`/`_sample_gradient`/`_draw_glow` 读 `self._stops`；`build_tray_icon(stops)`/`_paint_tray_face(painter, stops)` 参数化）、`ui/tray.py`（`set_icon`）、`app/controller.py`（启动 + 每日 `QTimer(self)` + 跨日检测 → `resolve_theme`；托盘图标跟随）、`tests/test_theme_render.py`（新）、`tests/test_static_constraints.py`（把 `core.theme` 加入无 Qt 导入清单） |
+| 结果 | 全量 **934 passed / rc=0**（+36 `test_theme_render`） |
+| 结论 | `PetPose` 零改动（R1）；`paint()` 签名不变；托盘图标随皮肤重建。app 层是唯一 `time` 使用点。 |
+
+**变异验证（A3）**
+
+| # | 怎么破坏 | 观察到 | 还原 |
+|---|---|---|---|
+| 1 | `_sample_gradient` 改回读 `C.BODY_GRADIENT_STOPS` | `test_sample_gradient_differs_across_themes[0/0.25/0.5/0.75/1.0]` **FAIL** | 已还原 |
+| 2 | `resolve_theme` 非法分支返回 `AUTO_THEME`（忽略用户选择） | `test_resolve_theme_manual_overrides_auto` **FAIL** | 已还原 |
+| 3 | `PetPose` 插入 `theme: str` 字段（模拟 R1 复发） | `test_petpose_fields_are_all_float` **FAIL** | 已还原 |
+
+> 说明：`_draw_glow` 阶段 A 简版按「清醒取深端 / 睡觉取亮端」从 `self._stops` 派生；
+> 阶段 B 的 `glow_for_theme` 会再精修。跨月换肤 = 每日 `QTimer` **叠加** `_on_frame_tick`
+> 既有跨日检测（保证零点精度，而非最多滞后一天）。

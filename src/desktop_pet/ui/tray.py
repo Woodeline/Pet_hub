@@ -112,6 +112,12 @@ class TrayController(QObject):
         except Exception:  # noqa: BLE001 —— 托盘通知失败不应影响主流程
             logger.exception("托盘通知失败：%s / %s", title, msg)
 
+    def set_icon(self, icon: QIcon) -> None:
+        """替换托盘图标（主题切换时跟随重建，P1）。"""
+
+        self._icon = icon
+        self._tray.setIcon(icon)
+
     def set_listen_checked(self, checked: bool) -> None:
         """同步"监听开关"勾选状态（不触发信号）。"""
 
