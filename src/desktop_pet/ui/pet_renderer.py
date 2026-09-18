@@ -40,6 +40,7 @@ from PySide6.QtGui import (
 from desktop_pet.core import constants as C
 from desktop_pet.core import motion
 from desktop_pet.core.pet_model import PetPose
+from desktop_pet.core.theme import glow_for_theme
 
 # --------------------------------------------------------------------------- #
 # 几何常量（逻辑画布 160×180）
@@ -210,11 +211,19 @@ class PetRenderer:
         #: 当前主题的渐变停靠点（实例状态；默认 ``default`` 皮肤）。
         #: 主题**绝不**进姿态通道（``PetPose`` 全 float，见 v1.1 R1）——它是渲染器实例状态。
         self._stops: tuple[tuple[float, str], ...] = C.THEMES[C.DEFAULT_THEME]
+        #: 当前皮肤名（供 ``glow_for_theme`` 派生光晕色；``set_theme`` 同步）。
+        self._theme_name: str = C.DEFAULT_THEME
 
         self._outline = QPen(ink)
         self._outline.setWidthF(_STROKE_W)
         self._outline.setCapStyle(Qt.PenCapStyle.RoundCap)
         self._outline.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+
+        #: 道具（键盘 / 鼠标）描边笔：比主体 ink 略浅，形成描边层级差（阶段 B1-3）。
+        self._outline_prop = QPen(QColor(C.PROP_OUTLINE))
+        self._outline_prop.setWidthF(_STROKE_W)
+        self._outline_prop.setCapStyle(Qt.PenCapStyle.RoundCap)
+        self._outline_prop.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
 
         self._outline_thin = QPen(ink)
         self._outline_thin.setWidthF(_STROKE_W_THIN)
@@ -259,6 +268,7 @@ class PetRenderer:
         """
 
         self._stops = C.THEMES.get(name, C.THEMES[C.DEFAULT_THEME])
+        self._theme_name = name if name in C.THEMES else C.DEFAULT_THEME
 
     def theme_stops(self) -> tuple[tuple[float, str], ...]:
         """返回当前主题的渐变停靠点（供托盘图标等外部取色复用）。"""
@@ -549,15 +559,17 @@ class PetRenderer:
     # 各部件绘制
     # ------------------------------------------------------------------ #
     def _draw_glow(self, painter: QPainter, pose: PetPose) -> None:
-        """专注/兴奋的光晕 或 睡觉的柔光（PRD §4.2）—— 颜色随当前皮肤派生（阶段 A3）。
+        """专注/兴奋的光晕 或 睡觉的柔光（PRD §4.2）—— 颜色随当前皮肤派生（阶段 B1-1）。
 
-        取色规则（阶段 A 简版；阶段 B 再按 `glow_for_theme` 精修）：清醒取暖/深端
-        （末尾停靠点），睡觉取冷/亮端（首个停靠点）——保持「睡觉更淡更柔」的语义。
+        取色交由 :func:`desktop_pet.core.theme.glow_for_theme`：
+        清醒取暖端主色派生、睡觉取冷端主色派生（保住「睡觉淡蓝」语义）。
+        色值**只在 core 派生**，本层不写死 hex（``test_static_constraints`` 的 AST 扫描）。
+        是否睡觉以 ``pose.zzz_alpha`` 判定。
         """
 
         if pose.glow_alpha <= self.GLOW_ALPHA_EPSILON:
             return
-        hexv = self._stops[0][1] if pose.zzz_alpha > 0.05 else self._stops[-1][1]
+        hexv = glow_for_theme(self._theme_name, sleeping=pose.zzz_alpha > 0.05)
         base = QColor(hexv)
         base.setAlphaF(min(1.0, max(0.0, pose.glow_alpha)) * 0.55)
         trans = QColor(base)
@@ -819,8 +831,8 @@ class PetRenderer:
                 QPointF(bot_hw, bot_y + thick), QPointF(-bot_hw, bot_y + thick),
             ])
 
-            # 键面（浅一档的深灰）+ 外圈黑描边
-            painter.setPen(self._outline)
+            # 键面（浅一档的深灰）+ 外圈道具描边（比主体 ink 略浅，阶段 B1-3）
+            painter.setPen(self._outline_prop)
             painter.setBrush(self._brush_mouse)
             painter.drawPolygon(top_face)
             painter.drawPolygon(front_face)
@@ -915,7 +927,7 @@ class PetRenderer:
             painter.rotate(_GEO_MOUSE_TILT)
             rx, ry = _GEO_MOUSE_RX, _GEO_MOUSE_RY
 
-            painter.setPen(self._outline)
+            painter.setPen(self._outline_prop)
             painter.setBrush(self._brush_mouse)
             painter.drawEllipse(QRectF(-rx, -ry, rx * 2.0, ry * 2.0))
 
