@@ -120,7 +120,7 @@
 | `src/desktop_pet/__init__.py` | 包标记 + 版本号 | `__version__` | 3 |
 | `src/desktop_pet/main.py` | 程序入口，创建 QApplication、装配 Controller | `main() -> int` | 60 |
 | `src/desktop_pet/core/__init__.py` | 包标记 | — | 2 |
-| `src/desktop_pet/core/constants.py` | 全部枚举 + 时间/配色/尺寸/文案常量 | `Mood` `Expression` `Gesture` `KeystrokeOutcome`；常量集合 | 150 |
+| `src/desktop_pet/core/constants.py` | 全部枚举 + 时间/配色/尺寸/文案常量 | `Mood` `Expression` `Gesture`；常量集合 | 150 |
 | `src/desktop_pet/core/config.py` | 配置 dataclass + JSON 读写 + 容错 | `AppConfig` `ConfigStore` | 130 |
 | `src/desktop_pet/core/event_aggregator.py` | 敲击计数、高频判定（300ms/3 次） | `KeystrokeAggregator` `KeystrokeResult` | 90 |
 | `src/desktop_pet/core/mood_state_machine.py` | 四态状态机 + 最小驻留防抖 | `MoodStateMachine` `MoodTransition` | 190 |
@@ -278,7 +278,6 @@ classDiagram
         -int _press_arm
         -bool _dragging
         -bool _hovering
-        -float _temp_action_until
         -Expression _base_expression
         +__init__()
         +set_expression(expr: Expression, duration: float) None
@@ -316,7 +315,6 @@ classDiagram
         -float _scale
         -QPoint _drag_origin
         -bool _dragging
-        -float _press_ts
         +__init__(model: PetModel, renderer: PetRenderer, scale: float)
         +set_scale(scale: float) None
         +set_fps(fps: int) None
@@ -517,7 +515,7 @@ sequenceDiagram
     participant FS as config.json
 
     US->>WN: mousePressEvent(LeftButton)
-    WN->>WN: 记录 _press_pos, _drag_origin, _press_ts
+    WN->>WN: 记录 _press_pos, _drag_origin
     WN->>MD: set_dragging(True)  (FR-29 被拎起姿态)
     loop 拖动中
         US->>WN: mouseMoveEvent(pos)

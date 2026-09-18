@@ -46,10 +46,10 @@ def _signature(image) -> str:
 # 1. 图标名清单
 # --------------------------------------------------------------------------- #
 def test_icon_names_complete() -> None:
-    """六个图标名齐全且顺序与计划一致。"""
+    """四个图标名齐全且顺序与计划一致。"""
 
     assert icon_factory.ICON_NAMES == (
-        "close", "retry", "refresh", "remove", "trash", "chevron_down",
+        "close", "retry", "remove", "trash",
     )
 
 
@@ -118,10 +118,10 @@ def test_make_icon_custom_color_changes_pixels(qapp) -> None:
 def test_default_color_comes_from_semantic_tokens(qapp) -> None:
     """默认色即 ``SEMANTIC_COLORS["text_secondary"]``（与显式传该色像素一致）。"""
 
-    default_sig = _signature(icon_factory.make_icon("chevron_down").pixmap(24, 24).toImage())
+    default_sig = _signature(icon_factory.make_icon("close").pixmap(24, 24).toImage())
     explicit_sig = _signature(
         icon_factory.make_icon(
-            "chevron_down", color=C.SEMANTIC_COLORS["text_secondary"]
+            "close", color=C.SEMANTIC_COLORS["text_secondary"]
         ).pixmap(24, 24).toImage()
     )
     assert default_sig == explicit_sig

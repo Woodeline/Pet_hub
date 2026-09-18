@@ -49,15 +49,6 @@ class Gesture(IntEnum):
     WAKE = 4
 
 
-class KeystrokeOutcome(IntEnum):
-    """单次按键的聚合判定结果分类。"""
-
-    NORMAL = 0
-    HIGH_FREQUENCY = 1
-    BURST_START = 2
-    BURST_END = 3
-
-
 # --------------------------------------------------------------------------- #
 # 2. 时间阈值（单位：秒，除非显式标注 ms）
 # --------------------------------------------------------------------------- #
@@ -69,7 +60,6 @@ SLEEP_THRESHOLD_S: Final[float] = 300.0     # 睡觉态阈值（>=300s）      F
 MIN_DWELL_S: Final[float] = 5.0             # 最小驻留防抖（>=5s）      PRD §5
 WAKE_SULKY_S: Final[float] = 3.0            # 唤醒后委屈表情时长        FR-09
 EXCITED_THRESHOLD_S: Final[float] = 5.0     # 专注态连续高频累计→兴奋   FR-12
-SLEEPY_REST_S: Final[float] = 30.0          # 休息态持续 >=30s→犯困     FR-12
 SURPRISED_IDLE_S: Final[float] = 120.0      # 长空闲后单次敲键→惊讶     FR-12
 
 # 生命体征 / 周期动画
@@ -80,7 +70,6 @@ BREATH_PERIOD_S: Final[float] = 3.0         # 呼吸周期                  FR-1
 TAIL_MIN_S: Final[float] = 2.0              # 尾巴摆动周期下限          FR-13
 TAIL_MAX_S: Final[float] = 4.0              # 尾巴摆动周期上限          FR-13
 EAR_TWITCH_MIN_S: Final[float] = 4.0        # 耳朵抖动间隔下限          FR-13
-EAR_TWITCH_MAX_S: Final[float] = 9.0        # 耳朵抖动间隔上限          FR-13
 LOOK_AROUND_PERIOD_S: Final[float] = 6.0    # 空闲左右张望周期          FR-06
 YAWN_MIN_S: Final[float] = 15.0             # 呵欠间隔下限              FR-12
 YAWN_MAX_S: Final[float] = 30.0             # 呵欠间隔上限              FR-12
@@ -227,8 +216,6 @@ BASE_W: Final[int] = 160
 BASE_H: Final[int] = 180
 SCALES: Final[tuple[float, ...]] = (0.8, 1.0, 1.2)
 DEFAULT_SCALE: Final[float] = 1.0
-# 宠物本体锚点：本体底部中心对齐窗口底边中点（§9.3）
-PET_ANCHOR_X: Final[float] = BASE_W / 2.0
 
 # --------------------------------------------------------------------------- #
 # 6. 配置常量（架构 §9.6）
@@ -415,7 +402,6 @@ BUBBLE_TEXTS: Final[dict[Expression | Mood, list[str]]] = {
 
 # 托盘提示 / 通知文案
 TRAY_TOOLTIP: Final[str] = f"{APP_DISPLAY_NAME} · 桌面宠物"
-BUBBLE_MAX_WIDTH_PX: Final[float] = BUBBLE_MAX_WIDTH
 
 # —— 托盘通用菜单文案（减少动效开关：对应 prefers-reduced-motion）——
 TRAY_MENU_REDUCE_MOTION: Final[str] = "减少动效"
@@ -570,21 +556,11 @@ JP_LOG_STATUS_TEMPLATE: Final[str] = (
 )
 
 # --------------------------------------------------------------------------- #
-# 12. Jisho 词典与单词详情（B 版 JC-*）—— 联网 / 缓存 / 窗口
+# 12. 单词详情（B 版 JC-*）—— 窗口
 # --------------------------------------------------------------------------- #
-# —— Jisho 查询（纯标准库 urllib，仅用户双击触发；超时 5s）——
-JISHO_API_URL: Final[str] = "https://jisho.org/api/v1/search/words"
-JISHO_TIMEOUT_S: Final[float] = 5.0
-JISHO_MAX_DEFINITIONS: Final[int] = 6
-
-# —— Jisho 持久缓存文件与版本（TTL 判定在 app 层，见设计 §B8）——
-JISHO_CACHE_FILENAME: Final[str] = "jisho_cache.json"
-JISHO_CACHE_VERSION: Final[int] = 1
-JISHO_CACHE_TTL_DAYS: Final[int] = 7
-
 # —— 单词详情窗口（尺寸 / 基础字段标签 / 通用按钮）——
 # 说明：详情窗口已重写为「纯中文五要素」（见 §13），此处仅保留窗口几何、
-# 基础字段标签与通用按钮文案；Jisho 详情专用英文文案已移除。
+# 基础字段标签与通用按钮文案。
 WORD_DETAIL_WINDOW_TITLE: Final[str] = "单词详情"
 WORD_DETAIL_WINDOW_W: Final[int] = 420
 WORD_DETAIL_WINDOW_H: Final[int] = 560
@@ -658,7 +634,6 @@ __all__ = [
     "Mood",
     "Expression",
     "Gesture",
-    "KeystrokeOutcome",
     "COLORS",
     # Design Token（UI 视觉升级 P0）
     "SEMANTIC_COLORS",
@@ -749,13 +724,6 @@ __all__ = [
     "JP_LOG_COL_STATUS",
     "JP_LOG_EMPTY_TEXT",
     "JP_LOG_STATUS_TEMPLATE",
-    # Jisho 词典（保留，文件不再被详情链路引用）
-    "JISHO_API_URL",
-    "JISHO_TIMEOUT_S",
-    "JISHO_MAX_DEFINITIONS",
-    "JISHO_CACHE_FILENAME",
-    "JISHO_CACHE_VERSION",
-    "JISHO_CACHE_TTL_DAYS",
     # 单词详情窗口（基础几何 / 标签 / 通用按钮）
     "WORD_DETAIL_WINDOW_TITLE",
     "WORD_DETAIL_WINDOW_W",

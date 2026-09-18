@@ -26,10 +26,8 @@ from desktop_pet.core import constants as C
 ICON_NAMES: Final[tuple[str, ...]] = (
     "close",
     "retry",
-    "refresh",
     "remove",
     "trash",
-    "chevron_down",
 )
 
 #: 设计栅格边长（所有路径都在 0.._GRID 的坐标系里定义，绘制时按 size 缩放）。
@@ -60,26 +58,6 @@ def _path_retry() -> QPainterPath:
     path.moveTo(11.0, 3.0)
     path.lineTo(14.5, 5.5)
     path.lineTo(11.0, 8.0)
-    return path
-
-
-def _path_refresh() -> QPainterPath:
-    """``refresh``：上下两段弧 + 两个箭头构成循环（刷新）。"""
-
-    path = QPainterPath()
-    rect = QRectF(6.0, 6.0, 12.0, 12.0)
-    # 上半弧（逆时针）+ 右侧箭头
-    path.arcMoveTo(rect, 30.0)
-    path.arcTo(rect, 30.0, 150.0)
-    path.moveTo(16.5, 5.5)
-    path.lineTo(19.0, 9.0)
-    path.lineTo(15.5, 10.0)
-    # 下半弧（逆时针）+ 左侧箭头
-    path.arcMoveTo(rect, 210.0)
-    path.arcTo(rect, 210.0, 150.0)
-    path.moveTo(7.5, 18.5)
-    path.lineTo(5.0, 15.0)
-    path.lineTo(8.5, 14.0)
     return path
 
 
@@ -118,24 +96,12 @@ def _path_trash() -> QPainterPath:
     return path
 
 
-def _path_chevron_down() -> QPainterPath:
-    """``chevron_down``：向下指的折线（展开/更多）。"""
-
-    path = QPainterPath()
-    path.moveTo(7.0, 10.0)
-    path.lineTo(12.0, 15.0)
-    path.lineTo(17.0, 10.0)
-    return path
-
-
 #: 图标名 → 路径构造函数（模块级只登记函数，不创建任何 Qt 绘图对象）。
 _PATH_BUILDERS: Final[dict[str, Callable[[], QPainterPath]]] = {
     "close": _path_close,
     "retry": _path_retry,
-    "refresh": _path_refresh,
     "remove": _path_remove,
     "trash": _path_trash,
-    "chevron_down": _path_chevron_down,
 }
 
 

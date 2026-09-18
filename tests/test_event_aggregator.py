@@ -44,7 +44,6 @@ def test_four_keystrokes_is_high_frequency() -> None:
 def test_default_thresholds_match_prd() -> None:
     agg = make_agg()
     assert agg._threshold == C.HIGH_FREQ_THRESHOLD == 3
-    assert agg._window_ms == C.HIGH_FREQ_WINDOW_MS == 300.0
 
 
 # --------------------------------------------------------------------------- #

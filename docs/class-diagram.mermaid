@@ -136,7 +136,6 @@ classDiagram
         -int _press_arm
         -bool _dragging
         -bool _hovering
-        -float _temp_action_until
         -Expression _base_expression
         +__init__()
         +set_expression(expr: Expression, duration: float) None
@@ -174,7 +173,6 @@ classDiagram
         -float _scale
         -QPoint _drag_origin
         -bool _dragging
-        -float _press_ts
         +__init__(model: PetModel, renderer: PetRenderer, scale: float)
         +set_scale(scale: float) None
         +set_fps(fps: int) None

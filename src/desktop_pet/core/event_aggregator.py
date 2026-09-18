@@ -50,7 +50,6 @@ class KeystrokeAggregator:
             threshold: 高频判定阈值（窗口内按键次数）。
         """
 
-        self._window_ms: float = float(window_ms)
         self._window_s: float = max(1e-6, float(window_ms) / 1000.0)
         self._threshold: int = max(1, int(threshold))
         self._timestamps: Deque[float] = deque()

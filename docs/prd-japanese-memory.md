@@ -1,4 +1,5 @@
 # 桌面宠物「日语记忆」功能 PRD（增量）
+> ⚠️ 历史归档：本文提到的 WordSampler 已于 2026-09-18 随代码瘦身移除（生产侧零引用）。正文保留为历史设计记录，不再随代码同步。
 
 > 本文档是 `docs/prd-japanese-learning.md`（JP-01~JP-16，已实现）的**增量 PRD**，只描述本次新增的「记忆闭环」能力，不重写既有内容。
 > 载体：既有「日语学习」吐泡泡 + 生词本（`ui/bubble.py` / `core/vocabulary.py` / `core/vocab_store.py`）。

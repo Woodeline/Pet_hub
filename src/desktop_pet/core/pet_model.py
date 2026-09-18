@@ -15,7 +15,7 @@ import logging
 import math
 import random
 from dataclasses import dataclass, fields
-from typing import Final, Optional
+from typing import Optional
 
 from desktop_pet.core import constants as C
 from desktop_pet.core import motion
@@ -106,7 +106,6 @@ class PetModel:
         self._tail_evade: float = 0.0
 
         # 临时动作（插队打断）
-        self._temp_action_until: float = 0.0
         self._temp_expression: Optional[Expression] = None
         self._temp_remaining: float = 0.0
 

@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from html import escape
 
-from PySide6.QtCore import QThreadPool, Qt, Signal
+from PySide6.QtCore import QSize, QThreadPool, Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 from desktop_pet.core import constants as C
 from desktop_pet.core.vocabulary import VocabEntry
 from desktop_pet.core.word_detail import WordDetail
-from desktop_pet.ui import motion_ui, theme
+from desktop_pet.ui import icon_factory, motion_ui, theme
 from desktop_pet.ui.spinner import Spinner
 from desktop_pet.ui.word_detail_worker import (
     WordDetailNetConfig,
@@ -256,12 +256,20 @@ class WordDetailWindow(QWidget):
         bottom = QHBoxLayout()
         self._retry_btn = QPushButton(C.WORD_DETAIL_RETRY, self)
         theme.set_variant(self._retry_btn, "primary")
+        self._retry_btn.setIcon(
+            icon_factory.make_icon("retry", color=C.SEMANTIC_COLORS["surface"])
+        )
+        self._retry_btn.setIconSize(QSize(C.SPACING["lg"], C.SPACING["lg"]))
         self._retry_btn.clicked.connect(self._on_retry)
         self._retry_btn.setVisible(False)
         bottom.addWidget(self._retry_btn)
         bottom.addStretch(1)
         self._close_btn = QPushButton(C.WORD_DETAIL_CLOSE, self)
         theme.set_variant(self._close_btn, "ghost")
+        self._close_btn.setIcon(
+            icon_factory.make_icon("close", color=C.SEMANTIC_COLORS["text_primary"])
+        )
+        self._close_btn.setIconSize(QSize(C.SPACING["lg"], C.SPACING["lg"]))
         self._close_btn.clicked.connect(self.close)
         bottom.addWidget(self._close_btn)
         root.addLayout(bottom)

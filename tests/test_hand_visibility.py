@@ -34,7 +34,6 @@ from desktop_pet.ui.pet_renderer import (
     _GEO_HAND_LIFT_PX,
     _GEO_HAND_PRESS_PX,
     _GEO_KEY_RIGHT_BAND,
-    _GEO_PAW_W,
     PetRenderer,
 )
 from desktop_pet.ui.pet_window import PetWindow

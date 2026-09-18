@@ -70,7 +70,6 @@ class PetWindow(QWidget):
         self._drag_origin: QPoint = QPoint(0, 0)   # 按下时的窗口左上角
         self._press_pos: QPoint = QPoint(0, 0)     # 按下时的全局鼠标坐标
         self._dragging: bool = False
-        self._press_ts: float = 0.0
 
         # 悬停抚摸
         self._hover_timer = QTimer(self)
@@ -176,12 +175,11 @@ class PetWindow(QWidget):
     # 鼠标事件
     # ------------------------------------------------------------------ #
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
-        """按下：记录拖拽原点/按压时刻（左键）。"""
+        """按下：记录拖拽原点（左键）。"""
 
         if event.button() == Qt.MouseButton.LeftButton:
             self._press_pos = event.globalPosition().toPoint()
             self._drag_origin = self.pos()
-            self._press_ts = time.monotonic()
             self._dragging = False
         event.accept()
 

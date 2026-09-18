@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -210,7 +209,6 @@ def test_save_overwrites_existing_file(config_store: ConfigStore) -> None:
 def test_save_never_raises_on_bad_path(tmp_path: Path) -> None:
     """写入不可用路径不应抛异常（边界处吞掉并记日志）。"""
 
-    store = ConfigStore(tmp_path / "config.json")
     # 让 parent 成为一个文件，阻止 mkdir
     (tmp_path / "blocker")
     bad = ConfigStore(tmp_path / "blocker" / "sub" / "config.json")

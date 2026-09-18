@@ -3,9 +3,8 @@
 **本模块禁止 import 任何图形界面（Qt/GUI）库，亦不得调用 ``time`` / ``datetime``。**
 
 设计要点（架构 §5.2 T02 / 共享知识「store 范式」）：
-- 完全复刻 :class:`~desktop_pet.core.jisho_cache_store.JishoCacheStore` /
-  :class:`~desktop_pet.core.vocab_store.VocabStore` 的 store 范式（刻意复制而非抽取共享工具，
-  以免触碰既有测试）：
+- 沿用本项目既有的原子写 + TTL 缓存设计（与 :class:`~desktop_pet.core.vocab_store.VocabStore`
+  同构；刻意复制而非抽取共享工具，以免触碰既有测试）：
   - 读 = 逐字段容错（非法记录跳过、合法记录保留）。
   - 写 = ``tempfile.mkstemp`` 同目录 + ``flush/fsync`` + ``os.replace`` 原子替换。
   - 用户数据损坏 = 先 ``os.replace`` 备份为 ``<name>.corrupt-<mtime>`` 再以空缓存继续，

@@ -1,4 +1,4 @@
-"""词库加载 / 分级索引 / 洗牌非重复抽取 单测（JP-01/06/07/11）。
+"""词库加载 / 分级索引 单测（JP-01/06/11）。
 
 全部为 ``core`` 纯逻辑测试，**不需要 Qt**。
 """
@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import json
-import random
 import sys
 from pathlib import Path
 
@@ -14,7 +13,7 @@ import pytest
 
 from desktop_pet.core import constants as C
 from desktop_pet.core import paths
-from desktop_pet.core.vocabulary import VocabEntry, WordBank, WordSampler
+from desktop_pet.core.vocabulary import VocabEntry, WordBank
 
 
 # --------------------------------------------------------------------------- #
@@ -148,67 +147,6 @@ def test_load_real_builtin_bank_has_all_levels() -> None:
 def test_entries_for_unknown_level_returns_empty() -> None:
     b = _bank([_entry(1)])
     assert b.entries_for("N9") == []
-
-
-# --------------------------------------------------------------------------- #
-# 3. WordSampler 洗牌非重复
-# --------------------------------------------------------------------------- #
-def test_sampler_returns_none_without_level() -> None:
-    sampler = WordSampler(_bank([_entry(1)]), random.Random(0))
-    assert sampler.next() is None
-
-
-def test_sampler_first_round_no_repeat_and_cross_round_differs() -> None:
-    entries = [_entry(i) for i in range(1, 4)]
-    sampler = WordSampler(_bank(entries), random.Random(0))
-    sampler.set_level("N5")
-
-    first_round = [sampler.next() for _ in range(3)]
-    ids = [e.id for e in first_round if e is not None]
-    assert len(ids) == 3
-    assert len(set(ids)) == 3, "同一轮内出现重复"
-
-    # 新一轮首词 ≠ 上轮末词
-    nxt = sampler.next()
-    assert nxt is not None
-    assert nxt.id != ids[-1], "新一轮首词与上轮末词相同"
-
-    # 新一轮同样不重复
-    second_round = [nxt] + [sampler.next() for _ in range(2)]
-    ids2 = [e.id for e in second_round if e is not None]
-    assert len(set(ids2)) == 3
-
-
-def test_sampler_set_level_switches_pool() -> None:
-    entries = [_entry(1, "N5"), _entry(2, "N5"), _entry(1, "N4")]
-    sampler = WordSampler(_bank(entries), random.Random(1))
-    sampler.set_level("N5")
-    assert sampler.next().level == "N5"
-    sampler.set_level("N4")
-    got = sampler.next()
-    assert got is not None and got.level == "N4"
-
-
-def test_sampler_invalid_level_is_noop() -> None:
-    sampler = WordSampler(_bank([_entry(1)]), random.Random(0))
-    sampler.set_level("N5")
-    sampler.set_level("XX")  # 非法 → no-op
-    assert sampler.next() is not None
-
-
-def test_sampler_level_without_words_returns_none() -> None:
-    sampler = WordSampler(_bank([_entry(1, "N5")]), random.Random(0))
-    sampler.set_level("N1")  # 合法但该级无词
-    assert sampler.next() is None
-
-
-def test_sampler_reset_forces_reshuffle() -> None:
-    entries = [_entry(i) for i in range(1, 4)]
-    sampler = WordSampler(_bank(entries), random.Random(0))
-    sampler.set_level("N5")
-    sampler.next()
-    sampler.reset()
-    assert sampler.next() is not None
 
 
 # --------------------------------------------------------------------------- #

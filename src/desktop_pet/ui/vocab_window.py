@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QComboBox,
@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
 
 from desktop_pet.core import constants as C
 from desktop_pet.core.vocab_store import VocabItem
-from desktop_pet.ui import motion_ui, theme
+from desktop_pet.ui import icon_factory, motion_ui, theme
 
 logger = logging.getLogger(__name__)
 
@@ -109,11 +109,19 @@ class VocabWindow(QWidget):
         top.addStretch(1)
         self._btn_remove = QPushButton(C.JP_VOCAB_BTN_REMOVE, self)
         theme.set_variant(self._btn_remove, "secondary")
+        self._btn_remove.setIcon(
+            icon_factory.make_icon("remove", color=C.SEMANTIC_COLORS["text_primary"])
+        )
+        self._btn_remove.setIconSize(QSize(C.SPACING["lg"], C.SPACING["lg"]))
         self._btn_remove.clicked.connect(self._on_remove_clicked)
         self._btn_remove.setEnabled(False)
         top.addWidget(self._btn_remove)
         self._btn_clear = QPushButton(C.JP_VOCAB_BTN_CLEAR, self)
         theme.set_variant(self._btn_clear, "destructive")
+        self._btn_clear.setIcon(
+            icon_factory.make_icon("trash", color=C.SEMANTIC_COLORS["surface"])
+        )
+        self._btn_clear.setIconSize(QSize(C.SPACING["lg"], C.SPACING["lg"]))
         self._btn_clear.clicked.connect(self._on_clear_clicked)
         top.addWidget(self._btn_clear)
         root.addLayout(top)
@@ -156,6 +164,10 @@ class VocabWindow(QWidget):
         bottom.addStretch(1)
         self._btn_close = QPushButton(C.JP_VOCAB_BTN_CLOSE, self)
         theme.set_variant(self._btn_close, "ghost")
+        self._btn_close.setIcon(
+            icon_factory.make_icon("close", color=C.SEMANTIC_COLORS["text_primary"])
+        )
+        self._btn_close.setIconSize(QSize(C.SPACING["lg"], C.SPACING["lg"]))
         self._btn_close.clicked.connect(self.close)
         bottom.addWidget(self._btn_close)
         root.addLayout(bottom)

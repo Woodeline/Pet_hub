@@ -1,3 +1,5 @@
+> ⚠️ 历史归档：本文描述的 Jisho 词典链路（core/jisho.py、core/jisho_cache_store.py、ui/jisho_worker.py）已于 2026-09-18 随代码瘦身移除，详情页改由 word_detail_* 链路承载。正文保留为历史设计记录。
+
 # 桌面宠物「日语学习 · 配置与详情」B 版增量架构设计
 
 > 配套 PRD：`docs/prd-japanese-config.md`（JC-01 ~ JC-14）

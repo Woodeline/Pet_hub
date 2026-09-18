@@ -224,7 +224,6 @@ class PetRenderer:
 
         self._brush_ink = QBrush(ink)
         self._brush_white = QBrush(QColor(C.COLORS["white"]))
-        self._brush_blush = QBrush(QColor(C.COLORS["blush"]))
         self._brush_mouse = QBrush(QColor(C.COLORS["mouse_body"]))
 
         self._mouse_hi_pen = QPen(QColor(C.COLORS["mouse_hi"]))
@@ -515,44 +514,6 @@ class PetRenderer:
         vx, vy = x1 - x0, y1 - y0
         denom = vx * vx + vy * vy or 1.0
         return ((x - x0) * vx + (y - y0) * vy) / denom
-
-    @staticmethod
-    def _tapered_path(
-        pts: list[tuple[float, float]], w0: float, w1: float
-    ) -> QPainterPath:
-        """把中心线 ``pts`` 扩展为**由粗到细**的填充路径（等宽锥形轮廓）。
-
-        .. note::
-           这是**宽度线性**收细 + **平切端点**的实现。尾巴已改用
-           :meth:`_tail_outline`（非线性剖面 + 圆头尾尖 + 平滑轮廓）——后者在
-           粗描边下没有多边形棱角，也不会有"香肠断头"感。保留本方法供其它
-           需要朴素锥形的场合复用。
-        """
-
-        n = len(pts) - 1
-        left: list[tuple[float, float]] = []
-        right: list[tuple[float, float]] = []
-        for i, (x, y) in enumerate(pts):
-            if i == 0:
-                dx, dy = pts[1][0] - x, pts[1][1] - y
-            elif i == n:
-                dx, dy = x - pts[i - 1][0], y - pts[i - 1][1]
-            else:
-                dx, dy = pts[i + 1][0] - pts[i - 1][0], pts[i + 1][1] - pts[i - 1][1]
-            length = math.hypot(dx, dy) or 1.0
-            nx, ny = -dy / length, dx / length
-            hw = (w0 + (w1 - w0) * (i / n)) / 2.0
-            left.append((x + nx * hw, y + ny * hw))
-            right.append((x - nx * hw, y - ny * hw))
-
-        path = QPainterPath()
-        path.moveTo(left[0][0], left[0][1])
-        for px, py in left[1:]:
-            path.lineTo(px, py)
-        for px, py in reversed(right):
-            path.lineTo(px, py)
-        path.closeSubpath()
-        return path
 
     # ------------------------------------------------------------------ #
     # 各部件绘制

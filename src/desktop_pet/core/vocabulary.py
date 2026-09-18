@@ -1,4 +1,4 @@
-"""core.vocabulary —— 内置词库加载、分级索引与「洗牌非重复」抽取。
+"""core.vocabulary —— 内置词库加载与分级索引。
 
 **本模块禁止 import 任何图形界面（Qt/GUI）库，亦不得调用 ``time`` / ``datetime``。**
 
@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import logging
-import random
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -209,68 +208,4 @@ class WordBank:
         return not self._entries
 
 
-class WordSampler:
-    """在单一等级内「洗牌非重复」抽取词条。
-
-    规则（JP-07）：
-    - 一轮内不重复：维护一份打乱后的队列，逐个弹出。
-    - 队列耗尽后重新洗牌，且**新一轮首词 ≠ 上一轮末词**（长度 > 1 时首尾对调）。
-    - 切换等级时清空队列并重洗。
-    """
-
-    def __init__(self, bank: WordBank, rng: random.Random | None = None) -> None:
-        """构造抽取器。
-
-        Args:
-            bank: 词库。
-            rng: 随机源（可注入以便测试复现）；``None`` 时新建独立 ``random.Random``。
-        """
-
-        self._bank: WordBank = bank
-        self._rng: random.Random = rng if rng is not None else random.Random()
-        self._level: str = ""
-        self._queue: list[VocabEntry] = []
-        self._last: VocabEntry | None = None
-
-    def set_level(self, level: str) -> None:
-        """切换抽取等级。
-
-        非法等级 → no-op；同级且队列非空 → no-op；否则清空队列并等待下次重洗。
-        """
-
-        if level not in C.JP_LEVELS:
-            return
-        if level == self._level and self._queue:
-            return
-        if level != self._level:
-            # 换级：上轮末词属于旧池，清空避免跨池误判「首尾重复」
-            self._last = None
-        self._level = level
-        self._queue = []
-
-    def next(self) -> "VocabEntry | None":
-        """抽取下一条词条；无可用等级 / 该级无词时返回 ``None``。"""
-
-        if not self._level:
-            return None
-        if not self._queue:
-            pool = self._bank.entries_for(self._level)
-            if not pool:
-                return None
-            shuffled = list(pool)
-            self._rng.shuffle(shuffled)
-            if len(shuffled) > 1 and self._last is not None and shuffled[0].id == self._last.id:
-                shuffled[0], shuffled[1] = shuffled[1], shuffled[0]
-            self._queue = shuffled
-        entry = self._queue.pop(0)
-        self._last = entry
-        return entry
-
-    def reset(self) -> None:
-        """重置抽取状态（清空队列与「上轮末词」记录，保留当前等级）。"""
-
-        self._queue = []
-        self._last = None
-
-
-__all__ = ["VocabEntry", "WordBank", "WordSampler"]
+__all__ = ["VocabEntry", "WordBank"]

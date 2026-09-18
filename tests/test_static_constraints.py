@@ -97,8 +97,6 @@ def test_core_imports_without_loading_qt(project_root: Path) -> None:
         "import desktop_pet.core.mastered_store\n"
         "import desktop_pet.core.daily_log_store\n"
         "import desktop_pet.core.weighted_picker\n"
-        "import desktop_pet.core.jisho\n"
-        "import desktop_pet.core.jisho_cache_store\n"
         "loaded = [m for m in sys.modules if m.startswith('PySide6')]\n"
         "assert not loaded, 'core 导入过程加载了 Qt: %r' % loaded\n"
         "print('CORE_IS_QT_FREE')\n"
@@ -212,7 +210,6 @@ def test_no_image_assets(project_root: Path) -> None:
         ("MIN_DWELL_S", 5.0),
         ("WAKE_SULKY_S", 3.0),
         ("EXCITED_THRESHOLD_S", 5.0),
-        ("SLEEPY_REST_S", 30.0),
         ("SURPRISED_IDLE_S", 120.0),
         ("BLINK_MIN_S", 3.0),
         ("BLINK_MAX_S", 6.0),
@@ -238,10 +235,6 @@ def test_no_image_assets(project_root: Path) -> None:
         ("JP_VOCAB_WEIGHT", 3.0),
         ("MASTERED_VERSION", 1),
         ("DAILY_LOG_VERSION", 1),
-        ("JISHO_TIMEOUT_S", 5.0),
-        ("JISHO_MAX_DEFINITIONS", 6),
-        ("JISHO_CACHE_VERSION", 1),
-        ("JISHO_CACHE_TTL_DAYS", 7),
     ],
 )
 def test_constants_match_prd(attr: str, expected) -> None:
@@ -261,14 +254,6 @@ def test_jp_config_option_tiers_match_prd() -> None:
     assert C.JP_DAILY_LIMIT in C.JP_DAILY_LIMIT_OPTIONS
     assert set(C.JP_BUBBLE_DURATION_LABELS) == set(C.JP_BUBBLE_DURATION_OPTIONS)
     assert set(C.JP_DAILY_LIMIT_LABELS) == set(C.JP_DAILY_LIMIT_OPTIONS)
-
-
-def test_jisho_url_and_cache_constants_defined() -> None:
-    """Jisho 联网 / 缓存常量存在且取值合理。"""
-
-    assert C.JISHO_API_URL.startswith("https://")
-    assert C.JISHO_CACHE_FILENAME.endswith(".json")
-    assert C.JISHO_CACHE_TTL_DAYS > 0
 
 
 def test_mood_has_four_states() -> None:
