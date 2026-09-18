@@ -10,16 +10,17 @@
 
 ## 🚀 我要马上运行（30 秒）
 
-**不需要装 Python**，直接双击：
+**不需要装 Python** —— 从 Releases 下载单个 exe，双击即可：
 
 ```text
-desktop-pet\dist\desktop-pet\desktop-pet.exe
+https://github.com/Woodeline/Pet_hub/releases/latest
+└─ desktop-pet.exe          # 单文件免安装：无需解压、无需任何附带文件
 ```
 
-或者双击项目根目录的 **`run.bat`**（自动挑选可用运行时）。
+或者双击项目根目录的 **`run.bat`**（自动挑选可用运行时；需本机已克隆仓库）。
 
-> 注：`dist/` 是**本地打包产物**，已在 `.gitignore` 中排除，因此从仓库克隆下来并不会自带
-> 该 exe。需要独立程序时请按下方「重新打包为独立程序」自行生成；只想跑起来则用方式 B（源码运行）。
+> 注：`dist/` 与 `build/` 是**本地打包产物**，已在 `.gitignore` 中排除，因此从仓库克隆下来并不会
+> 自带 exe。需要独立程序时请按下方「打包为独立程序」自行生成；只想跑起来则用方式 B（源码运行）。
 
 启动后猫咪会出现在屏幕右下角。**退出方式**：右键猫咪 → 退出。
 内存占用约 **50 MB**。
@@ -49,13 +50,15 @@ desktop-pet\dist\desktop-pet\desktop-pet.exe
 
 ## 环境要求
 
-**方式 A（推荐，开箱即用）**：无需安装任何东西 —— 直接用已打包好的独立程序：
+**方式 A（推荐，开箱即用）**：无需安装任何东西 —— 直接下载已发布好的单文件程序：
 
 ```text
-desktop-pet\dist\desktop-pet\desktop-pet.exe
+https://github.com/Woodeline/Pet_hub/releases/latest
+└─ desktop-pet.exe          # 单文件，下载后双击即用
 ```
 
-双击即可运行。也可双击项目根目录的 `run.bat`，它会自动优先启动这个 exe。
+若本机已克隆仓库并自行打包过，也可运行 `dist\desktop-pet.exe`（单文件）或
+`dist\desktop-pet\desktop-pet.exe`（目录版）；`run.bat` 会自动优先启动目录版。
 
 **方式 B（源码运行）**：需要 **Python 3.13**（Windows x64）+ Windows 10 / 11。
 
@@ -114,21 +117,39 @@ desktop-pet
 右键桌面上的猫咪 → **退出**；或右键托盘图标 → **退出**。
 （关掉命令行窗口**不会**结束宠物，因为它运行在分离进程中。）
 
-## 重新打包为独立程序（可选）
+## 打包为独立程序（可选）
 
-已打包好的产物在 `dist/`。如需重新打包：
+仓库提供两份 PyInstaller 配置，产物用途不同：
+
+| 配置 | 产物 | 用途 |
+| --- | --- | --- |
+| `desktop-pet-onefile.spec` | `dist\desktop-pet.exe` | **对外分发**：单文件，下载即用，无需解压 |
+| `desktop-pet.spec` | `dist\desktop-pet\desktop-pet.exe` | 本地运行：目录形式，启动更快（`run.bat` 调用） |
+
+打包单文件发布版（即 Releases 里那个 exe）：
 
 ```bat
 pip install pyinstaller
-pyinstaller --noconfirm --windowed --name desktop-pet ^
-    --paths src ^
-    --hidden-import pynput.keyboard._win32 ^
-    --hidden-import pynput.mouse._win32 ^
-    src\desktop_pet\main.py
+pyinstaller --noconfirm --clean desktop-pet-onefile.spec
 ```
 
-`--hidden-import` 两项是必须的：`pynput` 的后端模块是运行时动态导入的，PyInstaller 静态分析扫不到，
-漏掉会导致打包后的程序启动即静默崩溃。
+打包本地目录版：
+
+```bat
+pyinstaller --noconfirm --clean desktop-pet.spec
+```
+
+两点必须注意：
+
+- **`hiddenimports` 不能省。** `pynput` 的后端模块（`pynput.keyboard._win32` /
+  `pynput.mouse._win32`）是运行时动态导入的，PyInstaller 静态分析扫不到，
+  漏掉会导致打包后的程序**启动即静默崩溃**。两份 spec 都已内置这两项。
+- **onefile 首次启动会慢几秒。** 单文件版每次运行都要把内置依赖解压到
+  `%TEMP%\_MEIxxxxxx`，属预期行为，不是卡死。
+
+单文件版已裁掉 PySide6-Essentials 中本程序用不到的 Quick / Qml / Designer 等模块
+（程序仅使用 QtCore / QtGui / QtWidgets），体积由约 90 MB 压至约 36 MB。
+裁剪清单见 spec 的 `excludes`，**改动后务必实机启动验证**。
 
 打包后可在托盘菜单勾选"开机自启"，注册表将写入该可执行文件的路径。
 
@@ -185,6 +206,8 @@ pytest -q
 ```text
 desktop-pet/
 ├─ run.bat                     # ★ 双击启动（自动挑选可用运行时）
+├─ desktop-pet-onefile.spec    # 单文件发布版打包配置（Releases 分发用）
+├─ desktop-pet.spec            # 目录版打包配置（本地 run.bat 调用）
 ├─ src/desktop_pet/
 │  ├─ main.py                  # 入口
 │  ├─ core/                    # 纯逻辑层（零 Qt / 零 time / 零 print，可无头单测）
