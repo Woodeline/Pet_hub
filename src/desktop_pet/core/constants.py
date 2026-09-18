@@ -378,6 +378,33 @@ TAIL_EVADE_LIFT: Final[float] = 0.35       # 逃离方向的上翘偏置（只�
 TAIL_EVADE_ATTACK_K: Final[float] = 16.0   # 避让响应平滑系数（快）
 TAIL_EVADE_RELEASE_K: Final[float] = 4.2   # 避让回落平滑系数（慢）
 
+# --------------------------------------------------------------------------- #
+# 7c. 微交互（阶段 B2）—— 悬停凝视 / 点击弹跳过冲 / 气泡打字感
+# --------------------------------------------------------------------------- #
+# —— 悬停凝视（B2-1，P5 优先级：**悬停 > 表情模板 > 空闲张望**）——
+# 悬停超 HOVER_TRIGGER_S 后，宠物看向光标；空闲张望在此期间**不写入** look_x。
+#: 悬停注视的最大瞳孔偏移（逻辑像素，作用于 look_x / look_y）。
+HOVER_GAZE_RANGE_PX: Final[float] = 4.0
+#: 光标与「脸部中心」的距离达到该值时视为满幅注视（归一化 1）；更远则按方向钳制。
+HOVER_GAZE_MAX_DIST_PX: Final[float] = 60.0
+#: 悬停「半眯」眼张开度（≈0.55）——**不取** HAPPY 模板的全闭弧线眼（0.12），否则凝视不可见。
+#: 与 ``_draw_eye`` 的 ``openness < 0.18`` 弧线眼阈值配合：0.55 > 0.18 → 保持「实心眼」。
+HOVER_GAZE_OPENNESS: Final[float] = 0.55
+#: 悬停时眼睛弧线度**上限**（< ``_draw_eye`` 的 ``curve > 0.6`` 弧线眼阈值）。
+HOVER_GAZE_EYE_CURVE: Final[float] = 0.35
+
+# —— 点击弹跳过冲（B2-2）——
+#: 弹跳基准幅度（像素）。乘以 :func:`desktop_pet.core.motion.ease_out_back`（峰值 ≈1.1）
+#: 得**最大位移 ≈7.7px**，恰好等于旧 ``ease_out_bounce`` 版峰值（``BREATH_AMPLITUDE_PX*2.2``），
+#: 满足「不超过现值 1.1 倍」且脏区包围盒不因此扩大。
+CLICK_BOUNCE_PX: Final[float] = 7.0
+
+# —— 气泡打字感（B2-3）——
+#: 逐字刷新间隔（毫秒，挂 parent 的 QTimer）。
+BUBBLE_TYPE_TICK_MS: Final[int] = 40
+#: 每个字符的显示时长（秒）——总时长 = 字数 × 本值。
+BUBBLE_TYPE_CHAR_S: Final[float] = 0.12
+
 # 气泡时序（PRD §4.3）
 BUBBLE_FADE_IN_S: Final[float] = 0.2
 BUBBLE_FADE_OUT_S: Final[float] = 0.3
@@ -809,6 +836,14 @@ __all__ = [
     "SURPRISE_MAX_S",
     "SURPRISE_DURATION_S",
     "SURPRISE_POSES",
+    # 微交互（阶段 B2）
+    "HOVER_GAZE_RANGE_PX",
+    "HOVER_GAZE_MAX_DIST_PX",
+    "HOVER_GAZE_OPENNESS",
+    "HOVER_GAZE_EYE_CURVE",
+    "CLICK_BOUNCE_PX",
+    "BUBBLE_TYPE_TICK_MS",
+    "BUBBLE_TYPE_CHAR_S",
     # 日语学习
     "JP_LEVELS",
     "JP_DEFAULT_LEVEL",

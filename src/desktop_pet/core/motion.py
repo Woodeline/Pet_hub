@@ -251,6 +251,38 @@ def look_around_offset(
     return amplitude * math.sin(_TWO_PI * cycle_phase(now, period))
 
 
+def gaze_vector(
+    px: float, py: float, cx: float, cy: float, max_dist: float,
+) -> tuple[float, float]:
+    """光标相对基准点 ``(cx, cy)`` 的**归一化注视向量** ``(nx, ny)``（阶段 B2-1）。
+
+    以 ``max_dist`` 为「满幅注视」距离：
+
+    * 光标恰在基准点上 → ``(0, 0)``（看向正前方）；
+    * 距离达到 ``max_dist`` 及以上 → 按方向钳制到 ±1（瞳孔移到眼角）。
+
+    各分量独立钳制（不强制单位长度）—— 光标落在四角时瞳孔自然移向眼角，
+    符合「看向光标」的直觉。本函数**纯计算、零 Qt 依赖**：屏幕坐标 →
+    逻辑画布坐标的换算在 ``ui.pet_window`` 完成，归一化留在 core（可单测）。
+
+    Args:
+        px: 光标 x（逻辑画布坐标）。
+        py: 光标 y（逻辑画布坐标）。
+        cx: 基准点 x（通常为脸部中心）。
+        cy: 基准点 y。
+        max_dist: 满幅注视距离（<=0 时返回 ``(0, 0)``，防御除零）。
+
+    Returns:
+        ``(nx, ny)``，各分量位于 ``[-1, 1]``。
+    """
+
+    if max_dist <= 1e-9:
+        return 0.0, 0.0
+    nx = (px - cx) / max_dist
+    ny = (py - cy) / max_dist
+    return clamp(nx, -1.0, 1.0), clamp(ny, -1.0, 1.0)
+
+
 def random_interval(lo: float, hi: float, rng: random.Random | None = None) -> float:
     """返回 ``[lo, hi]`` 区间内的随机秒数；``hi <= lo`` 时返回 ``lo``。"""
 
@@ -512,6 +544,7 @@ __all__ = [
     "ear_twitch",
     "blink_curve",
     "look_around_offset",
+    "gaze_vector",
     "random_interval",
     "point_segment_distance",
     "polyline_proximity",

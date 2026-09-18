@@ -114,6 +114,9 @@ class PetModel:
         # 交互状态
         self._dragging: bool = False
         self._hovering: bool = False
+        #: 悬停注视方向（归一化 ``[-1, 1]``，由 UI 每帧写入；阶段 B2-1）。
+        #: ``(0, 0)`` = 看向正前方。仅悬停激活期间生效（P5：悬停 > 表情模板 > 空闲张望）。
+        self._gaze: tuple[float, float] = (0.0, 0.0)
 
         # 尾巴避让（鼠标靠近 / 触碰尾巴）：目标强度、逃离方向（单位向量）、当前平滑值
         self._tail_evade_target: float = 0.0
@@ -188,6 +191,27 @@ class PetModel:
         """设置悬停抚摸状态（FR-28，眯眼 + 腮红加深）。"""
 
         self._hovering = bool(active)
+
+    def set_gaze(self, nx: float, ny: float) -> None:
+        """写入悬停注视方向（阶段 B2-1）。
+
+        参数为**归一化**偏移 ``[-1, 1]``（各分量钳制）。仅由 UI 层在**悬停激活期间**
+        每帧调用 —— 光标屏幕坐标 → 逻辑画布坐标的换算在 ``ui.pet_window``、
+        方向归一化在 :func:`desktop_pet.core.motion.gaze_vector`（core 纯计算）。
+        模型在 :meth:`_apply_life_signs` 中把它转成 ``look_x`` / ``look_y`` 偏移，
+        优先级 **悬停 > 表情模板 > 空闲张望**（P5）。
+
+        Args:
+            nx: 水平归一化偏移（+ 向右）。
+            ny: 垂直归一化偏移（+ 向下）。
+        """
+
+        self._gaze = (motion.clamp(nx, -1.0, 1.0), motion.clamp(ny, -1.0, 1.0))
+
+    def clear_gaze(self) -> None:
+        """复位注视方向为正前方（悬停结束时由 UI 调用）。"""
+
+        self._gaze = (0.0, 0.0)
 
     def set_reduce_motion(self, active: bool) -> None:
         """设置「减少动效」开关（对应 prefers-reduced-motion）。
@@ -361,15 +385,20 @@ class PetModel:
     def _surprise_allowed(self) -> bool:
         """当前是否允许推进 / 触发小动作（门控，v1.1 G3）。
 
-        仅当**全部**满足时才允许：非 ``reduce_motion``、非拖拽、无临时表情、
+        仅当**全部**满足时才允许：非 ``reduce_motion``、非拖拽、**非悬停**、无临时表情、
         基础表情属 IDLE / REST 对应态（``HAPPY`` / ``SLEEPY``）——即「安静地在场」。
 
         ``HAPPY`` / ``SLEEPY`` 正是状态机按 ``IDLE_START_S`` / ``REST_THRESHOLD_S``
         判定 IDLE / REST 后给出的基础表情，故此处**复用同一空闲定义**，不再另设阈值，
         避免与阶段 C 的游走出现两套「空闲」口径漂移。
+
+        .. note::
+           阶段 B2-1 起把**悬停**也纳入抑制：悬停是「被抚摸」的**主动交互**态，
+           宠物正专注看向光标；此时若叠加小动作（尤其带 ``look_x`` 的看角落 / 甩尾）
+           会与凝视方向打架（P5：悬停 > 表情模板）。
         """
 
-        if self._reduce_motion or self._dragging:
+        if self._reduce_motion or self._dragging or self._hovering:
             return False
         if self._temp_expression is not None:
             return False
@@ -497,8 +526,20 @@ class PetModel:
                 C.EAR_TWITCH_AMPLITUDE_DEG * 0.8,
             )
 
-        # 空闲张望（FR-06）
-        if self._base_expression in (Expression.HAPPY,) and self._temp_expression is None:
+        # 悬停凝视（阶段 B2-1）—— **绝对赋值**，覆盖模板 / 小动作写入的 look_*
+        # （P5 优先级：悬停 > 表情模板 > 空闲张望）。方向由 UI 每帧经 ``set_gaze`` 写入。
+        # 必须在「空闲张望」**之前**执行：这样「悬停期间不写空闲张望」这一守卫才是
+        # 可观测的（否则后写的绝对赋值会把空闲偏移抹掉，守卫形同虚设、也无法被变异测试捕获）。
+        if self._hovering:
+            target.look_x = self._gaze[0] * C.HOVER_GAZE_RANGE_PX
+            target.look_y = self._gaze[1] * C.HOVER_GAZE_RANGE_PX
+
+        # 空闲张望（FR-06）—— 悬停期间不写入（P5：悬停 > 空闲张望）
+        if (
+            self._base_expression in (Expression.HAPPY,)
+            and self._temp_expression is None
+            and not self._hovering
+        ):
             target.look_x += motion.look_around_offset(now)
 
         # 眨眼（FR-14）——仅对睁眼状态生效；右眼比左眼晚 BLINK_EYE_DELAY_S 起闭（A5-3）
@@ -526,12 +567,14 @@ class PetModel:
         if active and not self._dragging:
             target.body_squash -= C.PRESS_BODY_SQUASH * press
 
-        # 点击弹跳（FR-27）
+        # 点击弹跳（FR-27）：压扁 → 弹起 → 轻微过冲回落（阶段 B2-2）
+        # ``ease_out_back`` 峰值 ≈1.1 → 最大位移 = CLICK_BOUNCE_PX * 1.1 ≈ 7.7px，
+        # 与旧 ``ease_out_bounce`` 版峰值（BREATH_AMPLITUDE_PX*2.2）持平 → 不越脏区。
         if self._click_timer > 0.0:
             progress = 1.0 - (self._click_timer / C.CLICK_ANIM_S)  # 0 → 1
-            bounce = motion.ease_out_bounce(progress * 2.0) if progress < 0.5 else \
-                motion.ease_out_bounce((1.0 - progress) * 2.0)
-            target.body_y -= C.BREATH_AMPLITUDE_PX * 2.2 * bounce
+            u = progress * 2.0 if progress < 0.5 else (1.0 - progress) * 2.0  # 0→1→0
+            bounce = motion.ease_out_back(u)
+            target.body_y -= C.CLICK_BOUNCE_PX * bounce
 
         # 被拎起姿态（FR-29）：四肢下垂 + 轻微上提
         if self._dragging:
@@ -539,9 +582,14 @@ class PetModel:
             target.body_y -= 2.0
             target.body_squash -= 0.02
 
-        # 悬停抚摸：腮红加深（FR-28）
+        # 悬停抚摸：腮红加深（FR-28）+ 半眯凝视眼（阶段 B2-1）
         if self._hovering:
             target.blush_alpha = min(1.0, target.blush_alpha + 0.25)
+            # 悬停本是 HAPPY 模板（全闭弧线眼 0.12 / curve 1.0）——会把瞳孔完全遮住，
+            # 凝视不可见。改为「半眯」：抬升张开度、压低弯曲度，保持实心眼 + 瞳孔可见。
+            target.eye_open_l = max(target.eye_open_l, C.HOVER_GAZE_OPENNESS)
+            target.eye_open_r = max(target.eye_open_r, C.HOVER_GAZE_OPENNESS)
+            target.eye_curve = min(target.eye_curve, C.HOVER_GAZE_EYE_CURVE)
 
         # 偶发小动作（阶段 A5-2）：按包络把姿态增量叠加到目标姿态
         if self._surprise_kind is not None:

@@ -288,10 +288,38 @@ class PetWindow(QWidget):
         except Exception:  # noqa: BLE001 —— 交互采样失败不影响动画
             logger.debug("尾巴亲近度采样失败（已忽略）", exc_info=True)
 
+    def _update_gaze(self) -> None:
+        """悬停激活期间按光标方向写入注视向量（阶段 B2-1，P5）。
+
+        职责边界与 :meth:`_update_tail_evade` 一致：本方法只做「全局屏幕坐标 →
+        逻辑画布坐标」的换算与调用；方向归一化在
+        :func:`desktop_pet.core.motion.gaze_vector`（纯计算、可单测）。
+
+        基准点取 :meth:`PetRenderer.face_center`（脸部中心，与绘制共用同一基准）。
+        非悬停态写入 ``(0, 0)``，保证离开悬停后瞳孔平滑回到正前方。任何异常都
+        只记 debug 日志：交互采样绝不能拖垮帧循环。
+        """
+
+        try:
+            if not self._hover_active or not self.isVisible():
+                self._model.clear_gaze()
+                return
+
+            scale = self._scale if self._scale else 1.0
+            local = self.mapFromGlobal(QCursor.pos())
+            px = local.x() / scale
+            py = local.y() / scale
+            cx, cy = PetRenderer.face_center(self._model.pose())
+            nx, ny = motion.gaze_vector(px, py, cx, cy, C.HOVER_GAZE_MAX_DIST_PX)
+            self._model.set_gaze(nx, ny)
+        except Exception:  # noqa: BLE001 —— 交互采样失败不影响动画
+            logger.debug("悬停注视采样失败（已忽略）", exc_info=True)
+
     def _on_frame(self) -> None:
-        """定时器节拍：采样光标 → 更新尾巴避让 → 向 Controller 发出帧信号。"""
+        """定时器节拍：采样光标 → 更新尾巴避让 / 悬停注视 → 向 Controller 发出帧信号。"""
 
         self._update_tail_evade()
+        self._update_gaze()
         self.frame_tick.emit(time.monotonic())
 
 

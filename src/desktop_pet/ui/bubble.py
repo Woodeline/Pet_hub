@@ -90,6 +90,15 @@ class BubbleWindow(QWidget):
         self._timer.setInterval(_FADE_TICK_MS)
         self._timer.timeout.connect(self._update_alpha)
 
+        # 打字感（阶段 B2-3）：reveal 进度 0→1，仅作用于学习泡泡「单词」行（``layout[0]``）。
+        # 尺寸测量仍按**完整词条**一次算定（``_measure_word`` / ``_word_layout``），
+        # 打字过程中气泡宽度恒定（``test_jp_bubble_visual`` 固定宽度契约不破）。
+        self._reveal: float = 1.0
+        self._reduce_motion: bool = False
+        self._reveal_timer = QTimer(self)
+        self._reveal_timer.setInterval(int(C.BUBBLE_TYPE_TICK_MS))
+        self._reveal_timer.timeout.connect(self._advance_reveal)
+
     # ------------------------------------------------------------------ #
     # 公共 API
     # ------------------------------------------------------------------ #
@@ -102,6 +111,14 @@ class BubbleWindow(QWidget):
         """返回当前三角尖是否朝下（供按钮条几何对齐；``True`` = 气泡在宠物上方）。"""
 
         return self._pointing_down
+
+    def set_reduce_motion(self, active: bool) -> None:
+        """设置「减少动效」开关（阶段 B2-3）。
+
+        开启时气泡**跳过逐字打字**、直接全显（``reveal = 1.0``），对动效敏感者更友好。
+        """
+
+        self._reduce_motion = bool(active)
 
     def show_message(self, text: str, duration: float) -> None:
         """显示一条气泡消息。
@@ -119,6 +136,9 @@ class BubbleWindow(QWidget):
         self._elapsed = 0.0
         self._alpha = 0.0
         self._phase = _PHASE_FADE_IN
+        # 情绪气泡为纯文本模式，非打字感目标 → 直接全显、停止逐字定时器
+        self._reveal = 1.0
+        self._reveal_timer.stop()
 
         geometry = self._compute_geometry(self._anchor)
         self.setGeometry(geometry)
@@ -149,6 +169,11 @@ class BubbleWindow(QWidget):
         self._elapsed = 0.0
         self._alpha = 0.0
         self._phase = _PHASE_FADE_IN
+        # 打字感：非 reduce_motion 时从 0 起逐字显示单词；reduce_motion 直接全显
+        self._reveal = 1.0 if self._reduce_motion else 0.0
+        self._reveal_timer.stop()
+        if not self._reduce_motion and self._line_word:
+            self._reveal_timer.start()
 
         geometry = self._compute_geometry(self._anchor)
         self.setGeometry(geometry)
@@ -161,6 +186,8 @@ class BubbleWindow(QWidget):
         """立即隐藏气泡并复位状态。"""
 
         self._timer.stop()
+        self._reveal_timer.stop()
+        self._reveal = 1.0
         self._phase = _PHASE_HIDDEN
         self._alpha = 0.0
         self.hide()
@@ -324,7 +351,13 @@ class BubbleWindow(QWidget):
         painter.restore()
 
     def _paint_word(self, painter: QPainter, body: QRectF) -> None:
-        """绘制学习泡泡四行文本块（各行独立字号/颜色，水平居中、整块垂直居中）。"""
+        """绘制学习泡泡四行文本块（各行独立字号/颜色，水平居中、整块垂直居中）。
+
+        **打字感（阶段 B2-3）**：``layout[0]`` 恒为「单词」行（``_word_layout`` 的行序
+        首项，且 ``show_word`` 要求 ``entry.word`` 非空），按 ``self._reveal`` 绘制其
+        **前缀子串**；其余行（假名 / 翻译 / 释义）全显。测量仍按完整文本一次算定，
+        故打字期间气泡尺寸恒定。
+        """
 
         wrap_w = C.JP_BUBBLE_MAX_WIDTH
         layout = self._word_layout(wrap_w)
@@ -337,20 +370,53 @@ class BubbleWindow(QWidget):
         left = content.left() + max(0.0, (content.width() - wrap_w) / 2.0)
         y = content.top() + max(0.0, (content.height() - total_h) / 2.0)
 
-        for font, color, text, rect in layout:
+        for index, (font, color, text, rect) in enumerate(layout):
             painter.setFont(font)
             painter.setPen(QPen(QColor(color)))
             row_h = rect.height()
+            draw_text = self._revealed_text(text) if index == 0 else text
             painter.drawText(
                 QRectF(left, y, wrap_w, row_h),
                 int(Qt.AlignmentFlag.AlignHCenter | Qt.TextFlag.TextWordWrap),
-                text,
+                draw_text,
             )
             y += row_h + spacing
 
     # ------------------------------------------------------------------ #
     # 内部
     # ------------------------------------------------------------------ #
+    def _revealed_text(self, text: str) -> str:
+        """按当前 reveal 进度返回 ``text`` 的**前缀子串**（阶段 B2-3 打字感）。
+
+        * ``reveal >= 1`` 或空文本 → 原样返回（全显）；
+        * ``reveal <= 0`` → 空串（一个字都还没"打"出来）；
+        * 其间 → ``text[:max(1, int(reveal * len(text)))]``（至少先显 1 个字）。
+        """
+
+        if self._reveal >= 1.0 or not text:
+            return text
+        if self._reveal <= 0.0:
+            return ""
+        return text[: max(1, int(self._reveal * len(text)))]
+
+    def _advance_reveal(self) -> None:
+        """按固定速率推进打字感 reveal 进度；到 1.0 后**停止**逐字定时器（阶段 B2-3）。
+
+        速率 = 单字符时长 ``BUBBLE_TYPE_CHAR_S``，故一个词的打字总时长 = 字数 × 该值，
+        与 ``BUBBLE_TYPE_TICK_MS`` 无关（定时器间隔只决定刷新粒度）。
+        """
+
+        chars = len(self._line_word)
+        if chars <= 0 or C.BUBBLE_TYPE_CHAR_S <= 0.0:
+            self._reveal = 1.0
+            self._reveal_timer.stop()
+            return
+        step = (C.BUBBLE_TYPE_TICK_MS / 1000.0) / (chars * C.BUBBLE_TYPE_CHAR_S)
+        self._reveal = min(1.0, self._reveal + step)
+        if self._reveal >= 1.0:
+            self._reveal_timer.stop()
+        self.update()
+
     def _update_alpha(self) -> None:
         """按相位推进透明度（淡入 / 停留 / 淡出）。"""
 

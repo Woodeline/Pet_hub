@@ -12,6 +12,10 @@
         --stage b1-before \\
         --outdir "C:/Users/王佐成/WorkBuddy/软件开发/_ui-review-phase-b"
 
+    # 阶段 B2 微交互三帧（悬停凝视 / 点击过冲 / 气泡打字感）
+    QT_QPA_PLATFORM=offscreen python tools/render_theme_preview.py \\
+        --stage b2 --outdir "C:/Users/王佐成/WorkBuddy/软件开发/_ui-review-phase-b"
+
 可选参数：
 
     --scale 0.8   渲染缩放（默认 0.8）
@@ -29,13 +33,15 @@ from pathlib import Path
 # 必须在导入 PySide6 之前设置离屏后端（无显示环境也能渲染）。
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QSize, Qt  # noqa: E402
+from PySide6.QtCore import QPoint, QSize, Qt  # noqa: E402
 from PySide6.QtGui import QImage, QPainter  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop_pet.core import constants as C  # noqa: E402
 from desktop_pet.core.constants import Expression  # noqa: E402
 from desktop_pet.core.pet_model import PetModel, PetPose  # noqa: E402
+from desktop_pet.core.vocabulary import VocabEntry  # noqa: E402
+from desktop_pet.ui.bubble import BubbleWindow  # noqa: E402
 from desktop_pet.ui.pet_renderer import PetRenderer  # noqa: E402
 
 #: 与 ``constants.THEMES`` 的键顺序一致（固定顺序便于逐张比对）。
@@ -43,6 +49,9 @@ THEMES = (
     "default", "spring", "summer", "autumn", "winter",
     "spring_festival", "christmas",
 )
+
+#: 阶段 B2 微交互预览的入口 stage 名。
+MICRO_STAGE = "b2"
 
 
 def render_pose(renderer: PetRenderer, pose: PetPose, scale: float, path: Path) -> Path:
@@ -60,6 +69,67 @@ def render_pose(renderer: PetRenderer, pose: PetPose, scale: float, path: Path) 
     if not image.save(str(path), "PNG"):
         raise RuntimeError(f"PNG 写出失败：{path}")
     return path
+
+
+def render_bubble_typing(path: Path) -> Path:
+    """渲染一张「气泡打字感」中途帧（reveal≈0.45）为 PNG（阶段 B2-3 视觉证据）。"""
+
+    bubble = BubbleWindow()
+    bubble.set_anchor(QPoint(0, 0))
+    bubble.show_word(
+        VocabEntry(
+            id="n5-0001", level="N5", word="食べる", kana="たべる",
+            translation="吃", meaning="进食", romaji="taberu",
+        ),
+        30.0,
+    )
+    bubble._alpha = 1.0
+    bubble._reveal = 0.45  # 打字进行中：单词行只显示前半段
+    image = QImage(bubble.size(), QImage.Format.Format_ARGB32)
+    image.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(image)
+    try:
+        bubble.render(painter, QPoint(0, 0))
+    finally:
+        painter.end()
+    bubble.hide_bubble()
+    if not image.save(str(path), "PNG"):
+        raise RuntimeError(f"PNG 写出失败：{path}")
+    return path
+
+
+def micro_series(renderer: PetRenderer, outdir: Path, scale: float) -> list[Path]:
+    """阶段 B2 微交互三帧：悬停凝视 / 点击过冲 / 气泡打字感。"""
+
+    renderer.set_theme(C.DEFAULT_THEME)
+    written: list[Path] = []
+
+    # ① 悬停凝视：看向右侧偏上的光标（look_x > 0 / look_y < 0）
+    gaze_model = PetModel()
+    gaze_model.set_hover(True)
+    gaze_model.set_gaze(1.0, -0.4)
+    now = 0.0
+    for _ in range(40):
+        now += 0.02
+        gaze_model.update(0.02, now)
+    written.append(
+        render_pose(renderer, gaze_model.pose(), scale, outdir / "b2-hover-gaze.png")
+    )
+
+    # ② 点击过冲：把弹跳包络钉在峰值附近（progress≈0.3 → u≈0.6）再收敛渲染
+    click_model = PetModel()
+    now = 0.0
+    for _ in range(60):
+        click_model._click_timer = C.CLICK_ANIM_S * 0.7
+        now += 0.02
+        click_model.update(0.02, now)
+    written.append(
+        render_pose(renderer, click_model.pose(), scale, outdir / "b2-click-overshoot.png")
+    )
+
+    # ③ 气泡打字感：单词行 reveal≈0.45 的中途帧
+    written.append(render_bubble_typing(outdir / "b2-bubble-typing.png"))
+    return written
 
 
 def theme_series(
@@ -89,7 +159,10 @@ def main(argv: list[str] | None = None) -> int:
 
     app = QApplication.instance() or QApplication(sys.argv[:1])
     renderer = PetRenderer()
-    written = theme_series(renderer, outdir, args.stage, args.scale)
+    if args.stage == MICRO_STAGE:
+        written = micro_series(renderer, outdir, args.scale)
+    else:
+        written = theme_series(renderer, outdir, args.stage, args.scale)
     for path in written:
         print(str(path))
     del app  # 显式持有到结束，避免过早回收

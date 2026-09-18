@@ -167,3 +167,112 @@ phase = ((now - epoch) / period) mod 1
 
 commit：`feat(motion): 呼吸相位随机化 + SurpriseKind 小动作 + 不对称眨眼`
 
+---
+
+## B1 · 色彩微调（光晕随主题派生 + 降饱和两档 + PROP_OUTLINE 道具描边分层）
+
+| 项 | 内容 |
+|---|---|
+| 文件 | `core/theme.py`（`glow_for_theme(name, sleeping)` 纯函数 + 色相工具 `_warmth`/`_pick_warmest`/`_pick_coldest`/`_soften` + `__all__`）、`core/constants.py`（`PROP_OUTLINE` 独立标量 + `BODY_GRADIENT_STOPS` 降饱和 + `__all__`）、`ui/pet_renderer.py`（`_theme_name` 实例状态 / `_outline_prop` 道具笔 / `_draw_glow` 改走 `glow_for_theme`；`_draw_keyboard`/`_draw_mouse` 用道具笔）、`tests/test_palette_level.py`（新，26 条）、`tools/render_theme_preview.py`（新，离屏预览工具） |
+| 结果 | 全量 **1001 passed / rc=0**（B1-1+B1-3 落地后）；B1-2 两档各再全量绿 |
+| 结论 | 光晕色**只在 core 派生**（`ui/` 零裸 hex，`test_static_constraints` AST 扫描绿）；道具描边用**独立标量常量**（照 `OUTLINE_W` 先例），`COLORS` / `SEMANTIC_COLORS` 键值未动。 |
+
+**降饱和公式（B1-2）**：`L = 0.299R + 0.587G + 0.114B`；`new = round(c + (L − c) · ratio)`。
+分两档、每档 5%，第 2 档在第 1 档结果上**再乘一次 5%**（累计 `1 − (1 − 0.05)² ≈ 0.0975`，**非**一次算 10%）。
+
+| 档 | `BODY_GRADIENT_STOPS` 色值（0 / .25 / .5 / .75 / 1.0） | commit |
+|---|---|---|
+| 原始 | `#AEE6A8 · #FFF9B0 · #FFCB9E · #FFAECD · #AEDAF1` | — |
+| 第 1 档（5%） | `#AAE5A3 · #FEF7AC · #FDC8A3 · #FCAAD4 · #AAD7EE` | `94cfc0a` |
+| 第 2 档（累计 10%） | `#ACE4A5 · #FDF7AF · #FBC9A5 · #F9ABD3 · #ACD6EC` | `2359e32` |
+
+> 结构 / 数量 / 位置一律未动，仅改色值；`THEMES["default"]` 以 `is` 引用 `BODY_GRADIENT_STOPS` 对象本身 → 默认皮肤自动跟随。
+
+**视觉证据（阶段 B1，PNG 在仓库外）**：`_ui-review-phase-b/` 下
+`b1-before-{7 套}.png`（降饱和前）· `b1-desat5-{7 套}.png`（第 1 档）· `b1-desat10-{7 套}.png`（第 2 档），
+命令：`QT_QPA_PLATFORM=offscreen python tools/render_theme_preview.py --stage b1-desat5 --outdir <绝对路径>`。
+
+**变异验证（B1）** —— 每条均先破坏源码确认 FAIL 再还原：
+
+| # | 怎么破坏 | 观察到 | 还原 |
+|---|---|---|---|
+| M1 | `PROP_OUTLINE` 改成 `#141414`（与 ink 同色，层级差消失） | `test_prop_outline_constant_is_literal_value`、`test_prop_outline_differs_from_ink` 双 **FAIL** | 已还原 |
+| M2 | 渲染器 `_outline_prop` 改回 `QPen(ink)` | `test_renderer_prop_pen_uses_prop_outline` **FAIL** | 已还原 |
+| M3 | `glow_for_theme` 睡觉分支误用暖端/清醒参数 | `test_glow_for_theme_awake_differs_from_sleeping[7 套]` + `..._default_literal_values` 共 **8 FAIL** | 已还原 |
+| M4 | `BODY_GRADIENT_STOPS` 暖端主色（0.50）退回第 1 档值 | `test_glow_for_theme_default_literal_values` **FAIL** | 已还原 |
+
+> ⚠️ M4 首轮误打在 0.00（薄荷绿）停靠点上 → **rc=0 未 FAIL**：该停靠点既非暖端主色也非冷端主色，
+> `glow_for_theme` 不取它，故无锚点覆盖。据此把变异改打到真正驱动默认光晕的暖端主色（0.50）→ 命中。
+> **诚实披露**：`BODY_GRADIENT_STOPS` 中 0.00 / 0.25 / 0.75 三个停靠点的**色值**目前无字面量断言锁定
+> （只有结构/合法 hex 断言），仅由 PNG 目视证据覆盖——若未来要做「色值漂移」守卫，需补字面量锚点。
+
+commit：`1f18197 feat(palette): 光晕随主题派生 + PROP_OUTLINE 道具描边分层` ·
+`94cfc0a feat(palette): BODY_GRADIENT_STOPS 降饱和（第 1 档 5%）` ·
+`2359e32 feat(palette): BODY_GRADIENT_STOPS 降饱和（第 2 档累计 10%）`
+
+---
+
+## B2 · 微交互（悬停凝视 + 点击弹跳过冲 + 气泡打字感）
+
+| 项 | 内容 |
+|---|---|
+| 文件 | `core/constants.py`（`HOVER_GAZE_*` / `CLICK_BOUNCE_PX` / `BUBBLE_TYPE_*` + `__all__`）、`core/motion.py`（`gaze_vector` 纯函数 + `__all__`）、`core/pet_model.py`（`_gaze`/`set_gaze`/`clear_gaze`；`_apply_life_signs` 悬停凝视 + 空闲张望抑制；`_apply_actions` 半眯眼 + `ease_out_back` 弹跳过冲；`_surprise_allowed` 纳入悬停抑制）、`ui/pet_renderer.py`（`face_center` 静态方法）、`ui/pet_window.py`（`_update_gaze` + `_on_frame` 调用）、`ui/bubble.py`（打字感 `_reveal`/`_reveal_timer`/`_revealed_text`/`_advance_reveal` + `set_reduce_motion`；`_paint_word` 前缀子串）、`app/controller.py`（启动 + 开关切换注入 `bubble.set_reduce_motion`）、`tests/test_micro_interaction.py`（新，21 条）、`tools/render_theme_preview.py`（`--stage b2` 三帧） |
+| 结果 | 全量 **1022 passed / rc=0**（+21 `test_micro_interaction`） |
+| 结论 | 悬停优先级 **悬停 > 表情模板 > 空闲张望** 生效且可测；弹跳峰值 ≤ 旧值 1.1 倍；气泡打字期间**宽度恒定**；`reduce_motion` 直达终态；逐字 QTimer 挂 parent 且 `hide_bubble` 停止。 |
+
+### 实现要点（含一处「主动修正」）
+
+**B2-1 悬停凝视**：`PetWindow._update_gaze` 每帧把 `QCursor.pos()` → `mapFromGlobal` →
+`/scale` 得逻辑画布坐标，再经 `motion.gaze_vector(px,py, cx,cy, HOVER_GAZE_MAX_DIST_PX)`
+归一化（`cx,cy` = `PetRenderer.face_center(pose)`），写入 `model.set_gaze(nx,ny)`。
+模型在 `_apply_life_signs` 里 `look_x = nx·HOVER_GAZE_RANGE_PX`（**绝对赋值**，覆盖模板）。
+
+> ⚠️ **主动修正（比 plan 原文更稳）**：plan §B2-1 只要求「空闲 `look_around_offset` 在悬停期间不写入」。
+> 首次实现把「凝视块」放在「空闲张望块」**之后**——结果空闲张望即便写入也会被随后的绝对赋值抹掉，
+> 该守卫**形同虚设且无法被变异测试捕获**（变异 M2 首轮 rc=0 未 FAIL）。遂把**凝视块前置**、空闲张望块后置，
+> 守卫即可观测：去掉 `and not self._hovering` → 悬停时 `look_x = gaze + 3.0` → 断言必挂。
+> 这既满足 plan 语义，也让守卫成为**真正承重**的代码（而非装饰）。
+
+**B2-2 点击弹跳过冲**：`_apply_actions` 用 `motion.ease_out_back(u)`（`u: 0→1→0`）替代旧
+`ease_out_bounce`；峰值 `ease_out_back` ≈ **1.1** → 最大位移 `CLICK_BOUNCE_PX(7.0) × 1.1 = 7.7px`，
+**恰好等于**旧版峰值（`BREATH_AMPLITUDE_PX 3.5 × 2.2 = 7.7px`）→ 满足「≤ 现值的 1.1 倍」且脏区包围盒不扩大。
+
+**B2-3 气泡打字感**：`_measure` / `_word_layout` 仍按**完整词条**一次算定（`_measure_word` 与 `_reveal` 无关）；
+仅 `_paint_word` 对 `layout[0]`（恒为单词行）绘制 `_revealed_text()` 前缀子串 → 打字期间气泡尺寸恒定
+（`test_jp_bubble_visual` 固定宽度契约不破）。`_reveal_timer` 挂 parent，`hide_bubble()` 与 `show_message()`
+路径均 `stop()`；`reduce_motion` 时 `_reveal` 直达 `1.0`、不启动定时器。
+
+**视觉证据（阶段 B2，PNG 在仓库外）**：`_ui-review-phase-b/` 下
+`b2-hover-gaze.png` · `b2-click-overshoot.png` · `b2-bubble-typing.png`，
+命令：`QT_QPA_PLATFORM=offscreen python tools/render_theme_preview.py --stage b2 --outdir <绝对路径>`。
+
+**变异验证（B2）** —— 每条均先破坏源码确认 FAIL 再还原：
+
+| # | 怎么破坏 | 观察到 | 还原 |
+|---|---|---|---|
+| M1 | 去掉 `_apply_life_signs` 的凝视赋值块 | `test_hover_gaze_writes_look_offsets`、`test_hover_gaze_overrides_expression_template` 双 **FAIL** | 已还原 |
+| M2 | 空闲张望去掉 `and not self._hovering` | `test_hover_gaze_suppresses_idle_look_around`、`test_hover_gaze_writes_look_offsets` 双 **FAIL** | 已还原 |
+| M3 | 去掉悬停「半眯」眼（openness/curve 覆盖） | `test_hover_uses_half_squint_not_full_arc_eye` **FAIL** | 已还原 |
+| M4 | `_surprise_allowed` 去掉 `or self._hovering` | `test_hover_suppresses_surprise_action` **FAIL** | 已还原 |
+| M5 | `CLICK_BOUNCE_PX` 调到 8.0（峰值 8.8 > 8.47 上界） | `test_click_bounce_peak_within_1_1x_legacy` **FAIL** | 已还原 |
+| M6 | `_revealed_text` 恒返回全文（不截前缀） | `test_revealed_text_is_prefix_substring` **FAIL** | 已还原 |
+| M7 | `_measure_word` 改为按子串测量（宽度随打字变化） | `test_word_bubble_width_constant_during_typing` **FAIL** | 已还原 |
+| M8 | `show_word` 无视 `reduce_motion`（恒从 0 逐字） | `test_reduce_motion_skips_typing_reaches_terminal_state` **FAIL** | 已还原 |
+| M9 | `hide_bubble` 不停止逐字定时器 | `test_hide_bubble_stops_reveal_timer` **FAIL** | 已还原 |
+| M10 | `gaze_vector` 去掉分量钳制 | `test_gaze_vector_clamps_components_to_unit` **FAIL** | 已还原 |
+
+> 要点：**M2** 首轮 rc=0 未 FAIL（守卫被后置绝对赋值掩盖）→ 触发上文的**主动修正**；修正后 M2 命中。
+> **M5** 证明弹跳上界断言非恒绿；**M7** 证明「宽度恒定」是**按完整词条测量**才成立（按子串测量会挂）。
+
+**遗留 / 诚实说明**
+
+1. `HOVER_GAZE_RANGE_PX = 4.0` 为**主观取值**（略大于空闲张望幅度 3.0）——凝视可见性已由 PNG 目视确认，
+   但数值本身无客观基准，后续如觉偏弱可只调该常量。
+2. 悬停凝视的 `look_x` 经 `face_center` 基准：`_GEO_BODY_CX/``_GEO_BODY_CY` 是渲染层几何常量，
+   `face_center` 已把二者封装为**单一来源**，渲染层若调整脸心，凝视基准会同步跟随（无需改 UI）。
+3. 打字感目前只作用于**单词行**（`layout[0]`）；假名 / 翻译 / 释义仍全显（plan §B2-3 明示「前缀子串」单数）。
+   若后续要「整块逐行打字」，属独立增量。
+4. `CLICK_BOUNCE_PX` 使峰值与旧值**持平**（非「略有过冲」）：为严守「≤1.1 倍 + 不越脏区」两条硬约束，
+   选择了物理上最保守的取值；`ease_out_back` 的过冲形状（压扁→弹起→回落）已体现「回弹」观感。
+
+

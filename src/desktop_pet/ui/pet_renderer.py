@@ -342,6 +342,23 @@ class PetRenderer:
         return QRect(px0, py0, max(1, px1 - px0), max(1, py1 - py0))
 
     @staticmethod
+    def face_center(pose: PetPose) -> tuple[float, float]:
+        """返回**脸部中心**的逻辑画布坐标 ``(x, y)``（阶段 B2-1）。
+
+        供 ``PetWindow`` 把光标位置换算成「注视方向」时的基准点：以脸心为原点，
+        光标偏右 → 瞳孔右移、偏上 → 上移。与 :meth:`_draw_face` 的变换基准一致
+        （``_GEO_BODY_CX`` / ``_GEO_BODY_CY + pose.body_y``），故视觉上「眼睛看的就是光标」。
+
+        Args:
+            pose: 当前姿态。
+
+        Returns:
+            逻辑画布（160×180）坐标下的脸心。
+        """
+
+        return _GEO_BODY_CX, _GEO_BODY_CY + pose.body_y
+
+    @staticmethod
     def _local_bounds(pose: PetPose) -> tuple[float, float, float, float]:
         """在**逻辑画布坐标**（160×180）内计算猫身包围盒（不含光晕）。
 

@@ -180,6 +180,8 @@ class PetAppController(QObject):
 
         self._model.set_base_expression(expression_for_mood(self._sm.mood))
         self._model.set_reduce_motion(self._cfg.reduce_motion)
+        # 气泡打字感（阶段 B2-3）：reduce_motion 开启时跳过逐字、直接全显
+        self._bubble.set_reduce_motion(self._cfg.reduce_motion)
         self._window.set_fps(C.FPS_IDLE)
         self._window.start_animation()
 
@@ -436,6 +438,7 @@ class PetAppController(QObject):
         self._tray.set_reduce_motion_checked(enabled)
         self._apply_reduce_motion_to_windows(enabled)
         self._model.set_reduce_motion(enabled)
+        self._bubble.set_reduce_motion(enabled)
         self._persist()
         self._tray.notify(
             C.APP_DISPLAY_NAME,
