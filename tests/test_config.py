@@ -176,6 +176,8 @@ def test_load_after_save_is_json_readable(config_store: ConfigStore, config_path
         "listen_enabled", "bubble_enabled", "autostart",
         # 增量改造：新增「减少动效」开关（UI 视觉升级 P2；CONFIG_VERSION 保持 1）
         "reduce_motion",
+        # 增量改造：新增主题皮肤（UI 视觉升级 阶段 A；CONFIG_VERSION 保持 1）
+        "theme",
         "jp_enabled", "jp_level",
         "jp_bubble_duration_s", "jp_daily_limit",
         # 增量改造：DeepSeek 联网 / 中文详情配置（CONFIG_VERSION 保持 1）
@@ -352,3 +354,37 @@ def test_reduce_motion_default_and_roundtrip(config_store: ConfigStore) -> None:
     loaded = config_store.load()
     assert loaded.reduce_motion is True
     assert loaded.to_dict()["reduce_motion"] is True
+
+
+# --------------------------------------------------------------------------- #
+# 9. 主题皮肤字段容错（UI 视觉升级 阶段 A；CONFIG_VERSION 保持 1）
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        (None, "default"),        # 缺字段 → 默认
+        (123, "default"),         # 非法类型 → 默认
+        ("", "default"),          # 空串 → 默认
+        ("banana", "default"),    # 合法类型、非法取值 → 默认（R3：必须白名单校验）
+        (["autumn"], "default"),  # 非法类型（list）→ 默认
+        ("autumn", "autumn"),     # 合法皮肤 → 保留
+        ("auto", "auto"),         # auto 合法 → 保留
+        ("christmas", "christmas"),
+        ("  spring  ", "spring"), # 首尾空白被 strip
+    ],
+)
+def test_theme_coercion(raw, expected) -> None:
+    """白名单校验：非 str / 空串 / 非法值回落 ``default``；合法值保留。"""
+
+    cfg = AppConfig.from_dict({"theme": raw})
+    assert cfg.theme == expected
+
+
+def test_theme_default_is_literal_default(config_store: ConfigStore) -> None:
+    """默认值为字面量 ``"default"``，且可往返序列化。"""
+
+    assert AppConfig().theme == "default"
+    config_store.save(AppConfig(theme="winter"))
+    loaded = config_store.load()
+    assert loaded.theme == "winter"
+    assert loaded.to_dict()["theme"] == "winter"

@@ -94,6 +94,21 @@ def _coerce_level(value: Any, default: str) -> str:
     return default
 
 
+def _coerce_theme(value: Any, default: str) -> str:
+    """把主题值收敛到白名单 ``THEME_ALLOWED``；非字符串 / 空串 / 非法值一律回落默认。
+
+    照 :func:`_coerce_level` 先例做**取值**校验（而非仅类型校验的 :func:`_coerce_str`）：
+    ``"banana"`` 这类“合法类型、非法取值”的字符串会原样通过 str 校验，随后在渲染器
+    ``THEMES["banana"]`` 处 ``KeyError``，违背 FR-39「越界值逐字段回落、绝不崩溃」。
+    """
+
+    if isinstance(value, str):
+        candidate = value.strip()
+        if candidate in C.THEME_ALLOWED:
+            return candidate
+    return default
+
+
 def _coerce_duration(value: Any, default: int) -> int:
     """把学习泡泡时长收敛到档位 ``JP_BUBBLE_DURATION_OPTIONS``；非法值回落默认。"""
 
@@ -145,6 +160,7 @@ class AppConfig:
         bubble_enabled: 气泡提示开关（PRD Q-01 的"静音"含义）。
         autostart: 开机自启开关。
         reduce_motion: 减少动效（对应 prefers-reduced-motion），默认 ``False``。
+        theme: 主题皮肤（``default`` / 四季 / 节日 / ``auto``），默认 ``default``。
         jp_enabled: 日语学习开关（JP-02，默认关闭）。
         jp_level: 日语难度等级（JP-06，默认 ``N5``，取值 ``N5..N1``）。
         jp_bubble_duration_s: 学习泡泡停留时长（秒，默认 30，取值 15/30/60）。
@@ -164,6 +180,7 @@ class AppConfig:
     bubble_enabled: bool = True
     autostart: bool = False
     reduce_motion: bool = False
+    theme: str = C.DEFAULT_THEME
     jp_enabled: bool = False
     jp_level: str = C.JP_DEFAULT_LEVEL
     jp_bubble_duration_s: int = C.JP_BUBBLE_DURATION_S
@@ -186,6 +203,7 @@ class AppConfig:
             "bubble_enabled": bool(self.bubble_enabled),
             "autostart": bool(self.autostart),
             "reduce_motion": bool(self.reduce_motion),
+            "theme": str(self.theme),
             "jp_enabled": bool(self.jp_enabled),
             "jp_level": str(self.jp_level),
             "jp_bubble_duration_s": int(self.jp_bubble_duration_s),
@@ -221,6 +239,7 @@ class AppConfig:
             bubble_enabled=_coerce_bool(get("bubble_enabled"), defaults.bubble_enabled),
             autostart=_coerce_bool(get("autostart"), defaults.autostart),
             reduce_motion=_coerce_bool(get("reduce_motion"), defaults.reduce_motion),
+            theme=_coerce_theme(get("theme"), defaults.theme),
             jp_enabled=_coerce_bool(get("jp_enabled"), defaults.jp_enabled),
             jp_level=_coerce_level(get("jp_level"), defaults.jp_level),
             jp_bubble_duration_s=_coerce_duration(

@@ -169,6 +169,101 @@ BODY_GRADIENT_STOPS: Final[tuple[tuple[float, str], ...]] = (
 OUTLINE_W: Final[float] = 3.2
 
 # --------------------------------------------------------------------------- #
+# 4c. 主题皮肤渐变表（阶段 A）—— 四季自动换肤 + 节日手动
+# --------------------------------------------------------------------------- #
+# 每套皮肤 = **5 个停靠点**（位置严格 ``0.0 / 0.25 / 0.5 / 0.75 / 1.0``），色值一律 ``#RRGGBB``。
+# 渐变方向与主体一致（左上前额 → 右下身体前沿）。所有皮肤为**低饱和粉彩**，
+# 同一色相家族「由亮到深」推进，避免高饱和刺眼。
+#
+# ``default`` **直接引用** ``BODY_GRADIENT_STOPS`` **对象本身**（不是复制字面量）——
+# 这样阶段 B 对默认彩虹降饱和时只需改一处，默认皮肤自动跟随。
+#
+# 本段为纯加法：``COLORS`` / ``BODY_GRADIENT_STOPS`` / ``OUTLINE_W`` 一字未动。
+DEFAULT_THEME: Final[str] = "default"
+AUTO_THEME: Final[str] = "auto"
+
+THEMES: Final[dict[str, tuple[tuple[float, str], ...]]] = {
+    # 默认：品牌柔和全息彩虹（引用既有对象）
+    "default": BODY_GRADIENT_STOPS,
+    # 春：新芽嫩绿 → 深叶绿
+    "spring": (
+        (0.00, "#E8F5DC"),
+        (0.25, "#CFEAB8"),
+        (0.50, "#B2DE96"),
+        (0.75, "#93CE79"),
+        (1.00, "#74BC60"),
+    ),
+    # 夏：晴空浅蓝 → 深海蓝
+    "summer": (
+        (0.00, "#DCEFF7"),
+        (0.25, "#B8DFF0"),
+        (0.50, "#92CBE6"),
+        (0.75, "#6BB5D9"),
+        (1.00, "#4A9DC6"),
+    ),
+    # 秋：暖米 → 枫橙
+    "autumn": (
+        (0.00, "#FBE7CC"),
+        (0.25, "#F5CE9E"),
+        (0.50, "#EDB270"),
+        (0.75, "#DE9349"),
+        (1.00, "#C4762E"),
+    ),
+    # 冬：雪青白 → 冷靛蓝
+    "winter": (
+        (0.00, "#EAF1FA"),
+        (0.25, "#CBDCEE"),
+        (0.50, "#A8C4E0"),
+        (0.75, "#84A9CF"),
+        (1.00, "#628DBD"),
+    ),
+    # 春节：桃粉 → 喜庆深红
+    "spring_festival": (
+        (0.00, "#FBD9DE"),
+        (0.25, "#F5B0BC"),
+        (0.50, "#EC8698"),
+        (0.75, "#DB5D74"),
+        (1.00, "#C23A55"),
+    ),
+    # 圣诞：松针浅绿 → 深松绿
+    "christmas": (
+        (0.00, "#D6EFE0"),
+        (0.25, "#AEDBC0"),
+        (0.50, "#82C29E"),
+        (0.75, "#57A67C"),
+        (1.00, "#2F875C"),
+    ),
+}
+
+#: 主题取值 → 中文显示名（含 ``auto``；供托盘菜单与配置展示使用）。
+THEME_NAMES: Final[dict[str, str]] = {
+    "default": "默认",
+    "spring": "春",
+    "summer": "夏",
+    "autumn": "秋",
+    "winter": "冬",
+    "spring_festival": "春节",
+    "christmas": "圣诞",
+    "auto": "自动",
+}
+
+#: 月份 → 季节皮肤（**仅四季**；节日皮肤只由用户手动选择，见 v1.1 §2.2 G4 决策 a）。
+#: 覆盖 1..12 全部月份，值均为 :data:`THEMES` 的键。
+THEME_SEASON_MAP: Final[dict[int, str]] = {
+    1: "winter", 2: "winter",
+    3: "spring", 4: "spring", 5: "spring",
+    6: "summer", 7: "summer", 8: "summer",
+    9: "autumn", 10: "autumn", 11: "autumn",
+    12: "winter",
+}
+
+#: 合法主题取值集合：7 套皮肤 + ``auto``（供 ``AppConfig`` 白名单校验）。
+THEME_ALLOWED: Final[frozenset[str]] = frozenset(THEMES) | {AUTO_THEME}
+
+#: 托盘「主题」子菜单标题。
+TRAY_MENU_THEME: Final[str] = "主题"
+
+# --------------------------------------------------------------------------- #
 # 4b. Design Token（UI 视觉升级 P0）—— 语义色 / 间距 / 字号 / 圆角
 # --------------------------------------------------------------------------- #
 # 说明：本段为**纯加法**（新字典），**不修改**上方 ``COLORS`` / ``BODY_GRADIENT_STOPS`` /
@@ -635,6 +730,14 @@ __all__ = [
     "Expression",
     "Gesture",
     "COLORS",
+    # 主题皮肤（阶段 A）
+    "THEMES",
+    "DEFAULT_THEME",
+    "AUTO_THEME",
+    "THEME_NAMES",
+    "THEME_SEASON_MAP",
+    "THEME_ALLOWED",
+    "TRAY_MENU_THEME",
     # Design Token（UI 视觉升级 P0）
     "SEMANTIC_COLORS",
     "SPACING",
