@@ -14,10 +14,19 @@
 from __future__ import annotations
 
 import logging
+import random
 import time
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QContextMenuEvent, QCursor, QMouseEvent, QPaintEvent, QPainter
+from PySide6.QtGui import (
+    QCloseEvent,
+    QContextMenuEvent,
+    QCursor,
+    QGuiApplication,
+    QMouseEvent,
+    QPaintEvent,
+    QPainter,
+)
 from PySide6.QtWidgets import QMenu, QWidget
 
 from desktop_pet.core import constants as C
@@ -78,6 +87,18 @@ class PetWindow(QWidget):
         self._hover_timer.timeout.connect(self._on_hover_triggered)
         self._hover_active: bool = False
 
+        # 锚点式空闲游走（阶段 C1-1）
+        #   锚点 = 稳定基准（= 持久化写入对象）；offset = **严格有界**的瞬态偏移。
+        #   游走位置 = 锚点 + offset，且 **绝不** emit position_changed —— 该信号只服务
+        #   「用户拖拽 → 持久化」；若游走也发它，随机位置会被存成新锚点、跨会话持续漂移
+        #   （v1.1 §2.3 G2 / 风险 6）。
+        self._wander_anchor: QPoint = QPoint(0, 0)
+        self._wander_offset_x: float = 0.0
+        self._wander_offset_y: float = 0.0
+        self._wander_timer = QTimer(self)
+        self._wander_timer.setInterval(C.WANDER_TICK_MS)
+        self._wander_timer.timeout.connect(self._on_wander_tick)
+
         # 右键菜单（由 Controller 注入复用托盘菜单）
         self._context_menu: QMenu | None = None
 
@@ -108,20 +129,56 @@ class PetWindow(QWidget):
         self._timer.setInterval(C.interval_for_fps(fps))
 
     def start_animation(self) -> None:
-        """启动帧循环。"""
+        """启动帧循环与空闲游走。"""
 
         if not self._timer.isActive():
             self._timer.start(C.interval_for_fps(self._fps))
+        self.start_wander()
 
     def stop_animation(self) -> None:
-        """停止帧循环。"""
+        """停止帧循环与空闲游走（避免残留定时器 / 事件，FR-24）。"""
 
         self._timer.stop()
+        self.stop_wander()
 
     def restore_position(self, x: int, y: int) -> None:
-        """恢复到指定位置（重启恢复，FR-36）。"""
+        """恢复到指定位置（重启恢复，FR-36），同时把它设为新的游走锚点（offset 归零）。"""
 
+        self.set_anchor(x, y)
+
+    def set_anchor(self, x: int, y: int) -> None:
+        """把 ``(x, y)`` 设为游走锚点、复位瞬态偏移，并把窗口移到锚点。
+
+        锚点是**稳定基准**：空闲游走只在锚点邻域 ``±WANDER_MAX_PX`` 内浮动，
+        **永不改写锚点本身** → 重启后位置回到锚点、不随随机游走漂移（G2 修正方案）。
+        拖拽结束（Controller 越界钳制后）与从托盘恢复也都经此重置基准。
+        """
+
+        self._wander_anchor = QPoint(int(x), int(y))
+        self._wander_offset_x = 0.0
+        self._wander_offset_y = 0.0
         self.move(int(x), int(y))
+
+    def anchor(self) -> tuple[int, int]:
+        """返回当前游走锚点（= 持久化基准，**不含**瞬态偏移）。"""
+
+        return self._wander_anchor.x(), self._wander_anchor.y()
+
+    def wander_offset(self) -> tuple[float, float]:
+        """返回当前瞬态游走偏移 ``(offset_x, offset_y)``（供测试 / 调试观察）。"""
+
+        return self._wander_offset_x, self._wander_offset_y
+
+    def start_wander(self) -> None:
+        """启动空闲游走定时器（幂等）。"""
+
+        if not self._wander_timer.isActive():
+            self._wander_timer.start(C.WANDER_TICK_MS)
+
+    def stop_wander(self) -> None:
+        """停止空闲游走定时器（幂等）。"""
+
+        self._wander_timer.stop()
 
     def set_context_menu(self, menu: QMenu) -> None:
         """注入右键菜单（由 Controller 复用托盘菜单实例）。"""
@@ -192,6 +249,10 @@ class PetWindow(QWidget):
         delta = current - self._press_pos
         if not self._dragging and (delta.manhattanLength()) >= C.DRAG_THRESHOLD_PX:
             self._dragging = True
+            # 拖拽开始：把当前实际位置吸收为新锚点、瞬态偏移归零（G2 修正方案）。
+            # 必须在跟手移动**之前**做：先让锚点追上窗口现位置，再清零 offset，
+            # 否则归零会把窗口瞬间拉回旧锚点。
+            self._absorb_wander_offset()
             self._model.set_dragging(True)
         if self._dragging:
             new_pos = self._drag_origin + delta
@@ -235,6 +296,13 @@ class PetWindow(QWidget):
             self._context_menu.popup(event.globalPos())
         event.accept()
 
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+        """关闭：停止帧循环与空闲游走定时器（避免残留定时器 / 事件，FR-24）。"""
+
+        self._timer.stop()
+        self._wander_timer.stop()
+        super().closeEvent(event)
+
     # ------------------------------------------------------------------ #
     # 内部
     # ------------------------------------------------------------------ #
@@ -244,6 +312,81 @@ class PetWindow(QWidget):
         width = int(round(C.BASE_W * self._scale))
         height = int(round(C.BASE_H * self._scale))
         self.setFixedSize(QSize(width, height))
+
+    def _absorb_wander_offset(self) -> None:
+        """把当前瞬态偏移吸收进锚点并清零 offset（拖拽开始时调用，G2）。
+
+        先令锚点 = 窗口**现位置**（= 旧锚点 + 现偏移），再把 offset 归零：二者代数和
+        不变 → 窗口不跳；此后游走相对新锚点展开。
+        """
+
+        self._wander_anchor = self.pos()
+        self._wander_offset_x = 0.0
+        self._wander_offset_y = 0.0
+
+    def _on_wander_tick(self) -> None:
+        """一次空闲游走节拍：随机迈一步（offset 严格有界）后落位。
+
+        门控：拖拽 / 悬停 / 不可见期间不游走（避免与用户操作打架）。
+        """
+
+        try:
+            if self._dragging or self._hover_active or not self.isVisible():
+                return
+            dx = random.uniform(-C.WANDER_STEP_PX, C.WANDER_STEP_PX)
+            dy = random.uniform(-C.WANDER_STEP_PX, C.WANDER_STEP_PX)
+            # 步进结果严格钳制在 ±WANDER_MAX_PX：偏移到达边界后不再继续外推（G2）。
+            self._wander_offset_x, self._wander_offset_y = motion.wander_step(
+                self._wander_offset_x, self._wander_offset_y, dx, dy, C.WANDER_MAX_PX
+            )
+            self._apply_wander_position()
+        except Exception:  # noqa: BLE001 —— 游走失败不影响动画
+            logger.debug("空闲游走采样失败（已忽略）", exc_info=True)
+
+    def _apply_wander_position(self) -> None:
+        """把「锚点 + 瞬态偏移」落到窗口位置，并经 :func:`motion.clamp_to_screens` 钳制。
+
+        硬约束：本方法**绝不** emit ``position_changed`` —— 该信号只服务用户拖拽 →
+        持久化；游走位置是瞬态的，不得污染锚点（v1.1 §2.3 G2 / 风险 6）。
+        """
+
+        target_x = self._wander_anchor.x() + int(round(self._wander_offset_x))
+        target_y = self._wander_anchor.y() + int(round(self._wander_offset_y))
+        cx, cy = motion.clamp_to_screens(
+            target_x,
+            target_y,
+            self.width(),
+            self.height(),
+            self._screen_geometries(),
+            self._primary_geometry(),
+        )
+        self.move(cx, cy)
+
+    @staticmethod
+    def _screen_geometries() -> list[tuple[int, int, int, int]]:
+        """返回全部屏幕的几何列表（游走越屏钳制用）。"""
+
+        result: list[tuple[int, int, int, int]] = []
+        try:
+            for screen in QGuiApplication.screens():
+                rect = screen.geometry()
+                result.append((rect.x(), rect.y(), rect.width(), rect.height()))
+        except Exception:  # noqa: BLE001
+            logger.debug("获取屏幕列表失败（已忽略）", exc_info=True)
+        return result
+
+    @staticmethod
+    def _primary_geometry() -> tuple[int, int, int, int]:
+        """返回主屏几何（不可用时回落 1920×1080 虚拟主屏）。"""
+
+        try:
+            screen = QGuiApplication.primaryScreen()
+            if screen is not None:
+                rect = screen.geometry()
+                return (rect.x(), rect.y(), rect.width(), rect.height())
+        except Exception:  # noqa: BLE001
+            logger.debug("获取主屏几何失败（已忽略）", exc_info=True)
+        return (0, 0, 1920, 1080)
 
     def _on_hover_triggered(self) -> None:
         """悬停达到阈值 → 抚摸反应。"""

@@ -106,6 +106,11 @@ class PetAppController(QObject):
         self._next_yawn_ts: float = float("inf")
         self._rng: random.Random = random.Random()
 
+        # —— 游走锚点（阶段 C1-1 / G2）：持久化的基准位置，**不含**瞬态游走偏移 ——
+        #   = 配置里的 window_x / window_y；退出与拖拽结束时保存它，绝不保存 pos()。
+        self._anchor_x: int = 0
+        self._anchor_y: int = 0
+
         # —— 日语学习运行时状态（词库 / 加权抽取器 / 生词本 / 单词定时 / 生词本窗口单例）——
         self._bank: WordBank = WordBank.empty()
         self._picker: WeightedWordPicker = WeightedWordPicker(self._bank, self._rng)
@@ -155,7 +160,9 @@ class PetAppController(QObject):
         self._apply_scale(self._cfg.scale, persist=False)
 
         x, y = self._initial_position()
-        self._window.restore_position(x, y)
+        # 锚点式游走：起始位置即锚点（offset 归零）；持久化保存的是锚点而非 pos()。
+        self._window.set_anchor(x, y)
+        self._anchor_x, self._anchor_y = x, y
         self._cfg.window_x, self._cfg.window_y = x, y
 
         self._window.set_context_menu(self._tray.menu)
@@ -388,16 +395,16 @@ class PetAppController(QObject):
         self._cfg.window_y = int(y)
 
     def _on_drag_finished(self, x: int, y: int) -> None:
-        """拖拽结束：越界钳制（FR-36）并持久化。"""
+        """拖拽结束：越界钳制（FR-36）后**重锚**并持久化（G2）。"""
 
         try:
             cx, cy = motion.clamp_to_screens(
                 x, y, self._window.width(), self._window.height(),
                 self._screen_geometries(), self._primary_geometry(),
             )
-            if (cx, cy) != (int(x), int(y)):
-                self._window.move(cx, cy)
-            self._cfg.window_x, self._cfg.window_y = cx, cy
+            # 重锚：拖拽后的落点成为新锚点、瞬态游走偏移归零（set_anchor 同时移动窗口）。
+            self._window.set_anchor(cx, cy)
+            self._anchor_x, self._anchor_y = cx, cy
             self._persist()
         except Exception:  # noqa: BLE001
             logger.exception("处理拖拽结束异常（已忽略）")
@@ -487,7 +494,8 @@ class PetAppController(QObject):
                 x, y, self._window.width(), self._window.height(),
                 self._screen_geometries(), self._primary_geometry(),
             )
-            self._window.restore_position(cx, cy)
+            self._window.set_anchor(cx, cy)
+            self._anchor_x, self._anchor_y = cx, cy
             self._window.show()
             self._window.raise_()
             now = time.monotonic()
@@ -1097,13 +1105,18 @@ class PetAppController(QObject):
             logger.exception("应用缩放失败（已忽略）")
 
     def _persist(self) -> None:
-        """把当前运行时状态写回配置（原子保存）。"""
+        """把当前运行时状态写回配置（原子保存）。
+
+        位置一律保存**游走锚点**而非窗口 ``pos()``：游走施加的瞬态偏移绝不落盘，
+        否则随机位置会被存成新锚点、跨会话持续漂移（v1.1 §2.3 G2 / 风险 6）。
+        """
 
         try:
-            self._cfg.window_x = self._window.x()
-            self._cfg.window_y = self._window.y()
+            ax, ay = self._window.anchor()
+            self._anchor_x, self._anchor_y = int(ax), int(ay)
         except Exception:  # noqa: BLE001 —— 窗口可能尚未创建
-            logger.debug("持久化时窗口坐标不可用，使用配置中的旧值")
+            logger.debug("持久化时游走锚点不可用，沿用内存中的锚点")
+        self._cfg.window_x, self._cfg.window_y = self._anchor_x, self._anchor_y
         self._store.save(self._cfg)
 
     # ------------------------------------------------------------------ #

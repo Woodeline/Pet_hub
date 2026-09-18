@@ -37,6 +37,9 @@ class SurpriseKind(Enum):
     TAIL_FLICK = auto()     # 甩尾
     EAR_FLICK = auto()      # 抖耳
     GLANCE_CORNER = auto()  # 看角落
+    # —— 换姿态（阶段 C1-2）：时长更长（``POSTURE_DURATION_S``），观感是「摆个姿势」——
+    LOAF = auto()           # 趴着
+    LIE_SIDE = auto()       # 侧卧
 
 
 @dataclass
@@ -409,6 +412,20 @@ class PetModel:
 
         return self._rng.choice(list(SurpriseKind))
 
+    @staticmethod
+    def _surprise_duration(kind: SurpriseKind) -> float:
+        """返回该小动作的持续时长（秒）。
+
+        「换姿态」成员（``constants.SURPRISE_POSTURE_KINDS`` 所列：趴着 / 侧卧）用更长的
+        ``POSTURE_DURATION_S``——需要维持一会儿才像「摆个姿势」；其余小动作沿用短促的
+        ``SURPRISE_DURATION_S``。以 ``.name`` 查表（constants 不能 import pet_model，同
+        ``SURPRISE_POSES`` 先例）。
+        """
+
+        if kind.name in C.SURPRISE_POSTURE_KINDS:
+            return C.POSTURE_DURATION_S
+        return C.SURPRISE_DURATION_S
+
     def _advance_surprise(self, dt: float) -> None:
         """推进小动作调度：累计平静时长、倒计时触发、换帧推进、收尾重排。"""
 
@@ -433,7 +450,7 @@ class PetModel:
             return
 
         self._surprise_elapsed += dt
-        if self._surprise_elapsed >= C.SURPRISE_DURATION_S:
+        if self._surprise_elapsed >= self._surprise_duration(self._surprise_kind):
             self._surprise_kind = None
             self._surprise_elapsed = 0.0
             self._surprise_timer = motion.random_interval(
@@ -592,9 +609,11 @@ class PetModel:
             target.eye_curve = min(target.eye_curve, C.HOVER_GAZE_EYE_CURVE)
 
         # 偶发小动作（阶段 A5-2）：按包络把姿态增量叠加到目标姿态
+        # 「换姿态」（LOAF / LIE_SIDE）用更长的 POSTURE_DURATION_S（阶段 C1-2），
+        # 包络时长必须与 _advance_surprise 的收尾阈值一致，否则姿态会被提前抹掉。
         if self._surprise_kind is not None:
             envelope = motion.surprise_envelope(
-                self._surprise_elapsed, C.SURPRISE_DURATION_S
+                self._surprise_elapsed, self._surprise_duration(self._surprise_kind)
             )
             for channel, delta in C.SURPRISE_POSES.get(self._surprise_kind.name, {}).items():
                 if hasattr(target, channel):

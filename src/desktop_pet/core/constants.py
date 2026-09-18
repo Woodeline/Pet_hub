@@ -405,6 +405,26 @@ BUBBLE_TYPE_TICK_MS: Final[int] = 40
 #: 每个字符的显示时长（秒）——总时长 = 字数 × 本值。
 BUBBLE_TYPE_CHAR_S: Final[float] = 0.12
 
+# --------------------------------------------------------------------------- #
+# 7d. 布局节奏（阶段 C1）—— 锚点式空闲游走 + 偶发换姿态
+# --------------------------------------------------------------------------- #
+#: 空闲游走的瞬态偏移上限（逻辑像素，**双轴**）。游走位置 = 锚点 + offset，
+#: offset 严格落在 ``[-WANDER_MAX_PX, WANDER_MAX_PX]``（到达边界后不再继续外推）。
+#: 游走的 ``move()`` **绝不** emit ``position_changed`` —— 该信号只服务「用户拖拽 → 持久化」，
+#: 否则随机位置会被存成新锚点、跨会话漂移（v1.1 G2 / 风险 6）。
+WANDER_MAX_PX: Final[float] = 20.0
+#: 单次游走步的最大增量（逻辑像素）——越小越平缓。
+WANDER_STEP_PX: Final[float] = 6.0
+#: 游走节拍间隔（毫秒）。
+WANDER_TICK_MS: Final[int] = 3000
+
+#: 偶发「换姿态」（LOAF 趴着 / LIE_SIDE 侧卧）的持续时间（秒）。
+#: 比 1.2s 的小动作长得多 —— 「换姿态」需要维持一会儿才像姿势，而非一闪而过的抽搐。
+POSTURE_DURATION_S: Final[float] = 6.0
+#: 属「换姿态」的 ``SurpriseKind`` 成员名：用 ``POSTURE_DURATION_S``，其余小动作沿用
+#: ``SURPRISE_DURATION_S``。以 ``.name`` 为键（constants 不能 import pet_model，同 ``SURPRISE_POSES`` 先例）。
+SURPRISE_POSTURE_KINDS: Final[frozenset[str]] = frozenset({"LOAF", "LIE_SIDE"})
+
 # 气泡时序（PRD §4.3）
 BUBBLE_FADE_IN_S: Final[float] = 0.2
 BUBBLE_FADE_OUT_S: Final[float] = 0.3
@@ -520,6 +540,23 @@ SURPRISE_POSES: Final[dict[str, dict[str, float]]] = {
     # 看角落：瞳孔与头一起偏向一角
     "GLANCE_CORNER": {
         "look_x": 3.0, "look_y": -2.0, "head_tilt": -4.0,
+    },
+    # —— 换姿态（阶段 C1-2）：时长更长（POSTURE_DURATION_S），观感是「摆个姿势」而非抽搐 ——
+    # 趴下 LOAF：重心下压、身体摊宽（squash>0）、头低垂、双耳后压、尾巴蜷在身侧、视线下垂
+    "LOAF": {
+        "body_y": 6.0, "body_squash": 0.10,
+        "head_y": 3.0,
+        "ear_l_tilt": 8.0, "ear_r_tilt": 8.0,
+        "tail_curve": 0.70, "tail_angle": 12.0,
+        "look_y": 2.0,
+    },
+    # 侧卧 LIE_SIDE：身体侧倾、头歪向一侧、耳朵放松（左右不对称）、尾巴甩向身侧、视线斜挑
+    "LIE_SIDE": {
+        "body_y": 7.0, "body_squash": 0.06,
+        "head_tilt": -14.0, "head_y": 4.0,
+        "ear_l_tilt": 12.0, "ear_r_tilt": 4.0,
+        "tail_curve": 0.45, "tail_angle": 26.0,
+        "look_x": -3.0,
     },
 }
 
@@ -844,6 +881,12 @@ __all__ = [
     "CLICK_BOUNCE_PX",
     "BUBBLE_TYPE_TICK_MS",
     "BUBBLE_TYPE_CHAR_S",
+    # 布局节奏（阶段 C1）
+    "WANDER_MAX_PX",
+    "WANDER_STEP_PX",
+    "WANDER_TICK_MS",
+    "POSTURE_DURATION_S",
+    "SURPRISE_POSTURE_KINDS",
     # 日语学习
     "JP_LEVELS",
     "JP_DEFAULT_LEVEL",

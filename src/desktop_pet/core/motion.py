@@ -293,6 +293,39 @@ def random_interval(lo: float, hi: float, rng: random.Random | None = None) -> f
 
 
 # --------------------------------------------------------------------------- #
+# 空闲游走（阶段 C1-1）：锚点 + **严格有界**的瞬态偏移
+# --------------------------------------------------------------------------- #
+def wander_step(
+    offset_x: float, offset_y: float, dx: float, dy: float, max_px: float,
+) -> tuple[float, float]:
+    """推进游走偏移一步，并把结果**严格钳制**在 ``[-max_px, max_px]``（双轴独立）。
+
+    游走位置 = ``锚点 + offset``；``offset`` 是**瞬态**量，绝不落盘（G2）。
+    本函数只负责「迈一步 + 钳边界」这一纯计算，位置换算与屏幕钳制在
+    ``ui.pet_window`` 完成（core 零 Qt 依赖）。
+
+    边界语义：偏移**到达** ``±max_px`` 后可继续调用，但不会继续外推（钳在原地），
+    避免长时间同一方向漂移累积。
+
+    Args:
+        offset_x: 当前偏移 x 分量（逻辑像素）。
+        offset_y: 当前偏移 y 分量。
+        dx: 本步增量 x。
+        dy: 本步增量 y。
+        max_px: 偏移上限（``<=0`` 时结果恒为 ``(0, 0)``，即退化「不游走」）。
+
+    Returns:
+        钳制后的 ``(offset_x, offset_y)``，两分量均落在 ``[-max_px, max_px]``。
+    """
+
+    bound = max(0.0, float(max_px))
+    return (
+        clamp(offset_x + dx, -bound, bound),
+        clamp(offset_y + dy, -bound, bound),
+    )
+
+
+# --------------------------------------------------------------------------- #
 # 点 / 折线几何（供「鼠标靠近尾巴」的亲近度判定；纯计算，无 Qt 依赖）
 # --------------------------------------------------------------------------- #
 def point_segment_distance(
@@ -546,6 +579,7 @@ __all__ = [
     "look_around_offset",
     "gaze_vector",
     "random_interval",
+    "wander_step",
     "point_segment_distance",
     "polyline_proximity",
     "polyline_centroid",

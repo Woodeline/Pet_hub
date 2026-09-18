@@ -275,4 +275,57 @@ commit：`1f18197 feat(palette): 光晕随主题派生 + PROP_OUTLINE 道具描�
 4. `CLICK_BOUNCE_PX` 使峰值与旧值**持平**（非「略有过冲」）：为严守「≤1.1 倍 + 不越脏区」两条硬约束，
    选择了物理上最保守的取值；`ease_out_back` 的过冲形状（压扁→弹起→回落）已体现「回弹」观感。
 
+---
+
+## C1 · 空闲游走 + 偶发换姿态（锚点式布局节奏）
+
+| 项 | 内容 |
+|---|---|
+| 文件 | `core/constants.py`（`WANDER_MAX_PX/STEP_PX/TICK_MS`、`POSTURE_DURATION_S`、`SURPRISE_POSTURE_KINDS`；`SURPRISE_POSES` 增 `LOAF`/`LIE_SIDE`；`__all__`）、`core/motion.py`（`wander_step` 纯函数 + `__all__`）、`core/pet_model.py`（`SurpriseKind.LOAF/LIE_SIDE`、`_surprise_duration`；`_advance_surprise`/`_apply_actions` 改用按 kind 时长）、`ui/pet_window.py`（锚点 `_wander_anchor` + 瞬态 `offset` + `_wander_timer`；`set_anchor`/`anchor`/`wander_offset`/`start_wander`/`stop_wander`/`_on_wander_tick`/`_apply_wander_position`/`_absorb_wander_offset`/`_screen_geometries`/`_primary_geometry`；新 `closeEvent`；`start/stop_animation` 联动）、`app/controller.py`（`_anchor_x/y` 锚点缓存；`start`/`_on_drag_finished`/`_on_restore` 重锚；`_persist` 存锚点而非 `pos()`）、`tests/test_idle_wander.py`（新，25 条）、`tests/test_motion_rhythm.py`（锁定集合加入两成员）、`tests/test_palette_level.py`（+1 C3 锚点）、`tools/render_theme_preview.py`（`--stage c1` + 字体修复） |
+| 结果 | 全量 **1048 passed / rc=0**（+25 `test_idle_wander`，+1 `test_palette_level`） |
+| 结论 | 位移严格 ≤ ±20px 且有界；**锚点不被游走改写**（G2）；拖拽即重锚；多屏 `clamp_to_screens` 生效；游走 `move()` 不发 `position_changed`；游走 `QTimer` 挂 parent 且 `closeEvent`/`stop_animation` 停；换姿态受同一门控与 `reduce_motion` 抑制；`Expression` 仍 == 8 |
+
+### 实现要点
+
+**C1-1 锚点 + 瞬态偏移（G2 修正方案）**：`ui/pet_window.py` 持有**锚点**（`_wander_anchor`，稳定基准）+ **瞬态偏移**（`_wander_offset_x/y`，由 `motion.wander_step` 严格钳在 `±WANDER_MAX_PX`）。游走位置 = `锚点 + offset`，再经 `motion.clamp_to_screens` 落位 —— `_apply_wander_position` **绝不** emit `position_changed`（该信号只服务拖拽 → 持久化；否则随机位置会被存成新锚点、跨会话持续漂移）。拖拽开始（`mouseMoveEvent` 越过 `DRAG_THRESHOLD_PX`）→ `_absorb_wander_offset()` 把现位置吸收为新锚点、`offset` 归零。`app/controller.py` 的 `_anchor_x/y` 为**落盘缓存**：`_persist()` 写入 `window.anchor()`（**非** `pos()`），`start` / `_on_drag_finished` / `_on_restore` 三处调用 `set_anchor` 重锚。
+
+> 说明（与 design 字面一致）：design §C1-1 写「Controller 维护 `anchor_x/anchor_y`」，而 §C1-4 要求游走 `QTimer` 挂 parent 且在 `closeEvent`/`stop_animation` 停下 —— 后两者是**窗口方法**。故把「驱动 `window.move()` 的锚点 + offset + 定时器」**同居窗口**（单一真相源、无镜像漂移），Controller 侧保留 `_anchor_x/y` 并以 `window.anchor()` 为唯一真相源同步落盘。四条硬验收（有界 / 锚点不被改写 / 拖拽重锚 / 越屏）全部满足且可测。
+
+**C1-2 偶发换姿态**：复用 A5 的 `SurpriseKind`（新增 `LOAF` 趴着 / `LIE_SIDE` 侧卧，**不动** `Expression`，仍 == 8）。`_surprise_duration(kind)` 按 `constants.SURPRISE_POSTURE_KINDS` 分派：换姿态用 `POSTURE_DURATION_S`（6s，需维持一会儿才像姿势），其余沿用 `SURPRISE_DURATION_S`（1.2s）；`_advance_surprise` 的收尾阈值与 `_apply_actions` 的包络时长**同源**（否则姿态会被提前抹掉）。同样受 IDLE/REST 门控 + `reduce_motion` 抑制。
+
+**C2 预览工具字体修复**：离屏环境 `QFontDatabase.families()` 实测 **0 个族**（`QFontDatabase: Cannot find font directory .../PySide6/lib/fonts`），故 `QFont("Microsoft YaHei")` 退化为方块。`tools/render_theme_preview.py` 新增 `ensure_cjk_font()`：打印诊断 → 若族缺失则 `QFontDatabase.addApplicationFont("C:/Windows/Fonts/msyh.ttc")` 注册（实测 `id=0 families=['Microsoft YaHei','Microsoft YaHei UI']`）→ `QFontInfo` 确认解析族。**仅改工具、未动应用源码**；若目标机无字体文件则打印降级提示。
+
+**C3 补 B1 断言缺口**：`test_palette_level.py` 新增 `test_body_gradient_stops_literal_values`——以**全等**锁定 `BODY_GRADIENT_STOPS` 5 个停靠点（位置 + 色值字面量，不引用常量自身），补齐 B1 遗留的 0.00 / 0.25 / 0.75 色值漂移守卫。
+
+**视觉证据（阶段 C，PNG 在仓库外）**：`_ui-review-phase-c/` 下 `c1-bubble-typing.png` · `c1-bubble-final.png` · `c1-posture-loaf.png` · `c1-posture-lie-side.png`，
+命令：`QT_QPA_PLATFORM=offscreen python tools/render_theme_preview.py --stage c1 --outdir <绝对路径>`。
+
+**变异验证（C1/C3）** —— 每条均先破坏源码确认 FAIL 再还原：
+
+| # | 怎么破坏 | 观察到 | 还原 |
+|---|---|---|---|
+| M1 | `motion.wander_step` 去掉 `clamp` 钳制 | `test_wander_step_clamps_on_both_axes`、`..._pinned_at_boundary`、`..._zero_or_negative_max_pins_origin`、`test_wander_keeps_offset_within_literal_bound` 共 **4 FAIL** | 已还原 |
+| M2 | `_apply_wander_position` 末尾把 anchor 改成落点 | `test_wander_does_not_mutate_anchor`、`test_persist_saves_anchor_not_window_pos` 双 **FAIL** | 已还原 |
+| M3 | `_apply_wander_position` 追加 `position_changed.emit` | `test_wander_move_does_not_emit_position_changed` **FAIL** | 已还原 |
+| M4 | 拖拽开始不调 `_absorb_wander_offset()` | `test_drag_start_reanchors_and_zeroes_offset` **FAIL** | 已还原 |
+| M5 | `_apply_wander_position` 直接 `move(target)`（跳过 `clamp_to_screens`） | `test_wander_position_is_clamped_to_visible_screen` **FAIL** | 已还原 |
+| M6 | `stop_animation` 不 `stop_wander()` | `test_stop_animation_stops_wander_timer` **FAIL** | 已还原 |
+| M7 | `closeEvent` 不 `stop()` 游走定时器 | `test_close_event_stops_wander_timer` **FAIL** | 已还原 |
+| M8 | `_surprise_duration` 换姿态分支误返回 `SURPRISE_DURATION_S` | `test_posture_duration_longer_than_small_action`、`test_posture_applies_pose_delta_then_expires` 双 **FAIL** | 已还原 |
+| M9 | `_surprise_allowed` 去掉 `reduce_motion` | `test_posture_suppressed_when_reduce_motion`、既有 `test_surprise_suppressed_when_reduce_motion_enabled` 双 **FAIL** | 已还原 |
+| M10 | `BODY_GRADIENT_STOPS` 0.00 停靠点改 `#FFFFFF` | `test_body_gradient_stops_literal_values` **FAIL** | 已还原 |
+| M11 | `_persist` 改读 `window.pos()` | `test_persist_saves_anchor_not_window_pos` **FAIL** | 已还原 |
+
+> ⚠️ **诚实披露（一次真实疏漏，已修正）**：批量变异 M8~M11 后，本次**只还原了 M9/M10/M11，漏还原 M8**。
+> 该残留使 `_surprise_duration` 恒返回 1.2s → 换姿态包络为 0 → 两张姿态 PNG **MD5 完全相同**（`8B809B09…`）。
+> 正是**渲染产物的哈希校验**暴露了这处「源码已回滚但状态未回滚」的假象；补还原 M8 后两图哈希相异
+> （`AC7833C0…` vs `D1839730…`）、全量复跑 **1048 passed**。教训：**变异还原须以「全量复跑绿 + 产物校验」双确认**，不能只信单文件测试。
+
+**遗留 / 诚实说明**
+
+1. 游走的随机步进用 `random.uniform`（非注入 `_rng`）：游走是**纯视觉瞬态**、不进持久化、不影响可复现性断言（测试直接读 `wander_offset()` 边界与 `anchor()` 不变性），故未引入可注入 RNG。
+2. 换姿态（LOAF / LIE_SIDE）为**小增量姿态**——在圆球团子造型上差异体现在身体下压、耳朵对称性、头部倾斜与尾巴朝向；已由两张 PNG 目视确认可区分，但幅度偏含蓄（可只调 `SURPRISE_POSES` 增量）。
+3. 游走节奏 `WANDER_TICK_MS = 3000`（每 3s 一步、单步 ≤6px、累计 ≤20px）为**主观取值**；真机观感若偏「呆」或偏「焦躁」，只需调这三个常量，无需改结构。
+4. 游走与 A5 小动作共用 `REST_THRESHOLD_S`（120s）后的门控节奏，但**相互独立**（游走由窗口 `QTimer` 驱动，小动作由模型帧循环驱动）——两者理论上可同时发生，未做互斥。
+
 

@@ -151,3 +151,24 @@ def test_glow_semantic_colors_untouched() -> None:
 
     assert C.COLORS["glow_yellow"] == "#FFD08A"
     assert C.COLORS["glow_blue"] == "#B9D4E8"
+
+
+# --------------------------------------------------------------------------- #
+# 4. BODY_GRADIENT_STOPS 5 个停靠点字面量锚点（补齐 B1 色值漂移守卫，C3）
+# --------------------------------------------------------------------------- #
+def test_body_gradient_stops_literal_values() -> None:
+    """锁定 B1 降饱和终档的 5 个停靠点（位置 + 色值，**字面量期望**）。
+
+    这补齐了 B1 的遗留缺口：此前 0.00 / 0.25 / 0.75 三个停靠点的**色值**仅有结构 /
+    合法 hex 断言（`test_body_gradient_and_outline_defined` 不锁色值），只有 0.50 端点
+    被 `glow_for_theme` 间接覆盖。本断言以**全等**方式锁定全部 5 个位置与色值 ——
+    刻意**不引用** `C.BODY_GRADIENT_STOPS` 自身拼期望（防自引用假绿）。
+    """
+
+    assert C.BODY_GRADIENT_STOPS == (
+        (0.00, "#ACE4A5"),
+        (0.25, "#FDF7AF"),
+        (0.50, "#FBC9A5"),
+        (0.75, "#F9ABD3"),
+        (1.00, "#ACD6EC"),
+    )

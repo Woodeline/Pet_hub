@@ -245,11 +245,16 @@ def test_surprise_envelope_attack_and_release_are_monotone() -> None:
 # 3. SurpriseKind 独立性 + 增量表合法通道（R4 守卫）
 # --------------------------------------------------------------------------- #
 def test_surprise_kind_is_independent_from_expression() -> None:
-    """``SurpriseKind`` 独立于 ``Expression``；``Expression`` 成员数锁死为 8（R4）。"""
+    """``SurpriseKind`` 独立于 ``Expression``；``Expression`` 成员数锁死为 8（R4）。
+
+    阶段 C1-2 新增两个「换姿态」成员（``LOAF`` / ``LIE_SIDE``）——本断言仍保持**全等**
+    强约束（只是集合随之扩大），并继续保证与 ``Expression`` 名字**互不相交**。
+    """
 
     assert not issubclass(SurpriseKind, Expression)
     assert {k.name for k in SurpriseKind} == {
         "STRETCH", "TAIL_FLICK", "EAR_FLICK", "GLANCE_CORNER",
+        "LOAF", "LIE_SIDE",
     }
     assert len(list(Expression)) == 8
     expression_names = {e.name for e in Expression}
