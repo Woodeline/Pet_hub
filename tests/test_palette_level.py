@@ -55,10 +55,13 @@ def test_renderer_prop_pen_uses_prop_outline() -> None:
 # 2. glow_for_theme（光晕随主题派生）
 # --------------------------------------------------------------------------- #
 def test_glow_for_theme_default_literal_values() -> None:
-    """默认皮肤字面量锚点（锁定派生公式：清醒取暖端 / 睡觉取冷端）。"""
+    """默认皮肤字面量锚点（锁定派生公式：清醒取暖端 / 睡觉取冷端）。
 
-    assert glow_for_theme("default", False) == "#ECCBB4"
-    assert glow_for_theme("default", True) == "#CBDBE4"
+    默认皮肤色值随 B1-2 降饱和而变，故本锚点亦随之更新（其余 6 套皮肤色值稳定）。
+    """
+
+    assert glow_for_theme("default", False) == "#EBCCB6"
+    assert glow_for_theme("default", True) == "#CBDBE3"
 
 
 @pytest.mark.parametrize("name", _ALL_THEMES)
