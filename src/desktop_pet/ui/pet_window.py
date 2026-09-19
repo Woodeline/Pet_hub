@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import random
 import time
+import warnings
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
@@ -275,8 +276,19 @@ class PetWindow(QWidget):
         event.accept()
 
     def enterEvent(self, event) -> None:  # noqa: N802
-        """进入：启动悬停抚摸计时（FR-28）。"""
+        """进入：启动悬停抚摸计时（FR-28）。
 
+        **可见性守卫**（teardown 崩溃根因修复之一）：窗口 ``show()`` 时若光标
+        恰好落在窗内，Qt 会**异步**投递一个 enter 事件；若该事件在窗口 ``close()``
+        之后才被事件循环派发，无守卫的 ``_hover_timer.start()`` 会在**已关闭**的
+        窗口上重新启动悬停定时器 —— 留下活表，在 pytest-qt teardown 的
+        ``processEvents()`` 窗口内触发原生 abort（QA 阻断项机制）。
+        对不可见窗口的 enter 事件是伪事件，直接吞掉。
+        """
+
+        if not self.isVisible():
+            event.accept()
+            return
         self._hover_timer.start()
         super().enterEvent(event)
 
@@ -297,11 +309,44 @@ class PetWindow(QWidget):
         event.accept()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
-        """关闭：停止帧循环与空闲游走定时器（避免残留定时器 / 事件，FR-24）。"""
+        """关闭：停止帧循环与空闲游走定时器，并**显式断开** timeout 连接（FR-24）。
 
-        self._timer.stop()
-        self._wander_timer.stop()
+        显式 ``disconnect()`` 是 QA 阻断项（teardown 原生 abort）的源侧加固之一：
+        停表只保证不再产生**新**事件，断开连接才能保证已入队的事件派发时槽函数
+        不会被调用（回调进入正在析构的 C++ 对象 → ``Fatal Python error: Aborted``，
+        Python 层 ``try/except`` 无法拦截）。
+        """
+
+        for t in (self._timer, self._wander_timer, self._hover_timer):
+            t.stop()
+        # 显式断开（按绑定方法）。PySide6 下对未连接信号断开**不抛异常**、只发
+        # RuntimeWarning —— 而「未连接」本就是目标状态，故就地压掉该警告。
+        # （try/except 保留作版本兼容：旧版 PySide6 会抛 RuntimeError。）
+        for t, slot in (
+            (self._timer, self._on_frame),
+            (self._wander_timer, self._on_wander_tick),
+        ):
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", RuntimeWarning)
+                    t.timeout.disconnect(slot)
+            except (RuntimeError, TypeError):
+                pass  # 已断开 / 从未连接 → 目标状态一致
         super().closeEvent(event)
+
+    def has_active_timers(self) -> bool:
+        """是否存在仍活跃的窗口级定时器（只读探针）。
+
+        供测试侧 conftest 的**确定性不变量守卫**使用：任何用例结束时都必须为
+        False，否则该窗口在 pytest-qt teardown 的 ``processEvents()`` 窗口内
+        有触发原生 abort 的风险（见 :meth:`closeEvent` 说明）。
+        """
+
+        return (
+            self._timer.isActive()
+            or self._wander_timer.isActive()
+            or self._hover_timer.isActive()
+        )
 
     # ------------------------------------------------------------------ #
     # 内部
@@ -327,11 +372,19 @@ class PetWindow(QWidget):
     def _on_wander_tick(self) -> None:
         """一次空闲游走节拍：随机迈一步（offset 严格有界）后落位。
 
-        门控：拖拽 / 悬停 / 不可见期间不游走（避免与用户操作打架）。
+        门控：拖拽 / 悬停 / 不可见期间不游走（避免与用户操作打架）；
+        **空闲时长未达 ``REST_THRESHOLD_S`` 也不游走** —— 复用
+        :attr:`PetModel.calm_seconds`（与偶发小动作**同一**空闲定义，v1.1 §G3）。
+        空闲门控是「位置漂移」缺陷的根因修复点：``start_wander()`` 随
+        ``start_animation()`` 在应用启动即开表，若只判拖拽/悬停，宠物会在用户
+        正常使用期间每 ``WANDER_TICK_MS`` 随机走一步并**永不回到锚点**，
+        表现为持续位置漂移。
         """
 
         try:
             if self._dragging or self._hover_active or not self.isVisible():
+                return
+            if not self._model.is_quiet_for_wander():
                 return
             dx = random.uniform(-C.WANDER_STEP_PX, C.WANDER_STEP_PX)
             dy = random.uniform(-C.WANDER_STEP_PX, C.WANDER_STEP_PX)
@@ -459,8 +512,14 @@ class PetWindow(QWidget):
             logger.debug("悬停注视采样失败（已忽略）", exc_info=True)
 
     def _on_frame(self) -> None:
-        """定时器节拍：采样光标 → 更新尾巴避让 / 悬停注视 → 向 Controller 发出帧信号。"""
+        """定时器节拍：采样光标 → 更新尾巴避让 / 悬停注视 → 向 Controller 发出帧信号。
 
+        前置**可见性守卫**（QA 阻断项加固）：不可见时直接返回 —— 隐藏窗口的
+        定时器节拍不再触碰渲染状态，避免窗口析构竞态下回调进入已失效对象。
+        """
+
+        if not self.isVisible():
+            return
         self._update_tail_evade()
         self._update_gaze()
         self.frame_tick.emit(time.monotonic())

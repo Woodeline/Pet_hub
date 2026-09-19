@@ -42,6 +42,19 @@ def _make_window(qtbot) -> PetWindow:
     return window
 
 
+def _make_quiet_window(qtbot) -> PetWindow:
+    """构造一个「已安静满 ``REST_THRESHOLD_S``」的宠物窗口。
+
+    阶段 C 游走门控修复（位置漂移根因）后，:meth:`PetWindow._on_wander_tick` 额外要求
+    模型安静时长 ≥ ``REST_THRESHOLD_S``。需要观察游走**本身**的测试必须先满足该前提，
+    否则会因为「空闲门控」而非「被测门控」挡住，沦为空测。
+    """
+
+    window = _make_window(qtbot)
+    window._model._calm_seconds = C.REST_THRESHOLD_S
+    return window
+
+
 def _mouse_event(
     etype,
     local_xy: tuple[float, float],
@@ -134,7 +147,7 @@ def test_wander_step_within_bound_is_exact_sum() -> None:
 # 3. 窗口级：位移始终有界；锚点不被游走改写（G2）
 # --------------------------------------------------------------------------- #
 def test_wander_keeps_offset_within_literal_bound(qtbot) -> None:
-    window = _make_window(qtbot)
+    window = _make_quiet_window(qtbot)
     window.set_anchor(300, 250)
     # 从一个已贴近边界的状态出发
     window._wander_offset_x = 20.0
@@ -153,7 +166,7 @@ def test_wander_keeps_offset_within_literal_bound(qtbot) -> None:
 def test_wander_does_not_mutate_anchor(qtbot) -> None:
     """**G2 核心**：游走只动瞬态偏移，锚点保持不变。"""
 
-    window = _make_window(qtbot)
+    window = _make_quiet_window(qtbot)
     window.set_anchor(300, 250)
     for _ in range(60):
         window._on_wander_tick()
@@ -161,7 +174,7 @@ def test_wander_does_not_mutate_anchor(qtbot) -> None:
 
 
 def test_wander_move_does_not_emit_position_changed(qtbot) -> None:
-    window = _make_window(qtbot)
+    window = _make_quiet_window(qtbot)
     window.set_anchor(300, 250)
     received: list[tuple[int, int]] = []
     window.position_changed.connect(lambda x, y: received.append((x, y)))
@@ -174,7 +187,9 @@ def test_wander_move_does_not_emit_position_changed(qtbot) -> None:
 
 
 def test_wander_paused_while_dragging(qtbot) -> None:
-    window = _make_window(qtbot)
+    """必须用「已安静」窗口：否则游走是被**空闲门控**挡住的，本测试沦为空测。"""
+
+    window = _make_quiet_window(qtbot)
     window.set_anchor(300, 250)
     _drag(window, (300, 250), (40, 0))
     # 拖拽进行中（未释放前）
@@ -288,6 +303,9 @@ def test_start_animation_starts_wander_timer(qtbot) -> None:
     assert not window._wander_timer.isActive()
     window.start_animation()
     assert window._wander_timer.isActive()
+    # 收尾：不得把活跃定时器留给 teardown（见 conftest 的确定性不变量守卫）
+    window.stop_animation()
+    assert not window.has_active_timers()
 
 
 def test_stop_animation_stops_wander_timer(qtbot) -> None:
@@ -307,6 +325,90 @@ def test_close_event_stops_wander_timer(qtbot) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# 6b. 位置漂移根因回归：游走必须受「空闲 ≥ REST_THRESHOLD_S」门控（v1.1 §G3）
+# --------------------------------------------------------------------------- #
+def test_wander_idle_gated_before_rest_threshold(qtbot) -> None:
+    """**漂移根因回归**：安静时长未达 ``REST_THRESHOLD_S`` → 游走绝不落位。
+
+    缺陷史：``start_wander()`` 随 ``start_animation()`` 在应用启动即开表，若只判
+    拖拽/悬停/可见性，宠物会在用户正常使用期间每 ``WANDER_TICK_MS`` 随机走一步，
+    偏移永不归零 → 用户看到宠物从放置点持续漂走。修复后：安静不足即不动。
+    """
+
+    window = _make_window(qtbot)
+    window.set_anchor(300, 250)
+    window._model._calm_seconds = 0.0
+    before = window.pos()
+    for _ in range(30):
+        window._on_wander_tick()
+    assert window.pos() == before, "空闲未达阈值时游走不应落位"
+    assert window.wander_offset() == (0.0, 0.0), "空闲未达阈值时偏移不应累积"
+
+
+def test_wander_starts_after_calm_reaches_rest_threshold(qtbot) -> None:
+    """安静达 ``REST_THRESHOLD_S`` 后游走**应当**发生（功能不被误杀）。"""
+
+    window = _make_window(qtbot)
+    window.set_anchor(300, 250)
+    window._model._calm_seconds = C.REST_THRESHOLD_S
+    moved = False
+    for _ in range(40):
+        window._on_wander_tick()
+        if window.wander_offset() != (0.0, 0.0):
+            moved = True
+            break
+    assert moved, "安静达阈值后应允许游走（门控过严会把功能砍没）"
+
+
+def test_calm_seconds_accumulates_when_quiet() -> None:
+    """安静在场时 ``calm_seconds`` 逐帧累加，130 秒后 ≥ ``REST_THRESHOLD_S``。"""
+
+    model = PetModel()
+    model.set_base_expression(Expression.HAPPY)
+    model.set_expression(Expression.HAPPY, 0.0)
+    for i in range(130):
+        model.update(1.0, float(i))
+    assert model.calm_seconds >= C.REST_THRESHOLD_S
+    assert model.is_quiet_for_wander() is True
+
+
+def test_calm_seconds_resets_when_not_quiet() -> None:
+    """门控任一失效（如被拖拽）→ ``calm_seconds`` 立即清零。"""
+
+    model = PetModel()
+    model.set_base_expression(Expression.HAPPY)
+    model.set_expression(Expression.HAPPY, 0.0)
+    for i in range(130):
+        model.update(1.0, float(i))
+    assert model.calm_seconds >= C.REST_THRESHOLD_S
+
+    model.set_dragging(True)
+    model.update(1.0, 200.0)
+    assert model.calm_seconds == 0.0, "拖拽应立即清零安静时长"
+    assert model.is_quiet_for_wander() is False
+
+
+def test_calm_seconds_stays_zero_under_reduce_motion() -> None:
+    """``reduce_motion`` 开启 → 门控恒 False → 安静时长恒 0 → 游走被抑制。"""
+
+    model = PetModel()
+    model.set_base_expression(Expression.HAPPY)
+    model.set_expression(Expression.HAPPY, 0.0)
+    model.set_reduce_motion(True)
+    for i in range(200):
+        model.update(1.0, float(i))
+    assert model.calm_seconds == 0.0
+    assert model.is_quiet_for_wander() is False
+
+
+def test_calm_seconds_registered_as_public_api() -> None:
+    """``calm_seconds`` / ``is_quiet_for_wander`` 是公开只读 API（供 UI 层门控复用）。"""
+
+    assert isinstance(PetModel.calm_seconds, property)
+    assert callable(PetModel.is_quiet_for_wander)
+
+
+# --------------------------------------------------------------------------- #
 # 7. 偶发换姿态（LOAF / LIE_SIDE）
 # --------------------------------------------------------------------------- #
 def test_posture_kinds_are_surprise_members_not_expressions() -> None:
@@ -321,6 +423,24 @@ def test_posture_poses_use_only_existing_channels() -> None:
         deltas = C.SURPRISE_POSES[name]
         assert deltas, f"{name} 增量为空"
         assert set(deltas) <= valid, f"{name} 使用了不存在的通道：{set(deltas) - valid}"
+
+
+def test_posture_pose_deltas_literal_anchor() -> None:
+    """姿态增量**字面量锚点**（QA 覆盖缺口 G2）。
+
+    此前仅 ``LOAF.body_y`` 有字面量锚，其余增量静默漂移不会被任何测试抓到。
+    锁定各姿态**最有辨识度**的通道；日后调姿态必须连同本锚点一起改。
+    期望值全部为字面量（不引用 ``C.SURPRISE_POSES`` 拼期望）。
+    """
+
+    assert C.SURPRISE_POSES["LOAF"]["body_y"] == 6.0
+    assert C.SURPRISE_POSES["LOAF"]["head_y"] == 3.0
+    assert C.SURPRISE_POSES["LIE_SIDE"]["body_y"] == 7.0
+    assert C.SURPRISE_POSES["LIE_SIDE"]["head_tilt"] == -14.0
+    assert C.SURPRISE_POSES["STRETCH"]["body_y"] == -5.0
+    assert C.SURPRISE_POSES["TAIL_FLICK"]["tail_angle"] == 22.0
+    assert C.SURPRISE_POSES["EAR_FLICK"]["ear_l_tilt"] == -12.0
+    assert C.SURPRISE_POSES["GLANCE_CORNER"]["look_x"] == 3.0
 
 
 def test_posture_duration_longer_than_small_action() -> None:

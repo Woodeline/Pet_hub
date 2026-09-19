@@ -64,3 +64,56 @@ def isolated_appdata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     appdata.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("APPDATA", str(appdata))
     return appdata
+
+
+@pytest.fixture(autouse=True)
+def no_leaked_pet_window_timers(monkeypatch: pytest.MonkeyPatch, qapp) -> None:
+    """**确定性不变量守卫**：任何用例结束时不得留下活跃的 ``PetWindow`` 定时器。
+
+    背景（QA 阻断项）：窗口级 ``QTimer``（帧循环 ``_timer`` / 空闲游走 ``_wander_timer``）
+    若在用例结束时仍活跃，会在 pytest-qt teardown 的 ``processEvents()`` 窗口内触发，
+    回调进入正在析构的 C++ 对象 → ``Fatal Python error: Aborted``（原生崩溃，
+    Python 层 ``try/except`` 无法拦截）。该崩溃是**时序竞态**：空载时 teardown 窗口极短
+    （复现率 ≈1.6%），高负载 / 慢机 / CI 下被拉长（实测 75%），概率性复现极难定位。
+
+    因此把「概率性崩溃」换成「**确定性 FAIL**」：每个用例结束时检查本用例创建的所有
+    ``PetWindow``，只要还有活跃定时器就立刻报错并指名用例 —— 让「忘收尾」在第一时间
+    被抓住，而不是偶发 abort。
+
+    顺序：先**断言**（给出可定位的失败信息），再**强制收尾**（stop + close +
+    processEvents），避免已检出的泄漏继续污染后续用例。
+    """
+
+    from desktop_pet.ui.pet_window import PetWindow
+
+    created: list = []
+    orig_init = PetWindow.__init__
+
+    def _tracked_init(self, *args, **kwargs):  # noqa: ANN002, ANN003
+        orig_init(self, *args, **kwargs)
+        created.append(self)
+
+    monkeypatch.setattr(PetWindow, "__init__", _tracked_init)
+    yield
+
+    leaked: list[str] = []
+    for index, window in enumerate(created):
+        try:
+            if window.has_active_timers():
+                leaked.append(f"PetWindow#{index}（{window.objectName() or '未命名'}）")
+        except RuntimeError:
+            continue  # C++ 对象已析构 → 不可能再触发
+    # 先强制收尾，防止已检出的泄漏在后续 teardown 中触发原生 abort
+    for window in created:
+        try:
+            window.stop_animation()
+            window.close()
+        except RuntimeError:
+            pass
+    qapp.processEvents()
+    if leaked:
+        pytest.fail(
+            "用例结束时仍有 PetWindow 带活跃定时器（帧循环 / 空闲游走），"
+            f"会在 teardown 的 processEvents() 窗口内触发原生 abort：{leaked}。"
+            "请在该用例内显式 stop_animation() / close() 收尾。"
+        )

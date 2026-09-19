@@ -225,6 +225,26 @@ class PetModel:
 
         self._reduce_motion = bool(active)
 
+    @property
+    def calm_seconds(self) -> float:
+        """累计「安静在场」时长（秒，只读）。
+
+        语义与 :meth:`_advance_surprise` 的调度**同源**：仅当门控（:meth:`_surprise_allowed`）
+        全部满足时才累加，否则**立即清零**。因此它是模型侧唯一权威的空闲度量 —— 阶段 C 的
+        空闲游走**必须**复用它做门控（v1.1 §G3：避免两套「空闲」口径漂移），否则宠物会在
+        用户正常使用期间也持续游走，表现为**位置漂移**。
+
+        注：``reduce_motion`` 开启时门控恒 False → ``calm_seconds`` 恒为 0 → 游走自然被抑制。
+        """
+
+        return self._calm_seconds
+
+    def is_quiet_for_wander(self) -> bool:
+        """是否安静到允许空闲游走（复用 ``REST_THRESHOLD_S`` 同一空闲阈值）。"""
+
+        return self._calm_seconds >= C.REST_THRESHOLD_S
+
+
     def set_tail_evade(self, amount: float, dir_x: float, dir_y: float) -> None:
         """设置尾巴**避让**目标（鼠标靠近 / 触碰尾巴时的反应）。
 
