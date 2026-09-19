@@ -1,7 +1,9 @@
 """ui.tray —— 系统托盘（图标 + 右键菜单 + 信号）。
 
 仅负责展示与发信号，**不含业务判定逻辑**（架构 §1.2）。
-菜单项：恢复显示 / 暂停监听 / 缩放三档 / 最小化到托盘 / 开机自启 / 减少动效 / 退出。
+菜单按大类分组（阶段 E 信息架构重组）：窗口控制（显示宠物 / 最小化到托盘）→
+开关（监听键盘 / 气泡提示）→ **日语学习**子菜单（开关 + 立即显示 + 节奏三档 +
+生词本 / 学习记录）→ 外观（大小 / 主题）→ 偏好（开机自启 / 减少动效）→ 退出。
 """
 
 from __future__ import annotations
@@ -75,7 +77,8 @@ class TrayController(QObject):
         self._theme_menu: QMenu | None = None
         self._theme_group: QActionGroup | None = None
         self._theme_actions: dict[str, QAction] = {}
-        # 日语学习菜单组
+        # —— 日语学习菜单组（菜单按大类重组：开关 + 子项收进同一个「日语学习」子菜单）——
+        self._jp_menu: QMenu | None = None
         self._action_jp: QAction | None = None
         self._jp_level_menu: QMenu | None = None
         self._jp_level_group: QActionGroup | None = None
@@ -243,7 +246,8 @@ class TrayController(QObject):
         self._action_bubble.toggled.connect(self.bubble_toggled.emit)
 
         # —— 日语学习菜单组（开关 + 难度/显示时长/每日数量子菜单 + 立即显示 + 生词本/记录）——
-        self._action_jp = QAction(C.JP_MENU_TITLE, self._menu)
+        self._jp_menu = QMenu(C.JP_MENU_TITLE, self._menu)
+        self._action_jp = QAction(C.JP_MENU_ENABLE, self._jp_menu)
         self._action_jp.setCheckable(True)
         self._action_jp.setChecked(bool(self._cfg.jp_enabled))
         self._action_jp.toggled.connect(self.jp_enabled_toggled.emit)
@@ -352,26 +356,36 @@ class TrayController(QObject):
         self._action_quit = QAction("退出", self._menu)
         self._action_quit.triggered.connect(self.quit_requested.emit)
 
-        self._menu.addAction(self._action_restore)
-        self._menu.addAction(self._action_listen)
-        self._menu.addAction(self._action_bubble)
-        self._menu.addSeparator()
-        self._menu.addAction(self._action_jp)
-        self._menu.addMenu(self._jp_level_menu)
-        self._menu.addMenu(self._jp_duration_menu)
-        self._menu.addMenu(self._jp_daily_limit_menu)
-        self._menu.addAction(self._action_jp_show_now)
-        self._menu.addAction(self._action_jp_vocab)
-        self._menu.addAction(self._action_jp_log)
-        self._menu.addSeparator()
-        self._menu.addMenu(scale_menu)
-        self._menu.addMenu(self._theme_menu)
-        self._menu.addAction(self._action_minimize)
-        self._menu.addSeparator()
-        self._menu.addAction(self._action_autostart)
-        self._menu.addAction(self._action_reduce_motion)
-        self._menu.addSeparator()
-        self._menu.addAction(self._action_quit)
+        # —— 装配（按大类分组，降低顶层信息密度：窗口控制 / 开关 / 日语学习 /
+        #     外观 / 偏好 / 退出六段，日语学习 7 项收进 1 个子菜单）——
+        menu = self._menu
+        menu.addAction(self._action_restore)
+        menu.addAction(self._action_minimize)
+        menu.addSeparator()
+        menu.addAction(self._action_listen)
+        menu.addAction(self._action_bubble)
+        menu.addSeparator()
+        # 「日语学习」子菜单：开关（首项）→ 立即显示 → 节奏三档 → 学习资料
+        jp = self._jp_menu
+        jp.addAction(self._action_jp)
+        jp.addAction(self._action_jp_show_now)
+        jp.addSeparator()
+        jp.addMenu(self._jp_level_menu)
+        jp.addMenu(self._jp_duration_menu)
+        jp.addMenu(self._jp_daily_limit_menu)
+        jp.addSeparator()
+        jp.addAction(self._action_jp_vocab)
+        jp.addAction(self._action_jp_log)
+        menu.addMenu(jp)
+        menu.addSeparator()
+        # 「外观」两兄弟：大小 + 主题（主题皮肤单选归为一类）
+        menu.addMenu(scale_menu)
+        menu.addMenu(self._theme_menu)
+        menu.addSeparator()
+        menu.addAction(self._action_autostart)
+        menu.addAction(self._action_reduce_motion)
+        menu.addSeparator()
+        menu.addAction(self._action_quit)
 
     def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         """托盘图标点击：双击恢复窗口，单击弹出菜单。"""

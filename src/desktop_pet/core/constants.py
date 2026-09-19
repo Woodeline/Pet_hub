@@ -742,6 +742,8 @@ VOCAB_WINDOW_H: Final[int] = 360
 
 # —— 托盘菜单文案 ——
 JP_MENU_TITLE: Final[str] = "日语学习"
+#: 「日语学习」子菜单内的**开关项**文案（菜单按大类重组后，开关收进子菜单首项）。
+JP_MENU_ENABLE: Final[str] = "启用日语学习"
 JP_MENU_LEVEL: Final[str] = "难度"
 JP_MENU_VOCAB: Final[str] = "生词本…"
 
@@ -984,6 +986,7 @@ __all__ = [
     "JP_LEVELS",
     "JP_DEFAULT_LEVEL",
     "JP_LEVEL_LABELS",
+    "JP_MENU_ENABLE",
     "JP_WORD_MIN_INTERVAL_S",
     "JP_WORD_MAX_INTERVAL_S",
     "JP_BUBBLE_WORD_FONT_SIZE",

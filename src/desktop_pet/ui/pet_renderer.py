@@ -110,6 +110,18 @@ _GEO_MOUSE_RX: Final[float] = 13.5
 _GEO_MOUSE_RY: Final[float] = 11.0
 _GEO_MOUSE_TILT: Final[float] = -16.0
 
+# 接地阴影（阶段 E：视觉打磨）—— 键盘 / 鼠标下方的柔和椭圆软影，让宠物「落在桌面」
+# 而非悬浮。椭圆完全落在键盘 / 鼠标各自的脏区包围盒内（见 _local_bounds 中的显式盒子）。
+_GEO_GROUND_CX: Final[float] = 84.0
+_GEO_GROUND_CY: Final[float] = 163.0
+_GEO_GROUND_RX: Final[float] = 42.0
+_GEO_GROUND_RY: Final[float] = 6.0
+_GEO_GROUND_ALPHA: Final[int] = 30      # 中心不透明度（0..255，向外渐隐）
+_GEO_MOUSE_SHADOW_CY: Final[float] = 170.0
+_GEO_MOUSE_SHADOW_RX: Final[float] = 13.0
+_GEO_MOUSE_SHADOW_RY: Final[float] = 3.5
+_GEO_MOUSE_SHADOW_ALPHA: Final[int] = 22
+
 # 尾巴 —— 根部落在团子**左中部轮廓内部**（被主体压住），再向左上方扫出一条饱满的弧。
 #
 # 形状由三件事共同决定（见 `tail_spine` / `_tail_outline`）：
@@ -238,6 +250,26 @@ class PetRenderer:
         self._mouth_pen.setWidthF(2.2)
         self._mouth_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         self._mouth_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+
+        # 键帽顶部受光高光线（阶段 E）：半透明白细线，提亮键帽上缘 → 键盘立体感
+        # （alpha 64：混合后在任何键帽色上都不会落入「近白」判定带，不污染
+        #   test_hand_visibility 的前爪近白测量）
+        key_hi = QColor(C.COLORS["white"])
+        key_hi.setAlpha(64)
+        self._key_hi_pen = QPen(key_hi)
+        self._key_hi_pen.setWidthF(1.1)
+        self._key_hi_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+
+        # 趾凸细描边（阶段 E）：比主体 3.2 细一档，小元素用粗描边会糊成黑点
+        self._outline_toe = QPen(ink)
+        self._outline_toe.setWidthF(2.0)
+        self._outline_toe.setCapStyle(Qt.PenCapStyle.RoundCap)
+
+        # 配件描边（阶段 E）：圣诞帽 / 围巾 / 小花 / 灯笼与全身粗描边风格统一
+        self._outline_accessory = QPen(ink)
+        self._outline_accessory.setWidthF(2.4)
+        self._outline_accessory.setCapStyle(Qt.PenCapStyle.RoundCap)
+        self._outline_accessory.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
 
         self._brush_ink = QBrush(ink)
         self._brush_white = QBrush(QColor(C.COLORS["white"]))
@@ -387,6 +419,7 @@ class PetRenderer:
             painter.scale(scale, scale)
 
             self._draw_decor_backdrop(painter)
+            self._draw_ground_shadow(painter)
             self._draw_decor_particles(painter)
             self._draw_glow(painter, pose)
             self._draw_tail(painter, pose)
@@ -400,8 +433,50 @@ class PetRenderer:
         finally:
             painter.restore()
 
+    def _draw_ground_shadow(self, painter: QPainter) -> None:
+        """接地阴影（阶段 E）：键盘与鼠标下方的柔和椭圆软影。
+
+        做**圆形**径向渐变后经 ``scale(1, ry/rx)`` 压扁成椭圆，使渐隐在椭圆
+        边缘各方向恰好归零（环境光遮蔽感，而非中心亮斑）。
+        椭圆几何受 ``_local_bounds`` 中显式盒子约束（不越出既有脏区）。
+        """
+
+        painter.save()
+        try:
+            painter.setPen(Qt.PenStyle.NoPen)
+            for cx, cy, rx, ry, alpha in (
+                (_GEO_GROUND_CX, _GEO_GROUND_CY,
+                 _GEO_GROUND_RX, _GEO_GROUND_RY, _GEO_GROUND_ALPHA),
+                (_GEO_MOUSE_CX, _GEO_MOUSE_SHADOW_CY,
+                 _GEO_MOUSE_SHADOW_RX, _GEO_MOUSE_SHADOW_RY,
+                 _GEO_MOUSE_SHADOW_ALPHA),
+            ):
+                center = QColor(C.COLORS["ink"])
+                center.setAlpha(alpha)
+                edge = QColor(C.COLORS["ink"])
+                edge.setAlpha(0)
+                gradient = QRadialGradient(QPointF(0.0, 0.0), rx)
+                gradient.setColorAt(0.0, center)
+                gradient.setColorAt(0.55, QColor(
+                    center.red(), center.green(), center.blue(), alpha // 2
+                ))
+                gradient.setColorAt(1.0, edge)
+                painter.setBrush(QBrush(gradient))
+                painter.save()
+                painter.translate(cx, cy)
+                painter.scale(1.0, ry / rx)
+                painter.drawEllipse(QPointF(0.0, 0.0), rx, rx)
+                painter.restore()
+        finally:
+            painter.restore()
+
     def _draw_decor_backdrop(self, painter: QPainter) -> None:
-        """布景层（最底）：春 = 画布顶端垂下的柳枝（阶段 D）。"""
+        """布景层（最底）：春 = 画布顶端垂下的柳枝（阶段 D；阶段 E 重画）。
+
+        阶段 E：枝条由两段折线改为**二次贝塞尔曲线**（曲率连续），叶滴由短线
+        改为沿枝伸展的**旋转小椭圆**，透明度分层（枝 200 / 叶 230）——
+        消除「乱画的划痕」观感。
+        """
 
         d = self._decor
         if d.backdrop == "none":
@@ -409,30 +484,55 @@ class PetRenderer:
         painter.save()
         try:
             color = QColor(d.backdrop_color)
-            branch_pen = QPen(color)
+            branch_color = QColor(color)
+            branch_color.setAlphaF(0.78)
+            branch_pen = QPen(branch_color)
             branch_pen.setWidthF(2.2)
             branch_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             painter.setPen(branch_pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            # 三条自顶端垂下的弧线柳枝（横向错开，长短不一）
+            leaf_color = QColor(color)
+            leaf_color.setAlphaF(0.9)
+            # 三条自顶端垂下的弧线柳枝（横向错开，长短不一、弯向各异）
             for i, (bx, drop, bend) in enumerate(((34.0, 52.0, 10.0), (80.0, 64.0, -8.0), (126.0, 48.0, 9.0))):
                 path_len = drop + self._decor_rand(i, 11) * 10.0
-                painter.drawLine(QPointF(bx, 0.0), QPointF(bx + bend, path_len * 0.55))
-                painter.drawLine(QPointF(bx + bend, path_len * 0.55), QPointF(bx + bend * 0.4, path_len))
-                # 柳枝上的小叶滴
-                leaf_pen = QPen(color)
-                leaf_pen.setWidthF(1.4)
-                painter.setPen(leaf_pen)
+                mid_x = bx + bend * 1.5
+                mid_y = path_len * 0.5
+                end_x = bx + bend * 0.4
+                branch = QPainterPath()
+                branch.moveTo(bx, 0.0)
+                branch.quadTo(mid_x, mid_y, end_x, path_len)
+                painter.drawPath(branch)
+                # 柳叶：沿枝小椭圆（按枝的局部走向旋转），错落分布
+                painter.setBrush(QBrush(leaf_color))
+                painter.setPen(Qt.PenStyle.NoPen)
                 for k in range(4):
-                    ly = 10.0 + (path_len - 14.0) * (k + self._decor_rand(i * 4 + k, 12)) / 4.0
-                    lx = bx + bend * (ly / max(1.0, path_len))
-                    painter.drawLine(QPointF(lx, ly), QPointF(lx + 3.5, ly + 2.5))
+                    t = (k + self._decor_rand(i * 4 + k, 12)) / 4.0
+                    # 贝塞尔点：B(t) = (1-t)²P0 + 2(1-t)t P1 + t² P2
+                    u = 1.0 - t
+                    ly = u * u * 0.0 + 2.0 * u * t * mid_y + t * t * path_len
+                    lx = u * u * bx + 2.0 * u * t * mid_x + t * t * end_x
+                    tangent = math.atan2(
+                        2.0 * u * (mid_y - 0.0) + 2.0 * t * (path_len - mid_y),
+                        2.0 * u * (mid_x - bx) + 2.0 * t * (end_x - mid_x),
+                    )
+                    painter.save()
+                    painter.translate(lx, ly)
+                    painter.rotate(math.degrees(tangent) + 90.0 + (18.0 if k % 2 == 0 else -18.0))
+                    painter.drawEllipse(QPointF(0.0, 2.2), 1.0, 2.4)
+                    painter.restore()
                 painter.setPen(branch_pen)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
         finally:
             painter.restore()
 
     def _draw_decor_particles(self, painter: QPainter) -> None:
-        """粒子层：雪（圆）/ 花瓣（斜椭圆）/ 红叶（长斜椭圆）/ 气泡（圆环）。"""
+        """粒子层：雪（柔焦圆）/ 花瓣（斜椭圆）/ 红叶（长斜椭圆）/ 气泡（高光圆环）。
+
+        阶段 E 层次化：每粒透明度由确定性散列差异化（0.55~0.95），雪花叠一层
+        大半径低透明外晕（柔焦感），气泡加左上白高光点 —— 消除「同一张剪纸
+        复制 N 份」的机械感。
+        """
 
         d = self._decor
         if d.particle == "none" or d.particle_count <= 0:
@@ -440,26 +540,49 @@ class PetRenderer:
         painter.save()
         try:
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QBrush(QColor(d.particle_color)))
-            for x, y, size in self.decor_particle_positions():
+            for idx, (x, y, size) in enumerate(self.decor_particle_positions()):
+                alpha = 0.55 + self._decor_rand(idx, 8) * 0.4
                 painter.save()
                 try:
                     painter.translate(x, y)
+                    color = QColor(d.particle_color)
                     if d.particle == "snow":
+                        # 外晕（柔焦）+ 主圆：两层不同透明度的圆叠加
+                        halo = QColor(color)
+                        halo.setAlphaF(alpha * 0.35)
+                        painter.setBrush(QBrush(halo))
+                        painter.drawEllipse(QPointF(0, 0), 2.6 * size, 2.6 * size)
+                        core = QColor(color)
+                        core.setAlphaF(alpha)
+                        painter.setBrush(QBrush(core))
                         painter.drawEllipse(QPointF(0, 0), 1.6 * size, 1.6 * size)
                     elif d.particle == "petal":
                         painter.rotate(38.0 * math.sin(self._decor_phase * 0.9 + x))
+                        color.setAlphaF(alpha)
+                        painter.setBrush(QBrush(color))
                         painter.drawEllipse(QPointF(0, 0), 2.4 * size, 1.3 * size)
                     elif d.particle == "leaf":
                         painter.rotate(52.0 * math.sin(self._decor_phase * 1.1 + y))
+                        color.setAlphaF(alpha)
+                        painter.setBrush(QBrush(color))
                         painter.drawEllipse(QPointF(0, 0), 3.0 * size, 1.2 * size)
                     elif d.particle == "bubble":
-                        painter.setBrush(Qt.BrushStyle.NoBrush)
-                        ring = QPen(QColor(d.particle_color))
+                        ring = QPen(color)
                         ring.setWidthF(1.1)
+                        ring_color = QColor(color)
+                        ring_color.setAlphaF(alpha)
+                        ring.setColor(ring_color)
                         painter.setPen(ring)
+                        painter.setBrush(Qt.BrushStyle.NoBrush)
                         painter.drawEllipse(QPointF(0, 0), 2.6 * size, 2.6 * size)
+                        # 左上白高光点：泡泡的「玻璃感」来源
                         painter.setPen(Qt.PenStyle.NoPen)
+                        hi = QColor(C.COLORS["white"])
+                        hi.setAlphaF(alpha * 0.9)
+                        painter.setBrush(QBrush(hi))
+                        painter.drawEllipse(
+                            QPointF(-1.0 * size, -1.0 * size), 0.55 * size, 0.55 * size
+                        )
                 finally:
                     painter.restore()
         finally:
@@ -469,6 +592,8 @@ class PetRenderer:
         """配件层（最顶，画在 ZZZ 之后）：圣诞帽 / 围巾 / 小花 / 灯笼。
 
         锚定于体心 ``(cx, cy + pose.body_y)``，随呼吸上下浮动（与脸一致）。
+        阶段 E：全部配件补齐**墨线描边**（与主体 3.2 粗描边同风格、宽 2.4 的
+        次级层级），并各加一处高光/织物细节 —— 消除「无描边纯色贴片」的断裂感。
         """
 
         d = self._decor
@@ -480,9 +605,9 @@ class PetRenderer:
         try:
             main = QColor(d.accessory_color)
             accent = QColor(d.accessory_accent)
-            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setPen(self._outline_accessory)
             if d.accessory == "santa_hat":
-                # 歪戴圣诞帽：红色三角 + 白绒边 + 白绒球（头顶偏左）
+                # 歪戴圣诞帽：红色三角 + 白绒边 + 白绒球（头顶偏左），通体墨线描边
                 painter.setBrush(QBrush(main))
                 hat = QPolygonF([
                     QPointF(cx - 20.0, cy - 30.0),
@@ -493,18 +618,31 @@ class PetRenderer:
                 painter.setBrush(QBrush(accent))
                 painter.drawEllipse(QPointF(cx - 2.0, cy - 29.0), 19.0, 5.5)
                 painter.drawEllipse(QPointF(cx - 6.0, cy - 58.0), 4.0, 4.0)
+                # 绒球高光点
+                painter.setPen(Qt.PenStyle.NoPen)
+                pom_hi = QColor(accent)
+                painter.setBrush(QBrush(pom_hi))
+                painter.drawEllipse(QPointF(cx - 7.4, cy - 59.4), 1.3, 1.3)
             elif d.accessory == "scarf":
-                # 颈间围巾：横带 + 垂穗（身体下沿 y ≈ cy+30）
+                # 颈间围巾：横带 + 垂穗（身体下沿 y ≈ cy+30），墨线描边 + 织物条纹
                 painter.setBrush(QBrush(main))
                 painter.drawRoundedRect(QRectF(cx - 26.0, cy + 22.0, 52.0, 9.0), 4.5, 4.5)
                 painter.drawRoundedRect(QRectF(cx + 8.0, cy + 28.0, 10.0, 20.0), 4.0, 4.0)
+                # 织物条纹（accent 低透明横带，绕开描边内缘）
+                painter.setPen(Qt.PenStyle.NoPen)
+                stripe = QColor(accent)
+                stripe.setAlphaF(0.75)
+                painter.setBrush(QBrush(stripe))
+                painter.drawRoundedRect(QRectF(cx - 22.5, cy + 25.2, 45.0, 2.6), 1.3, 1.3)
+                # 垂穗（尾端三粒，accent 描边保留圆润）
                 painter.setBrush(QBrush(accent))
+                painter.setPen(self._outline_accessory)
                 for k in range(3):
                     painter.drawEllipse(
                         QPointF(cx + 12.0 + (k - 1) * 3.0, cy + 49.0), 1.4, 1.4,
                     )
             elif d.accessory == "flower":
-                # 头顶右侧五瓣小花 + 黄芯
+                # 头顶右侧五瓣小花 + 黄芯，通体墨线描边
                 fx, fy = cx + 24.0, cy - 26.0
                 painter.setBrush(QBrush(main))
                 for k in range(5):
@@ -516,17 +654,28 @@ class PetRenderer:
                 painter.setBrush(QBrush(accent))
                 painter.drawEllipse(QPointF(fx, fy), 2.2, 2.2)
             elif d.accessory == "lantern":
-                # 头侧挂灯笼：细绳 + 椭圆灯体 + 金色灯盖/灯穗
+                # 头侧挂灯笼：细绳 + 椭圆灯体 + 金色灯盖/灯穗，灯体通体墨线描边
                 lx, ly_top = cx - 30.0, cy - 24.0
                 painter.setPen(QPen(QColor(C.COLORS["ink"]), 1.0))
                 painter.drawLine(QPointF(lx, ly_top - 8.0), QPointF(lx, ly_top))
-                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setPen(self._outline_accessory)
                 painter.setBrush(QBrush(main))
                 painter.drawEllipse(QPointF(lx, ly_top + 9.0), 6.5, 9.0)
                 painter.setBrush(QBrush(accent))
-                painter.drawRect(QRectF(lx - 3.5, ly_top - 1.5, 7.0, 3.0))
-                painter.drawRect(QRectF(lx - 3.5, ly_top + 16.5, 7.0, 3.0))
+                painter.drawRoundedRect(QRectF(lx - 3.5, ly_top - 1.5, 7.0, 3.0), 1.4, 1.4)
+                painter.drawRoundedRect(QRectF(lx - 3.5, ly_top + 16.5, 7.0, 3.0), 1.4, 1.4)
                 painter.drawEllipse(QPointF(lx, ly_top + 22.5), 1.5, 1.5)
+                # 灯体骨架竖纹（accent 低透明，单中线即可，避免花哨）
+                painter.setPen(QPen(accent, 1.0))
+                seam_top = ly_top + 3.0
+                seam_bottom = ly_top + 15.5
+                seam = QPainterPath()
+                seam.moveTo(lx, seam_top)
+                seam.quadTo(lx + 3.2, (seam_top + seam_bottom) / 2.0, lx, seam_bottom)
+                seam.moveTo(lx, seam_top)
+                seam.quadTo(lx - 3.2, (seam_top + seam_bottom) / 2.0, lx, seam_bottom)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawPath(seam)
         finally:
             painter.restore()
 
@@ -647,6 +796,16 @@ class PetRenderer:
         )
         add(_GEO_MOUSE_CX + mx0, _GEO_MOUSE_CY + my0,
             _GEO_MOUSE_CX + mx1, _GEO_MOUSE_CY + my1)
+
+        # --- 接地阴影（对应 _draw_ground_shadow；锚在「地面」，不随 pose 位移，
+        #     故为固定盒子。椭圆完全落在键盘 / 鼠标盒子内，此处显式声明以防
+        #     未来调几何时被脏区静默裁掉）---
+        add(_GEO_GROUND_CX - _GEO_GROUND_RX, _GEO_GROUND_CY - _GEO_GROUND_RY,
+            _GEO_GROUND_CX + _GEO_GROUND_RX, _GEO_GROUND_CY + _GEO_GROUND_RY)
+        add(_GEO_MOUSE_CX - _GEO_MOUSE_SHADOW_RX,
+            _GEO_MOUSE_SHADOW_CY - _GEO_MOUSE_SHADOW_RY,
+            _GEO_MOUSE_CX + _GEO_MOUSE_SHADOW_RX,
+            _GEO_MOUSE_SHADOW_CY + _GEO_MOUSE_SHADOW_RY)
 
         # --- 尾巴（包围盒直接由 _tail_spine 现算，避免手写盒与绘制脱节）---
         # 每个脊线采样点按「最大半宽 + 描边」外扩 → 保守覆盖整条尾巴（含圆帽）。
@@ -1002,6 +1161,42 @@ class PetRenderer:
         painter.setBrush(QBrush(gradient))
         painter.drawPath(silhouette)
 
+        # 体积感（阶段 E）：剪影内叠加「左上柔光 + 底部暗面」双层明暗，
+        # 让单层对角渐变有了受光面 / 背光面 → 圆球从贴纸感变成蓬松团子感。
+        painter.save()
+        try:
+            painter.setClipPath(silhouette)
+            painter.setPen(Qt.PenStyle.NoPen)
+
+            # 左上柔光（镜面高光的柔化版）：白 → 透明径向渐变
+            hi_center = QPointF(cx - rx * 0.38, cy - ry * 0.5)
+            hi_radius = rx * 0.95
+            hi = QRadialGradient(hi_center, hi_radius)
+            hi_color = QColor(C.COLORS["white"])
+            hi_color.setAlpha(66)
+            hi.setColorAt(0.0, hi_color)
+            hi_end = QColor(C.COLORS["white"])
+            hi_end.setAlpha(0)
+            hi.setColorAt(1.0, hi_end)
+            painter.setBrush(QBrush(hi))
+            painter.drawEllipse(QRectF(
+                hi_center.x() - hi_radius, hi_center.y() - hi_radius,
+                hi_radius * 2.0, hi_radius * 2.0,
+            ))
+
+            # 底部暗面：线性渐变自中段渐入 ink 低透明度（接地投影语义）
+            shade = QLinearGradient(QPointF(cx, cy), QPointF(cx, cy + ry))
+            shade_mid = QColor(C.COLORS["ink"])
+            shade_mid.setAlpha(0)
+            shade_end = QColor(C.COLORS["ink"])
+            shade_end.setAlpha(26)
+            shade.setColorAt(0.0, shade_mid)
+            shade.setColorAt(1.0, shade_end)
+            painter.setBrush(QBrush(shade))
+            painter.drawRect(QRectF(cx - rx, cy, rx * 2.0, ry))
+        finally:
+            painter.restore()
+
     def _ear_path(
         self,
         side: float,
@@ -1120,6 +1315,14 @@ class PetRenderer:
                     key_color = QColor(self._sample_gradient(col / col_span))
                     painter.setBrush(QBrush(key_color))
                     painter.drawPolygon(poly)
+
+                    # 键帽顶部受光高光线（阶段 E）：沿上缘一道半透明白细线，
+                    # 与键面受光方向一致 → 键帽有了「顶面 vs 正面」的立体分工
+                    painter.setPen(self._key_hi_pen)
+                    top_l = self._kb_warp(x0 + 0.8, y0 + 0.7, top_y, bot_y, top_hw, bot_hw)
+                    top_r = self._kb_warp(x1 - 0.8, y0 + 0.7, top_y, bot_y, top_hw, bot_hw)
+                    painter.drawLine(top_l, top_r)
+                    painter.setPen(self._outline_thin)
         finally:
             painter.restore()
 
@@ -1250,7 +1453,9 @@ class PetRenderer:
             )
 
             # 两个小趾凸（表现圆润的脚趾；屈指时上收，像抓住键盘）
+            # 阶段 E：改用细一档的描边 —— 小圆上 3.2px 粗线会糊成黑点，2.0px 才留得住形状
             toe_y = paw_bottom - _GEO_TOE_R - 1.0 - c * 4.0
+            painter.setPen(self._outline_toe)
             for slot in (-1.0, 1.0):
                 painter.drawEllipse(QRectF(
                     slot * _GEO_TOE_DX - _GEO_TOE_R,
@@ -1268,18 +1473,28 @@ class PetRenderer:
         try:
             self._head_transform(painter, pose)
 
-            # 腮红（在眼睛下方两侧）
+            # 腮红（在眼睛下方两侧；阶段 E 改径向渐变软边，消除硬边椭圆的「贴纸」感）
             if pose.blush_alpha > 0.01:
-                blush = QColor(C.COLORS["blush"])
-                blush.setAlphaF(min(1.0, max(0.0, pose.blush_alpha)))
+                base = QColor(C.COLORS["blush"])
+                alpha = min(1.0, max(0.0, pose.blush_alpha))
                 painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(QBrush(blush))
                 for side in (-1.0, 1.0):
+                    bcx = side * _GEO_BLUSH_DX
+                    bcy = _GEO_BLUSH_DY
+                    radius = _GEO_BLUSH_RX * 1.15
+                    blush = QRadialGradient(QPointF(bcx, bcy), radius)
+                    core = QColor(base)
+                    core.setAlphaF(alpha)
+                    blush.setColorAt(0.0, core)
+                    mid = QColor(base)
+                    mid.setAlphaF(alpha * 0.85)
+                    blush.setColorAt(0.55, mid)
+                    rim = QColor(base)
+                    rim.setAlphaF(0.0)
+                    blush.setColorAt(1.0, rim)
+                    painter.setBrush(QBrush(blush))
                     painter.drawEllipse(QRectF(
-                        side * _GEO_BLUSH_DX - _GEO_BLUSH_RX,
-                        _GEO_BLUSH_DY - _GEO_BLUSH_RY,
-                        _GEO_BLUSH_RX * 2.0,
-                        _GEO_BLUSH_RY * 2.0,
+                        bcx - radius, bcy - radius, radius * 2.0, radius * 2.0,
                     ))
 
             # 眼睛
@@ -1341,6 +1556,15 @@ class PetRenderer:
             cy - ry * 0.45 + pose.look_y * 0.5,
             hl_r * 2.0,
             hl_r * 2.0,
+        ))
+
+        # 次级反光点（阶段 E）：主高光左下的一颗小亮斑，眼睛从「贴片」变「玻璃珠」
+        sub_r = hl_r * 0.42
+        painter.drawEllipse(QRectF(
+            cx - _GEO_EYE_RX * 0.1 + pose.look_x * 0.5 - sub_r,
+            cy + ry * 0.28 + pose.look_y * 0.5 - sub_r,
+            sub_r * 2.0,
+            sub_r * 2.0,
         ))
 
     def _draw_mouth(self, painter: QPainter, pose: PetPose) -> None:
