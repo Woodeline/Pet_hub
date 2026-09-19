@@ -24,7 +24,7 @@ from desktop_pet.core.config import AppConfig, ConfigStore
 from desktop_pet.ui.tray import TrayController
 
 _EXPECTED_KEYS = ["auto", "default", "spring", "summer", "autumn", "winter",
-                  "spring_festival", "christmas"]
+                  "spring_festival"]
 
 
 # --------------------------------------------------------------------------- #
@@ -39,12 +39,12 @@ def test_tray_exposes_theme_signal_and_menu(qtbot) -> None:
     assert tray._theme_menu.title() == C.TRAY_MENU_THEME == "主题"
 
 
-def test_theme_menu_has_auto_plus_seven_skins(qtbot) -> None:
-    """子菜单含「自动」+ 7 套皮肤，共 8 项，全部 checkable。"""
+def test_theme_menu_has_auto_plus_six_skins(qtbot) -> None:
+    """子菜单含「自动」+ 6 套皮肤，共 7 项，全部 checkable。"""
 
     tray = TrayController(QIcon(), AppConfig())
     actions = tray._theme_menu.actions()
-    assert len(actions) == 8
+    assert len(actions) == 7
     assert set(tray._theme_actions) == set(_EXPECTED_KEYS)
     for key, action in tray._theme_actions.items():
         assert action.isCheckable(), f"{key} 未设 checkable"
@@ -52,7 +52,7 @@ def test_theme_menu_has_auto_plus_seven_skins(qtbot) -> None:
 
 
 def test_theme_actions_are_exclusive_group(qtbot) -> None:
-    """8 个项共属一个 **exclusive** 的 ``QActionGroup``。"""
+    """7 个项共属一个 **exclusive** 的 ``QActionGroup``。"""
 
     from PySide6.QtGui import QActionGroup
 
@@ -60,7 +60,7 @@ def test_theme_actions_are_exclusive_group(qtbot) -> None:
     group = tray._theme_group
     assert isinstance(group, QActionGroup)
     assert group.isExclusive() is True
-    assert len(group.actions()) == 8
+    assert len(group.actions()) == 7
 
 
 def test_theme_default_checked_follows_config(qtbot) -> None:
@@ -96,8 +96,8 @@ def test_theme_selection_is_mutually_exclusive(qtbot) -> None:
     assert tray._theme_actions["summer"].isChecked() is True
     assert tray._theme_actions["default"].isChecked() is False
 
-    tray._theme_actions["christmas"].trigger()
-    assert tray._theme_actions["christmas"].isChecked() is True
+    tray._theme_actions["spring_festival"].trigger()
+    assert tray._theme_actions["spring_festival"].isChecked() is True
     assert tray._theme_actions["summer"].isChecked() is False
 
 

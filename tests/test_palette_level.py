@@ -18,7 +18,7 @@ from desktop_pet.ui.pet_renderer import PetRenderer
 
 _ALL_THEMES = (
     "default", "spring", "summer", "autumn", "winter",
-    "spring_festival", "christmas",
+    "spring_festival",
 )
 
 _HEX_RE = re.compile(r"^#[0-9A-F]{6}$")

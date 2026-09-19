@@ -58,7 +58,7 @@ from desktop_pet.ui.pet_renderer import PetRenderer  # noqa: E402
 #: 与 ``constants.THEMES`` 的键顺序一致（固定顺序便于逐张比对）。
 THEMES = (
     "default", "spring", "summer", "autumn", "winter",
-    "spring_festival", "christmas",
+    "spring_festival",
 )
 
 #: 阶段 B2 微交互预览的入口 stage 名。
@@ -235,7 +235,7 @@ def idle_series(renderer: PetRenderer, outdir: Path, scale: float) -> list[Path]
 def theme_series(
     renderer: PetRenderer, outdir: Path, stage: str, scale: float
 ) -> list[Path]:
-    """7 套皮肤各渲染一帧（清醒基础态）。"""
+    """6 套皮肤各渲染一帧（清醒基础态）。"""
 
     pose = PetModel.pose_for_expression(Expression.HAPPY)
     written: list[Path] = []

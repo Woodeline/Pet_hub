@@ -22,10 +22,10 @@ from desktop_pet.core import constants as C
 
 _HEX_RE = re.compile(r"^#[0-9A-F]{6}$")
 
-#: 期望的 7 套皮肤键（字面量，防“少一套/多一套”静默漂移）。
+#: 期望的 6 套皮肤键（字面量，防"少一套/多一套"静默漂移）。
 _EXPECTED_THEMES = {
     "default", "spring", "summer", "autumn", "winter",
-    "spring_festival", "christmas",
+    "spring_festival",
 }
 #: 期望的停靠点位置序列（字面量）。
 _EXPECTED_POSITIONS = (0.0, 0.25, 0.5, 0.75, 1.0)
@@ -35,10 +35,10 @@ _EXPECTED_POSITIONS = (0.0, 0.25, 0.5, 0.75, 1.0)
 # 1. 皮肤集合与结构
 # --------------------------------------------------------------------------- #
 def test_themes_key_set_matches_plan() -> None:
-    """``THEMES`` 恰含 7 套皮肤（键集合字面量全等）。"""
+    """``THEMES`` 恰含 6 套皮肤（键集合字面量全等）。"""
 
     assert set(C.THEMES) == _EXPECTED_THEMES
-    assert len(C.THEMES) == 7
+    assert len(C.THEMES) == 6
 
 
 @pytest.mark.parametrize("name", sorted(_EXPECTED_THEMES))
@@ -127,8 +127,6 @@ def test_all_theme_color_sets_are_pairwise_distinct() -> None:
                     (0.75, "#84A9CF"), (1.00, "#628DBD"))),
         ("spring_festival", ((0.00, "#FBD9DE"), (0.25, "#F5B0BC"), (0.50, "#EC8698"),
                              (0.75, "#DB5D74"), (1.00, "#C23A55"))),
-        ("christmas", ((0.00, "#D6EFE0"), (0.25, "#AEDBC0"), (0.50, "#82C29E"),
-                       (0.75, "#57A67C"), (1.00, "#2F875C"))),
     ],
 )
 def test_theme_stop_colors_literal_anchor(name: str, stops: tuple) -> None:
@@ -171,10 +169,10 @@ def test_season_map_literal_expectations(month: int, expected: str) -> None:
 # --------------------------------------------------------------------------- #
 # 5. 白名单
 # --------------------------------------------------------------------------- #
-def test_theme_allowed_has_eight_members() -> None:
-    """``THEME_ALLOWED`` = 7 套皮肤 + ``auto``，成员数恰为 8（字面量）。"""
+def test_theme_allowed_has_seven_members() -> None:
+    """``THEME_ALLOWED`` = 6 套皮肤 + ``auto``，成员数恰为 7（字面量）。"""
 
-    assert len(C.THEME_ALLOWED) == 8
+    assert len(C.THEME_ALLOWED) == 7
     assert C.THEME_ALLOWED == _EXPECTED_THEMES | {"auto"}
 
 

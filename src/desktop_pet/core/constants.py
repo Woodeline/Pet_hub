@@ -189,6 +189,13 @@ OUTLINE_W: Final[float] = 3.2
 # 独立标量模块级常量（照 ``OUTLINE_W`` 先例），**不新增字典键**（避免动 COLORS 全等断言）。
 PROP_OUTLINE: Final[str] = "#4A4A4A"
 
+# 布景绘制色（阶段 F）——照 ``PROP_OUTLINE`` 先例的独立标量常量（不动 COLORS 字典）：
+# ui 层禁裸 hex（AST 扫描红线），故沙滩 / 遮阳棚 / 太阳 / 枫叶叶脉等新布景色集中于此。
+DECOR_BEACH_AWNING: Final[str] = "#E4574F"  # 遮阳棚棚顶红（与灯笼主红同族）
+DECOR_BEACH_POLE: Final[str] = "#8A6B4F"    # 遮阳棚立柱（暖棕）
+DECOR_SUN_GOLD: Final[str] = "#FFD166"      # 太阳 / 灯笼灯盖金（与烟花同色族）
+DECOR_MAPLE_VEIN: Final[str] = "#F6C453"    # 秋·枫叶黄色叶脉（红黄相间）
+
 # --------------------------------------------------------------------------- #
 # 4c. 主题皮肤渐变表（阶段 A）—— 四季自动换肤 + 节日手动
 # --------------------------------------------------------------------------- #
@@ -246,14 +253,6 @@ THEMES: Final[dict[str, tuple[tuple[float, str], ...]]] = {
         (0.75, "#DB5D74"),
         (1.00, "#C23A55"),
     ),
-    # 圣诞：松针浅绿 → 深松绿
-    "christmas": (
-        (0.00, "#D6EFE0"),
-        (0.25, "#AEDBC0"),
-        (0.50, "#82C29E"),
-        (0.75, "#57A67C"),
-        (1.00, "#2F875C"),
-    ),
 }
 
 #: 主题取值 → 中文显示名（含 ``auto``；供托盘菜单与配置展示使用）。
@@ -264,7 +263,6 @@ THEME_NAMES: Final[dict[str, str]] = {
     "autumn": "秋",
     "winter": "冬",
     "spring_festival": "春节",
-    "christmas": "圣诞",
     "auto": "自动",
 }
 
@@ -322,54 +320,50 @@ class ThemeDecor:
 
 #: 粒子形状白名单（数据完整性守卫用）。
 THEME_DECOR_PARTICLES: Final[frozenset[str]] = frozenset(
-    {"none", "snow", "petal", "leaf", "bubble"}
+    {"none", "snow", "petal", "leaf", "firework"}
 )
 #: 布景元素白名单。
-THEME_DECOR_BACKDROPS: Final[frozenset[str]] = frozenset({"none", "willow"})
+THEME_DECOR_BACKDROPS: Final[frozenset[str]] = frozenset(
+    {"none", "willow", "beach", "lantern_sky"}
+)
 #: 随身配件白名单。
 THEME_DECOR_ACCESSORIES: Final[frozenset[str]] = frozenset(
-    {"none", "flower", "scarf", "lantern", "santa_hat"}
+    {"none", "flower"}
 )
 
 #: 皮肤 → 造型装饰表（键集合与 :data:`THEMES` 一致；``default`` 全空）。
 THEME_DECOR: Final[dict[str, ThemeDecor]] = {
     # 品牌基准形态：不画任何装饰
     "default": ThemeDecor(),
-    # 春：垂柳布景 + 飘落花瓣 + 头顶小花
+    # 春：垂柳布景（柳叶放大 + 风吹摆动）+ 飘落花瓣 + 头顶小花
     "spring": ThemeDecor(
         particle="petal", particle_color="#FFC9DA", particle_count=6,
         backdrop="willow", backdrop_color="#8FCB79",
         accessory="flower", accessory_color="#FF9EC4", accessory_accent="#FFF3B0",
     ),
-    # 夏：缓缓上浮的清凉气泡
+    # 夏：远景沙滩（沙滩 / 遮阳棚 / 太阳光效）
     "summer": ThemeDecor(
-        particle="bubble", particle_color="#CFEAF8", particle_count=7,
-        backdrop="none", backdrop_color="#FFFFFF",
-        accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
-    ),
-    # 秋：飘落红叶
-    "autumn": ThemeDecor(
-        particle="leaf", particle_color="#E8A25A", particle_count=8,
-        backdrop="none", backdrop_color="#FFFFFF",
-        accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
-    ),
-    # 冬：雪花 + 颈间围巾
-    "winter": ThemeDecor(
-        particle="snow", particle_color="#F2F8FF", particle_count=8,
-        backdrop="none", backdrop_color="#FFFFFF",
-        accessory="scarf", accessory_color="#7FA8E0", accessory_accent="#FFFFFF",
-    ),
-    # 春节：头侧挂小灯笼
-    "spring_festival": ThemeDecor(
         particle="none", particle_color="#FFFFFF", particle_count=0,
-        backdrop="none", backdrop_color="#FFFFFF",
-        accessory="lantern", accessory_color="#E4574F", accessory_accent="#FFD166",
+        backdrop="beach", backdrop_color="#F3C98B",
+        accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
     ),
-    # 圣诞：雪花 + 圣诞帽
-    "christmas": ThemeDecor(
+    # 秋：飘落红黄相间的醒目大枫叶
+    "autumn": ThemeDecor(
+        particle="leaf", particle_color="#E8593A", particle_count=9,
+        backdrop="none", backdrop_color="#FFFFFF",
+        accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
+    ),
+    # 冬：飘落雪花（移除围巾）
+    "winter": ThemeDecor(
         particle="snow", particle_color="#F2F8FF", particle_count=10,
         backdrop="none", backdrop_color="#FFFFFF",
-        accessory="santa_hat", accessory_color="#E4574F", accessory_accent="#FFFFFF",
+        accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
+    ),
+    # 春节：远景挂灯笼 + 烟花绽放
+    "spring_festival": ThemeDecor(
+        particle="firework", particle_color="#FFD166", particle_count=5,
+        backdrop="lantern_sky", backdrop_color="#E4574F",
+        accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
     ),
 }
 
@@ -937,6 +931,11 @@ __all__ = [
     "COLORS",
     # 色彩微调（阶段 B1）
     "PROP_OUTLINE",
+    # 布景绘制色（阶段 F）
+    "DECOR_BEACH_AWNING",
+    "DECOR_BEACH_POLE",
+    "DECOR_SUN_GOLD",
+    "DECOR_MAPLE_VEIN",
     # 主题皮肤（阶段 A）
     "THEMES",
     "DEFAULT_THEME",

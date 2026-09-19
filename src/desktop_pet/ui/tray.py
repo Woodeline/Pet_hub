@@ -73,7 +73,7 @@ class TrayController(QObject):
         self._action_quit: QAction | None = None
         self._scale_group: QActionGroup | None = None
         self._scale_actions: dict[float, QAction] = {}
-        # 主题皮肤菜单组（「自动」+ 7 套皮肤，单选）
+        # 主题皮肤菜单组（「自动」+ 6 套皮肤，单选）
         self._theme_menu: QMenu | None = None
         self._theme_group: QActionGroup | None = None
         self._theme_actions: dict[str, QAction] = {}
@@ -323,7 +323,7 @@ class TrayController(QObject):
             scale_menu.addAction(action)
             self._scale_actions[value] = action
 
-        # —— 主题子菜单（「自动」+ 7 套皮肤，单选；照 scale_menu 先例）——
+        # —— 主题子菜单（「自动」+ 6 套皮肤，单选；照 scale_menu 先例）——
         self._theme_menu = QMenu(C.TRAY_MENU_THEME, self._menu)
         self._theme_group = QActionGroup(self._menu)
         self._theme_group.setExclusive(True)

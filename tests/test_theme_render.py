@@ -28,7 +28,7 @@ from desktop_pet.ui.pet_renderer import PetRenderer
 
 _ALL_THEMES = (
     "default", "spring", "summer", "autumn", "winter",
-    "spring_festival", "christmas",
+    "spring_festival",
 )
 
 
@@ -50,10 +50,10 @@ def test_resolve_theme_auto_all_months(month: int, expected: str) -> None:
 
 
 def test_resolve_theme_manual_overrides_auto() -> None:
-    """手动选择覆盖 ``auto``：即使月份指向 winter，选 ``christmas`` 也返回 christmas。"""
+    """手动选择覆盖 ``auto``：即使月份指向 winter，选 ``spring_festival`` 也返回它。"""
 
-    assert resolve_theme(1, "christmas") == "christmas"
-    assert resolve_theme(6, "christmas") == "christmas"
+    assert resolve_theme(1, "spring_festival") == "spring_festival"
+    assert resolve_theme(6, "spring_festival") == "spring_festival"
     assert resolve_theme(6, "winter") == "winter"
 
 

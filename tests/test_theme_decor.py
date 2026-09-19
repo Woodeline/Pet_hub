@@ -32,7 +32,7 @@ from desktop_pet.ui.pet_window import PetWindow
 
 _ALL_THEMES = (
     "default", "spring", "summer", "autumn", "winter",
-    "spring_festival", "christmas",
+    "spring_festival",
 )
 
 
@@ -82,7 +82,7 @@ def test_theme_decor_keys_match_themes() -> None:
 
     assert set(C.THEME_DECOR) == {
         "default", "spring", "summer", "autumn", "winter",
-        "spring_festival", "christmas",
+        "spring_festival",
     }
 
 
@@ -97,15 +97,48 @@ def test_theme_decor_default_is_all_empty() -> None:
     assert C.THEME_DECOR["default"] == expected
 
 
-def test_theme_decor_christmas_literal_values() -> None:
-    """圣诞 = 雪花 + 圣诞帽（字面量全等，防静默漂移）。"""
+def test_theme_decor_winter_literal_values() -> None:
+    """冬 = 雪花（移除围巾）（字面量全等，防静默漂移）。"""
 
     expected = C.ThemeDecor(
         particle="snow", particle_color="#F2F8FF", particle_count=10,
         backdrop="none", backdrop_color="#FFFFFF",
-        accessory="santa_hat", accessory_color="#E4574F", accessory_accent="#FFFFFF",
+        accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
     )
-    assert C.THEME_DECOR["christmas"] == expected
+    assert C.THEME_DECOR["winter"] == expected
+
+
+def test_theme_decor_summer_literal_values() -> None:
+    """夏 = 沙滩远景（移除气泡）（字面量全等）。"""
+
+    expected = C.ThemeDecor(
+        particle="none", particle_color="#FFFFFF", particle_count=0,
+        backdrop="beach", backdrop_color="#F3C98B",
+        accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
+    )
+    assert C.THEME_DECOR["summer"] == expected
+
+
+def test_theme_decor_autumn_literal_values() -> None:
+    """秋 = 红黄相间大枫叶（字面量全等）。"""
+
+    expected = C.ThemeDecor(
+        particle="leaf", particle_color="#E8593A", particle_count=9,
+        backdrop="none", backdrop_color="#FFFFFF",
+        accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
+    )
+    assert C.THEME_DECOR["autumn"] == expected
+
+
+def test_theme_decor_spring_festival_literal_values() -> None:
+    """春节 = 远景灯笼 + 烟花（字面量全等）。"""
+
+    expected = C.ThemeDecor(
+        particle="firework", particle_color="#FFD166", particle_count=5,
+        backdrop="lantern_sky", backdrop_color="#E4574F",
+        accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
+    )
+    assert C.THEME_DECOR["spring_festival"] == expected
 
 
 def test_theme_decor_spring_literal_values() -> None:
@@ -176,12 +209,12 @@ def test_decor_for_theme_unknown_falls_back_to_default() -> None:
     "name,field,expected",
     [
         ("winter", "particle", "snow"),
-        ("winter", "accessory", "scarf"),
-        ("christmas", "accessory", "santa_hat"),
+        ("winter", "accessory", "none"),
+        ("summer", "backdrop", "beach"),
         ("spring", "backdrop", "willow"),
         ("autumn", "particle", "leaf"),
-        ("summer", "particle", "bubble"),
-        ("spring_festival", "accessory", "lantern"),
+        ("spring_festival", "particle", "firework"),
+        ("spring_festival", "backdrop", "lantern_sky"),
     ],
 )
 def test_decor_for_theme_returns_specific_decor(
@@ -199,7 +232,7 @@ def test_renderer_has_decor_follows_theme() -> None:
     renderer = PetRenderer()
     assert renderer.has_decor() is False, "default 不应带装饰"
 
-    for name in ("christmas", "spring", "winter", "autumn", "summer", "spring_festival"):
+    for name in ("spring", "winter", "autumn", "summer", "spring_festival"):
         renderer.set_theme(name)
         assert renderer.has_decor() is True, f"{name} 应带装饰"
 
@@ -213,12 +246,12 @@ def test_decor_particles_are_deterministic() -> None:
     """粒子位置是 ``(decor, phase)`` 的**纯函数**：同相位必同坐标（禁运行期 random）。"""
 
     renderer = PetRenderer()
-    renderer.set_theme("christmas")
+    renderer.set_theme("autumn")
     a = renderer.decor_particle_positions(phase=12.5)
     b = renderer.decor_particle_positions(phase=12.5)
     assert a == b
     assert a != ()
-    assert len(a) == 10, "christmas 粒子数字面量为 10"
+    assert len(a) == 9, "autumn 粒子数字面量为 9"
 
     c = renderer.decor_particle_positions(phase=13.5)
     assert a != c, "相位推进后粒子应当移动（否则动画失效）"
@@ -230,7 +263,7 @@ def test_decor_particles_no_particles_for_default() -> None:
     assert renderer.decor_particle_positions(phase=1.0) == ()
 
 
-@pytest.mark.parametrize("name", ("christmas", "spring", "autumn", "summer"))
+@pytest.mark.parametrize("name", ("spring", "autumn", "winter", "spring_festival"))
 def test_decor_particles_stay_near_canvas(name: str) -> None:
     """粒子坐标始终贴近画布（含回绕缓冲），不得飞出画面。"""
 
@@ -252,7 +285,7 @@ def test_paint_with_decor_differs_from_no_decor() -> None:
 
     pose = PetModel.pose_for_expression(Expression.HAPPY)
     renderer = PetRenderer()
-    renderer.set_theme("christmas")
+    renderer.set_theme("autumn")
     renderer.set_decor_phase(7.0)
     with_decor = _image_hash(_render(renderer, pose))
 
@@ -304,7 +337,7 @@ def test_paint_all_themes_with_decor_no_exception(name: str) -> None:
 # 5. 脏区：带装饰必须回退整窗（否则粒子被收窄矩形裁掉）
 # --------------------------------------------------------------------------- #
 def test_pet_rect_falls_back_to_full_window_with_decor(qtbot) -> None:
-    window = _make_window(qtbot, "christmas")
+    window = _make_window(qtbot, "summer")
     assert window._renderer.has_decor() is True
     assert window.pet_rect() == window.rect(), "带装饰时应回退整窗，避免粒子被裁切"
 

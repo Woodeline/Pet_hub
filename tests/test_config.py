@@ -369,7 +369,7 @@ def test_reduce_motion_default_and_roundtrip(config_store: ConfigStore) -> None:
         (["autumn"], "default"),  # 非法类型（list）→ 默认
         ("autumn", "autumn"),     # 合法皮肤 → 保留
         ("auto", "auto"),         # auto 合法 → 保留
-        ("christmas", "christmas"),
+        ("spring_festival", "spring_festival"),
         ("  spring  ", "spring"), # 首尾空白被 strip
     ],
 )

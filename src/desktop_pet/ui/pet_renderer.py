@@ -265,7 +265,7 @@ class PetRenderer:
         self._outline_toe.setWidthF(2.0)
         self._outline_toe.setCapStyle(Qt.PenCapStyle.RoundCap)
 
-        # 配件描边（阶段 E）：圣诞帽 / 围巾 / 小花 / 灯笼与全身粗描边风格统一
+        # 配件描边（阶段 E）：头顶小花与全身粗描边风格统一
         self._outline_accessory = QPen(ink)
         self._outline_accessory.setWidthF(2.4)
         self._outline_accessory.setCapStyle(Qt.PenCapStyle.RoundCap)
@@ -381,7 +381,7 @@ class PetRenderer:
         span_y = _GEO_CANVAS_H                 # y 基准 ∈ [0, 180)
         wrap = self._DECOR_WRAP_PAD            # y 落域 = [-12, 192)
         period = _GEO_CANVAS_H + 2.0 * wrap    # 纵向回绕周期
-        rising = d.particle == "bubble"        # 气泡上浮，其余（雪 / 花瓣 / 叶）下落
+        rising = False                          # 全部粒子下落（阶段 F 移除气泡上浮）
         particles: list[tuple[float, float, float]] = []
         for i in range(d.particle_count):
             base_x = 2.0 + self._decor_rand(i, 1) * span_x
@@ -471,16 +471,27 @@ class PetRenderer:
             painter.restore()
 
     def _draw_decor_backdrop(self, painter: QPainter) -> None:
-        """布景层（最底）：春 = 画布顶端垂下的柳枝（阶段 D；阶段 E 重画）。
+        """布景层（最底）：春 = 垂柳（阶段 F 放大柳叶 + 风吹摆动）、
+        夏 = 沙滩远景（沙滩 / 遮阳棚 / 太阳光效）、春节 = 远景挂灯笼。
 
-        阶段 E：枝条由两段折线改为**二次贝塞尔曲线**（曲率连续），叶滴由短线
-        改为沿枝伸展的**旋转小椭圆**，透明度分层（枝 200 / 叶 230）——
-        消除「乱画的划痕」观感。
+        三条自画布顶端垂下的柳枝用**二次贝塞尔曲线**表示（曲率连续），柳叶为
+        沿枝伸展的**旋转大椭圆**（比阶段 E 放大约 1.8 倍，更醒目），整条枝与
+        叶随相位做**正弦摆动**（风吹摇曳感）——摆动幅度沿枝身递增（根不动、梢最摆）。
         """
 
         d = self._decor
         if d.backdrop == "none":
             return
+        if d.backdrop == "willow":
+            self._draw_willow(painter, d)
+        elif d.backdrop == "beach":
+            self._draw_beach(painter, d)
+        elif d.backdrop == "lantern_sky":
+            self._draw_lantern_sky(painter, d)
+
+    def _draw_willow(self, painter: QPainter, d: C.ThemeDecor) -> None:
+        """春·垂柳：柳叶放大 + 风吹摆动（阶段 F）。"""
+
         painter.save()
         try:
             color = QColor(d.backdrop_color)
@@ -492,23 +503,43 @@ class PetRenderer:
             painter.setPen(branch_pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             leaf_color = QColor(color)
-            leaf_color.setAlphaF(0.9)
+            leaf_color.setAlphaF(0.92)
+            phase = self._decor_phase
             # 三条自顶端垂下的弧线柳枝（横向错开，长短不一、弯向各异）
-            for i, (bx, drop, bend) in enumerate(((34.0, 52.0, 10.0), (80.0, 64.0, -8.0), (126.0, 48.0, 9.0))):
+            for i, (bx, drop, bend) in enumerate(
+                ((34.0, 52.0, 10.0), (80.0, 64.0, -8.0), (126.0, 48.0, 9.0))
+            ):
                 path_len = drop + self._decor_rand(i, 11) * 10.0
                 mid_x = bx + bend * 1.5
                 mid_y = path_len * 0.5
                 end_x = bx + bend * 0.4
+                # 风吹摆动：沿枝身的正弦横向偏移，幅度从根部 0 递增到梢部最大
+                sway_amp = 4.0 + self._decor_rand(i, 13) * 3.0
+                sway_freq = 0.9 + self._decor_rand(i, 14) * 0.6
+                sway_phase = self._decor_rand(i, 15) * 6.283
                 branch = QPainterPath()
                 branch.moveTo(bx, 0.0)
-                branch.quadTo(mid_x, mid_y, end_x, path_len)
+                # 用 3 个贝塞尔控制点近似「带摆动的曲线」：中段与梢部各自横向偏移
+                for seg in range(1, 7):
+                    t = seg / 6.0
+                    u = 1.0 - t
+                    sway = sway_amp * math.sin(phase * sway_freq + sway_phase) * (t ** 1.5)
+                    bx0 = bx
+                    by0 = 0.0
+                    bmid_x = mid_x
+                    bmid_y = mid_y
+                    bend_x = end_x
+                    bend_y = path_len
+                    # 在曲线点 (lx, ly) 上叠加横向偏移（沿曲线法线近似水平方向）
+                    lx = u * u * bx0 + 2.0 * u * t * bmid_x + t * t * bend_x
+                    ly = u * u * by0 + 2.0 * u * t * bmid_y + t * t * bend_y
+                    branch.lineTo(lx + sway, ly)
                 painter.drawPath(branch)
-                # 柳叶：沿枝小椭圆（按枝的局部走向旋转），错落分布
+                # 柳叶：沿枝小椭圆（按枝的局部走向旋转），错落分布，放大更醒目
                 painter.setBrush(QBrush(leaf_color))
                 painter.setPen(Qt.PenStyle.NoPen)
-                for k in range(4):
-                    t = (k + self._decor_rand(i * 4 + k, 12)) / 4.0
-                    # 贝塞尔点：B(t) = (1-t)²P0 + 2(1-t)t P1 + t² P2
+                for k in range(5):
+                    t = (k + self._decor_rand(i * 4 + k, 12)) / 5.0
                     u = 1.0 - t
                     ly = u * u * 0.0 + 2.0 * u * t * mid_y + t * t * path_len
                     lx = u * u * bx + 2.0 * u * t * mid_x + t * t * end_x
@@ -516,22 +547,137 @@ class PetRenderer:
                         2.0 * u * (mid_y - 0.0) + 2.0 * t * (path_len - mid_y),
                         2.0 * u * (mid_x - bx) + 2.0 * t * (end_x - mid_x),
                     )
+                    # 叶片随风微转（相位驱动），并随摆动一起横向偏移
+                    leaf_sway = sway_amp * math.sin(
+                        phase * sway_freq + sway_phase
+                    ) * (t ** 1.5)
+                    leaf_twist = 9.0 * math.sin(phase * sway_freq * 1.3 + sway_phase + k)
                     painter.save()
-                    painter.translate(lx, ly)
-                    painter.rotate(math.degrees(tangent) + 90.0 + (18.0 if k % 2 == 0 else -18.0))
-                    painter.drawEllipse(QPointF(0.0, 2.2), 1.0, 2.4)
+                    painter.translate(lx + leaf_sway, ly)
+                    painter.rotate(
+                        math.degrees(tangent) + 90.0
+                        + (18.0 if k % 2 == 0 else -18.0) + leaf_twist
+                    )
+                    painter.drawEllipse(QPointF(0.0, 3.6), 1.9, 4.2)
                     painter.restore()
                 painter.setPen(branch_pen)
                 painter.setBrush(Qt.BrushStyle.NoBrush)
         finally:
             painter.restore()
 
+    def _draw_beach(self, painter: QPainter, d: C.ThemeDecor) -> None:
+        """夏·沙滩远景：沙滩条带 + 遮阳棚 + 太阳光效（阶段 F）。
+
+        布景画在**最底层**（宠物背后），整体清淡，避免喧宾夺主：
+        - 底部一道暖沙色条带（沙滩）；
+        - 中景一顶红白条纹遮阳棚（三角形棚顶 + 立柱）；
+        - 右上角一枚带光晕的太阳。
+        """
+
+        painter.save()
+        try:
+            sand = QColor(d.backdrop_color)
+            # —— 沙滩条带（底部）——
+            sand_fill = QColor(sand)
+            sand_fill.setAlphaF(0.55)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(sand_fill))
+            painter.drawRect(QRectF(0.0, 158.0, _GEO_CANVAS_W, 22.0))
+
+            # —— 遮阳棚（左中景，红白条纹三角棚顶 + 立柱）——
+            awning = QColor(C.DECOR_BEACH_AWNING)
+            awning.setAlphaF(0.85)
+            white = QColor(C.COLORS["white"])
+            white.setAlphaF(0.85)
+            pole = QColor(C.DECOR_BEACH_POLE)
+            pole.setAlphaF(0.7)
+            # 棚顶（扇形三角）
+            painter.setBrush(QBrush(awning))
+            painter.drawPolygon(QPolygonF([
+                QPointF(14.0, 128.0),
+                QPointF(46.0, 128.0),
+                QPointF(30.0, 110.0),
+            ]))
+            # 白色条纹
+            painter.setBrush(QBrush(white))
+            painter.drawPolygon(QPolygonF([
+                QPointF(22.0, 128.0),
+                QPointF(30.0, 128.0),
+                QPointF(30.0, 111.0),
+            ]))
+            # 立柱
+            painter.setBrush(QBrush(pole))
+            painter.drawRect(QRectF(28.5, 128.0, 3.0, 32.0))
+
+            # —— 太阳（右上角，带光晕）——
+            sun_cx, sun_cy, sun_r = 138.0, 30.0, 8.0
+            sun = QColor(C.DECOR_SUN_GOLD)
+            # 外光晕
+            halo = QRadialGradient(QPointF(sun_cx, sun_cy), sun_r * 3.2)
+            halo_core = QColor(sun)
+            halo_core.setAlphaF(0.45)
+            halo_edge = QColor(sun)
+            halo_edge.setAlpha(0)
+            halo.setColorAt(0.0, halo_core)
+            halo.setColorAt(1.0, halo_edge)
+            painter.setBrush(QBrush(halo))
+            painter.drawEllipse(
+                QPointF(sun_cx, sun_cy), sun_r * 3.2, sun_r * 3.2
+            )
+            # 太阳本体
+            painter.setBrush(QBrush(sun))
+            painter.drawEllipse(QPointF(sun_cx, sun_cy), sun_r, sun_r)
+        finally:
+            painter.restore()
+
+    def _draw_lantern_sky(self, painter: QPainter, d: C.ThemeDecor) -> None:
+        """春·远景挂灯笼（阶段 F）：画布顶部左右两侧各垂下一串红灯笼。
+
+        灯笼挂在**远景**（顶部角落、小尺寸、半透明），与烟花粒子形成「夜空」
+        层次，不再贴身佩戴（原「头侧小灯笼」配件已移除）。
+        """
+
+        painter.save()
+        try:
+            main = QColor(d.backdrop_color)
+            accent = QColor(C.DECOR_SUN_GOLD)
+            ink = QColor(C.COLORS["ink"])
+            # 顶部左右各一列（x 约 20 / 140），每列 2~3 盏小灯笼
+            for col_x in (20.0, 140.0):
+                lantern_count = 3 if col_x < 100.0 else 2
+                for j in range(lantern_count):
+                    ly = 14.0 + j * 22.0
+                    # 细绳
+                    rope = QPen(ink)
+                    rope.setWidthF(0.8)
+                    painter.setPen(rope)
+                    painter.drawLine(
+                        QPointF(col_x, ly - 10.0), QPointF(col_x, ly - 2.0)
+                    )
+                    # 灯体（远景缩小 + 半透明）
+                    body = QColor(main)
+                    body.setAlphaF(0.88)
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.setBrush(QBrush(body))
+                    painter.drawEllipse(QPointF(col_x, ly + 4.0), 4.5, 6.0)
+                    # 灯盖 / 灯穗
+                    painter.setBrush(QBrush(accent))
+                    painter.drawRoundedRect(
+                        QRectF(col_x - 2.5, ly - 3.0, 5.0, 2.2), 1.0, 1.0
+                    )
+                    painter.drawRoundedRect(
+                        QRectF(col_x - 2.5, ly + 9.0, 5.0, 2.2), 1.0, 1.0
+                    )
+        finally:
+            painter.restore()
+
     def _draw_decor_particles(self, painter: QPainter) -> None:
-        """粒子层：雪（柔焦圆）/ 花瓣（斜椭圆）/ 红叶（长斜椭圆）/ 气泡（高光圆环）。
+        """粒子层：雪（柔焦圆）/ 花瓣（斜椭圆）/ 枫叶（红黄相间大叶）/ 烟花（绽放）。
 
         阶段 E 层次化：每粒透明度由确定性散列差异化（0.55~0.95），雪花叠一层
-        大半径低透明外晕（柔焦感），气泡加左上白高光点 —— 消除「同一张剪纸
-        复制 N 份」的机械感。
+        大半径低透明外晕（柔焦感）。
+        阶段 F：枫叶改为**红黄相间**的双色掌形大叶（更醒目）；烟花为**周期性
+        绽放**的放射线爆点（中心亮点 + 8 条射线 + 渐隐尾迹）。
         """
 
         d = self._decor
@@ -562,38 +708,90 @@ class PetRenderer:
                         painter.setBrush(QBrush(color))
                         painter.drawEllipse(QPointF(0, 0), 2.4 * size, 1.3 * size)
                     elif d.particle == "leaf":
+                        # 红黄相间的掌形大枫叶（阶段 F）：红色主体 + 黄色叶脉高光，
+                        # 尺寸比阶段 E 的细长椭圆放大约 1.6 倍，旋转飘落更醒目。
                         painter.rotate(52.0 * math.sin(self._decor_phase * 1.1 + y))
-                        color.setAlphaF(alpha)
-                        painter.setBrush(QBrush(color))
-                        painter.drawEllipse(QPointF(0, 0), 3.0 * size, 1.2 * size)
-                    elif d.particle == "bubble":
-                        ring = QPen(color)
-                        ring.setWidthF(1.1)
-                        ring_color = QColor(color)
-                        ring_color.setAlphaF(alpha)
-                        ring.setColor(ring_color)
-                        painter.setPen(ring)
-                        painter.setBrush(Qt.BrushStyle.NoBrush)
-                        painter.drawEllipse(QPointF(0, 0), 2.6 * size, 2.6 * size)
-                        # 左上白高光点：泡泡的「玻璃感」来源
-                        painter.setPen(Qt.PenStyle.NoPen)
-                        hi = QColor(C.COLORS["white"])
-                        hi.setAlphaF(alpha * 0.9)
-                        painter.setBrush(QBrush(hi))
-                        painter.drawEllipse(
-                            QPointF(-1.0 * size, -1.0 * size), 0.55 * size, 0.55 * size
-                        )
+                        leaf_red = QColor(color)
+                        leaf_red.setAlphaF(alpha)
+                        leaf_yellow = QColor(C.DECOR_MAPLE_VEIN)
+                        leaf_yellow.setAlphaF(alpha)
+                        # 五裂掌形：中心椭圆 + 左右各两片外展小椭圆（近似枫叶轮廓）
+                        painter.setBrush(QBrush(leaf_red))
+                        painter.drawEllipse(QPointF(0.0, 0.0), 5.0 * size, 2.4 * size)
+                        for ang in (-62.0, 62.0):
+                            for dist in (1.0, 1.8):
+                                px = dist * 3.4 * size * math.sin(math.radians(ang))
+                                py = -dist * 3.0 * size * math.cos(math.radians(ang))
+                                painter.drawEllipse(QPointF(px, py), 2.1 * size, 1.4 * size)
+                        # 黄色叶脉（中心一道亮脉，红黄相间观感）
+                        painter.setBrush(QBrush(leaf_yellow))
+                        painter.drawEllipse(QPointF(0.0, -0.6 * size), 4.0 * size, 0.9 * size)
+                    elif d.particle == "firework":
+                        self._draw_firework(painter, idx, x, y, size, color, alpha)
                 finally:
                     painter.restore()
         finally:
             painter.restore()
 
+    def _draw_firework(
+        self,
+        painter: QPainter,
+        idx: int,
+        x: float,
+        y: float,
+        size: float,
+        color: QColor,
+        alpha: float,
+    ) -> None:
+        """单个烟花爆点（阶段 F）：中心亮点 + 8 条放射线 + 外圈渐隐尾迹。
+
+        烟花「绽放」由相位周期驱动：每个爆点按 ``(idx)`` 错开相位，周期内先
+        扩张（射线外伸）再淡出（透明度衰减），形成周期性绽放的夜空烟花效果。
+        """
+
+        phase = self._decor_phase
+        # 每个爆点独立错开的周期（5 个爆点错开 1/5 周期 → 交替绽放）
+        period = 4.0 + self._decor_rand(idx, 20) * 2.0
+        local_t = (phase / period + self._decor_rand(idx, 21)) % 1.0
+        # 绽放包络：0→1 扩张、1→0 淡出（正弦半周期近似）
+        bloom = math.sin(math.pi * local_t)  # 0..1..0
+        if bloom < 0.05:
+            return
+        # 射线长度随绽放扩张，透明度随绽放衰减
+        ray_len = (3.0 + 5.5 * bloom) * size
+        spark_alpha = alpha * bloom
+        spark = QColor(color)
+        spark.setAlphaF(max(0.0, min(1.0, spark_alpha)))
+        # 中心亮点
+        painter.setBrush(QBrush(spark))
+        painter.drawEllipse(QPointF(0.0, 0.0), 1.6 * size * bloom, 1.6 * size * bloom)
+        # 8 条放射射线（固定角度，长度随绽放外伸）
+        pen = QPen(spark)
+        pen.setWidthF(1.0)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        for k in range(8):
+            ang = math.radians(k * 45.0 + self._decor_rand(idx, 22) * 45.0)
+            tip_x = math.cos(ang) * ray_len
+            tip_y = math.sin(ang) * ray_len
+            # 射线尾端渐隐：从中心向外的线，起点在亮点边缘
+            painter.drawLine(
+                QPointF(math.cos(ang) * 1.2 * size, math.sin(ang) * 1.2 * size),
+                QPointF(tip_x, tip_y),
+            )
+        # 外圈渐隐尾迹（低透明的小圆环残影）
+        painter.setPen(Qt.PenStyle.NoPen)
+        tail = QColor(color)
+        tail.setAlphaF(max(0.0, min(1.0, alpha * 0.3 * bloom)))
+        painter.setBrush(QBrush(tail))
+        painter.drawEllipse(QPointF(0.0, 0.0), ray_len * 0.5, ray_len * 0.5)
+
     def _draw_decor_accessory(self, painter: QPainter, pose: PetPose) -> None:
-        """配件层（最顶，画在 ZZZ 之后）：圣诞帽 / 围巾 / 小花 / 灯笼。
+        """配件层（最顶，画在 ZZZ 之后）：头顶小花。
 
         锚定于体心 ``(cx, cy + pose.body_y)``，随呼吸上下浮动（与脸一致）。
-        阶段 E：全部配件补齐**墨线描边**（与主体 3.2 粗描边同风格、宽 2.4 的
-        次级层级），并各加一处高光/织物细节 —— 消除「无描边纯色贴片」的断裂感。
+        阶段 F：仅保留「小花」一个配件（围巾 / 头侧灯笼 / 圣诞帽已随主题精简移除）。
         """
 
         d = self._decor
@@ -606,42 +804,7 @@ class PetRenderer:
             main = QColor(d.accessory_color)
             accent = QColor(d.accessory_accent)
             painter.setPen(self._outline_accessory)
-            if d.accessory == "santa_hat":
-                # 歪戴圣诞帽：红色三角 + 白绒边 + 白绒球（头顶偏左），通体墨线描边
-                painter.setBrush(QBrush(main))
-                hat = QPolygonF([
-                    QPointF(cx - 20.0, cy - 30.0),
-                    QPointF(cx + 16.0, cy - 30.0),
-                    QPointF(cx - 6.0, cy - 58.0),
-                ])
-                painter.drawPolygon(hat)
-                painter.setBrush(QBrush(accent))
-                painter.drawEllipse(QPointF(cx - 2.0, cy - 29.0), 19.0, 5.5)
-                painter.drawEllipse(QPointF(cx - 6.0, cy - 58.0), 4.0, 4.0)
-                # 绒球高光点
-                painter.setPen(Qt.PenStyle.NoPen)
-                pom_hi = QColor(accent)
-                painter.setBrush(QBrush(pom_hi))
-                painter.drawEllipse(QPointF(cx - 7.4, cy - 59.4), 1.3, 1.3)
-            elif d.accessory == "scarf":
-                # 颈间围巾：横带 + 垂穗（身体下沿 y ≈ cy+30），墨线描边 + 织物条纹
-                painter.setBrush(QBrush(main))
-                painter.drawRoundedRect(QRectF(cx - 26.0, cy + 22.0, 52.0, 9.0), 4.5, 4.5)
-                painter.drawRoundedRect(QRectF(cx + 8.0, cy + 28.0, 10.0, 20.0), 4.0, 4.0)
-                # 织物条纹（accent 低透明横带，绕开描边内缘）
-                painter.setPen(Qt.PenStyle.NoPen)
-                stripe = QColor(accent)
-                stripe.setAlphaF(0.75)
-                painter.setBrush(QBrush(stripe))
-                painter.drawRoundedRect(QRectF(cx - 22.5, cy + 25.2, 45.0, 2.6), 1.3, 1.3)
-                # 垂穗（尾端三粒，accent 描边保留圆润）
-                painter.setBrush(QBrush(accent))
-                painter.setPen(self._outline_accessory)
-                for k in range(3):
-                    painter.drawEllipse(
-                        QPointF(cx + 12.0 + (k - 1) * 3.0, cy + 49.0), 1.4, 1.4,
-                    )
-            elif d.accessory == "flower":
+            if d.accessory == "flower":
                 # 头顶右侧五瓣小花 + 黄芯，通体墨线描边
                 fx, fy = cx + 24.0, cy - 26.0
                 painter.setBrush(QBrush(main))
@@ -653,29 +816,6 @@ class PetRenderer:
                     )
                 painter.setBrush(QBrush(accent))
                 painter.drawEllipse(QPointF(fx, fy), 2.2, 2.2)
-            elif d.accessory == "lantern":
-                # 头侧挂灯笼：细绳 + 椭圆灯体 + 金色灯盖/灯穗，灯体通体墨线描边
-                lx, ly_top = cx - 30.0, cy - 24.0
-                painter.setPen(QPen(QColor(C.COLORS["ink"]), 1.0))
-                painter.drawLine(QPointF(lx, ly_top - 8.0), QPointF(lx, ly_top))
-                painter.setPen(self._outline_accessory)
-                painter.setBrush(QBrush(main))
-                painter.drawEllipse(QPointF(lx, ly_top + 9.0), 6.5, 9.0)
-                painter.setBrush(QBrush(accent))
-                painter.drawRoundedRect(QRectF(lx - 3.5, ly_top - 1.5, 7.0, 3.0), 1.4, 1.4)
-                painter.drawRoundedRect(QRectF(lx - 3.5, ly_top + 16.5, 7.0, 3.0), 1.4, 1.4)
-                painter.drawEllipse(QPointF(lx, ly_top + 22.5), 1.5, 1.5)
-                # 灯体骨架竖纹（accent 低透明，单中线即可，避免花哨）
-                painter.setPen(QPen(accent, 1.0))
-                seam_top = ly_top + 3.0
-                seam_bottom = ly_top + 15.5
-                seam = QPainterPath()
-                seam.moveTo(lx, seam_top)
-                seam.quadTo(lx + 3.2, (seam_top + seam_bottom) / 2.0, lx, seam_bottom)
-                seam.moveTo(lx, seam_top)
-                seam.quadTo(lx - 3.2, (seam_top + seam_bottom) / 2.0, lx, seam_bottom)
-                painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.drawPath(seam)
         finally:
             painter.restore()
 
