@@ -2,7 +2,7 @@
 
 覆盖：
 
-- ``THEME_DECOR`` 结构：键集合 == 7 套皮肤；色值合法 ``#RRGGBB``；取值在白名单内；
+- ``THEME_DECOR`` 结构：键集合 == 6 套皮肤；色值合法 ``#RRGGBB``；取值在白名单内；
   ``default`` 全空（品牌基准形态不得被装饰污染）。
 - ``decor_for_theme``：未知名称回落 ``default`` 且不抛异常；各皮肤返回**各自**的装饰
   （字面量期望，防「全部回落 default」的假实现）。
@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 
 import pytest
 from PySide6.QtCore import QSize
@@ -98,11 +99,11 @@ def test_theme_decor_default_is_all_empty() -> None:
 
 
 def test_theme_decor_winter_literal_values() -> None:
-    """冬 = 雪花（移除围巾）（字面量全等，防静默漂移）。"""
+    """冬 = 远景雪山 + 雪花（移除围巾）（字面量全等，防静默漂移）。"""
 
     expected = C.ThemeDecor(
         particle="snow", particle_color="#F2F8FF", particle_count=10,
-        backdrop="none", backdrop_color="#FFFFFF",
+        backdrop="snow_mountain", backdrop_color="#B9CFE8",
         accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
     )
     assert C.THEME_DECOR["winter"] == expected
@@ -293,6 +294,22 @@ def test_paint_with_decor_differs_from_no_decor() -> None:
     renderer._decor = C.THEME_DECOR["default"]
     without_decor = _image_hash(_render(renderer, pose))
     assert with_decor != without_decor, "关掉装饰后图像未变 → 装饰没有被绘制"
+
+
+def test_paint_snow_mountain_backdrop_renders() -> None:
+    """冬·雪山布景真实上屏：仅关 ``backdrop``（雪花粒子等其余不变）→ 哈希必须变。"""
+
+    pose = PetModel.pose_for_expression(Expression.HAPPY)
+    renderer = PetRenderer()
+    renderer.set_theme("winter")
+    renderer.set_decor_phase(3.0)
+    with_mountain = _image_hash(_render(renderer, pose))
+
+    # 仅去掉布景（decor 其余字段原样保留）→ 雪山必须造成逐像素差异
+    bare = replace(C.THEME_DECOR["winter"], backdrop="none", backdrop_color="#FFFFFF")
+    renderer._decor = bare
+    without_mountain = _image_hash(_render(renderer, pose))
+    assert with_mountain != without_mountain, "去掉雪山布景后图像未变 → 雪山没有被绘制"
 
 
 def test_paint_decor_opaque_pixel_count_increases() -> None:

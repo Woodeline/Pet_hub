@@ -471,8 +471,9 @@ class PetRenderer:
             painter.restore()
 
     def _draw_decor_backdrop(self, painter: QPainter) -> None:
-        """布景层（最底）：春 = 垂柳（阶段 F 放大柳叶 + 风吹摆动）、
-        夏 = 沙滩远景（沙滩 / 遮阳棚 / 太阳光效）、春节 = 远景挂灯笼。
+        """布景层（最底）：春 = 垂柳（柳叶放大 + 风吹摆动）、
+        夏 = 沙滩远景（沙滩 / 遮阳棚 / 太阳光效）、春节 = 远景挂灯笼、
+        冬 = 远景雪山（双峰 + 远脊 + 山脚雪原）。
 
         三条自画布顶端垂下的柳枝用**二次贝塞尔曲线**表示（曲率连续），柳叶为
         沿枝伸展的**旋转大椭圆**（比阶段 E 放大约 1.8 倍，更醒目），整条枝与
@@ -488,6 +489,8 @@ class PetRenderer:
             self._draw_beach(painter, d)
         elif d.backdrop == "lantern_sky":
             self._draw_lantern_sky(painter, d)
+        elif d.backdrop == "snow_mountain":
+            self._draw_snow_mountain(painter, d)
 
     def _draw_willow(self, painter: QPainter, d: C.ThemeDecor) -> None:
         """春·垂柳：柳叶放大 + 风吹摆动（阶段 F）。"""
@@ -668,6 +671,77 @@ class PetRenderer:
                     painter.drawRoundedRect(
                         QRectF(col_x - 2.5, ly + 9.0, 5.0, 2.2), 1.0, 1.0
                     )
+        finally:
+            painter.restore()
+
+    def _draw_snow_mountain(self, painter: QPainter, d: C.ThemeDecor) -> None:
+        """冬·远景雪山（阶段 G 增量）：最远山脊 + 左主峰 + 右次峰 + 山脚雪原。
+
+        全部为**确定性静态几何**（无随机、无相位）——远景山脉不应运动，
+        动感由其上的雪花粒子层承担。三层纵深：
+        远脊（空气透视：更浅、更淡、无积雪）→ 双峰（山体 + 右侧暗面 + 锯齿雪线积雪盖）
+        → 雪原（压平的近白雪带，与猫的接地软影衔接成「坐在雪地上」）。
+
+        配色红线：判定带（x 50-74 × y 100-152）内所有落点颜色的 R 通道 < 232，
+        不得污染 ``test_hand_visibility`` 的前爪近白扫描。
+        """
+
+        painter.save()
+        try:
+            body = QColor(d.backdrop_color)
+            snow = QColor(C.DECOR_MOUNTAIN_SNOW)
+            haze = QColor(C.DECOR_MOUNTAIN_HAZE)
+            horizon = 146.0
+            painter.setPen(Qt.PenStyle.NoPen)
+
+            # ① 最远山脊（空气透视：更浅、更淡、无积雪细节），主峰后方探出
+            haze.setAlphaF(0.5)
+            painter.setBrush(QBrush(haze))
+            painter.drawPolygon(QPolygonF([
+                QPointF(56.0, horizon), QPointF(96.0, 96.0), QPointF(136.0, horizon),
+            ]))
+
+            # ② 左主峰：山体 + 右侧暗面（双面体积）+ 锯齿雪线积雪盖
+            body_alpha = QColor(body)
+            body_alpha.setAlphaF(0.85)
+            painter.setBrush(QBrush(body_alpha))
+            painter.drawPolygon(QPolygonF([
+                QPointF(-8.0, horizon), QPointF(30.0, 84.0), QPointF(68.0, horizon),
+            ]))
+            shade = QColor(body)
+            shade.setAlphaF(0.85)
+            painter.setBrush(QBrush(shade.darker(112)))
+            painter.drawPolygon(QPolygonF([
+                QPointF(30.0, 84.0), QPointF(68.0, horizon), QPointF(34.0, horizon),
+            ]))
+            snow_cap = QColor(snow)
+            snow_cap.setAlphaF(0.95)
+            painter.setBrush(QBrush(snow_cap))
+            painter.drawPolygon(QPolygonF([
+                QPointF(30.0, 84.0), QPointF(46.0, 110.0), QPointF(38.0, 104.0),
+                QPointF(30.0, 112.0), QPointF(22.0, 105.0), QPointF(14.0, 108.0),
+            ]))
+
+            # ③ 右次峰（更矮更远，积雪盖相应缩小）
+            painter.setBrush(QBrush(body_alpha))
+            painter.drawPolygon(QPolygonF([
+                QPointF(100.0, horizon), QPointF(128.0, 102.0), QPointF(156.0, horizon),
+            ]))
+            painter.setBrush(QBrush(QColor(shade.darker(112))))
+            painter.drawPolygon(QPolygonF([
+                QPointF(128.0, 102.0), QPointF(156.0, horizon), QPointF(131.0, horizon),
+            ]))
+            painter.setBrush(QBrush(snow_cap))
+            painter.drawPolygon(QPolygonF([
+                QPointF(128.0, 102.0), QPointF(138.0, 118.0), QPointF(132.0, 114.0),
+                QPointF(126.0, 119.0), QPointF(120.0, 115.0),
+            ]))
+
+            # ④ 山脚雪原：压平的近白雪带——与宠物接地软影衔接成「坐在雪地上」
+            field = QColor(C.DECOR_MOUNTAIN_SNOW)
+            field.setAlphaF(0.55)
+            painter.setBrush(QBrush(field))
+            painter.drawRoundedRect(QRectF(-4.0, horizon, 168.0, 40.0), 6.0, 6.0)
         finally:
             painter.restore()
 

@@ -195,6 +195,9 @@ DECOR_BEACH_AWNING: Final[str] = "#E4574F"  # 遮阳棚棚顶红（与灯笼主�
 DECOR_BEACH_POLE: Final[str] = "#8A6B4F"    # 遮阳棚立柱（暖棕）
 DECOR_SUN_GOLD: Final[str] = "#FFD166"      # 太阳 / 灯笼灯盖金（与烟花同色族）
 DECOR_MAPLE_VEIN: Final[str] = "#F6C453"    # 秋·枫叶黄色叶脉（红黄相间）
+DECOR_MOUNTAIN_BODY: Final[str] = "#B9CFE8"  # 冬·雪山山体（雾蓝；r<232 不入前爪近白判定带）
+DECOR_MOUNTAIN_SNOW: Final[str] = "#DCE9F5"  # 冬·雪山积雪 / 山脚雪原（近白雪，同样 r<232）
+DECOR_MOUNTAIN_HAZE: Final[str] = "#D2E0F0"  # 冬·最远山脊（空气透视：更浅更淡）
 
 # --------------------------------------------------------------------------- #
 # 4c. 主题皮肤渐变表（阶段 A）—— 四季自动换肤 + 节日手动
@@ -324,7 +327,7 @@ THEME_DECOR_PARTICLES: Final[frozenset[str]] = frozenset(
 )
 #: 布景元素白名单。
 THEME_DECOR_BACKDROPS: Final[frozenset[str]] = frozenset(
-    {"none", "willow", "beach", "lantern_sky"}
+    {"none", "willow", "beach", "lantern_sky", "snow_mountain"}
 )
 #: 随身配件白名单。
 THEME_DECOR_ACCESSORIES: Final[frozenset[str]] = frozenset(
@@ -353,10 +356,10 @@ THEME_DECOR: Final[dict[str, ThemeDecor]] = {
         backdrop="none", backdrop_color="#FFFFFF",
         accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
     ),
-    # 冬：飘落雪花（移除围巾）
+    # 冬：远景雪山（双峰 + 远脊 + 山脚雪原）+ 飘落雪花（移除围巾）
     "winter": ThemeDecor(
         particle="snow", particle_color="#F2F8FF", particle_count=10,
-        backdrop="none", backdrop_color="#FFFFFF",
+        backdrop="snow_mountain", backdrop_color="#B9CFE8",
         accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
     ),
     # 春节：远景挂灯笼 + 烟花绽放
@@ -936,6 +939,9 @@ __all__ = [
     "DECOR_BEACH_POLE",
     "DECOR_SUN_GOLD",
     "DECOR_MAPLE_VEIN",
+    "DECOR_MOUNTAIN_BODY",
+    "DECOR_MOUNTAIN_SNOW",
+    "DECOR_MOUNTAIN_HAZE",
     # 主题皮肤（阶段 A）
     "THEMES",
     "DEFAULT_THEME",
