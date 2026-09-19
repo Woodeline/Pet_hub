@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "desktop-pet"
-version = "0.5.0"
+version = "0.5.1"
 description = "大圣喵风格 Windows 桌面宠物（程序化矢量绘制，零外部素材）"
 readme = "README.md"
 requires-python = ">=3.13"
