@@ -40,7 +40,7 @@ from PySide6.QtGui import (
 from desktop_pet.core import constants as C
 from desktop_pet.core import motion
 from desktop_pet.core.pet_model import PetPose
-from desktop_pet.core.theme import glow_for_theme
+from desktop_pet.core.theme import decor_for_theme, glow_for_theme
 
 # --------------------------------------------------------------------------- #
 # 几何常量（逻辑画布 160×180）
@@ -213,6 +213,10 @@ class PetRenderer:
         self._stops: tuple[tuple[float, str], ...] = C.THEMES[C.DEFAULT_THEME]
         #: 当前皮肤名（供 ``glow_for_theme`` 派生光晕色；``set_theme`` 同步）。
         self._theme_name: str = C.DEFAULT_THEME
+        #: 当前皮肤的造型装饰描述（不可变；``default`` 全空 → 不画装饰，阶段 D）。
+        self._decor: C.ThemeDecor = C.THEME_DECOR[C.DEFAULT_THEME]
+        #: 装饰动画相位（秒；由 UI 层每帧经 :meth:`set_decor_phase` 注入，见其说明）。
+        self._decor_phase: float = 0.0
 
         self._outline = QPen(ink)
         self._outline.setWidthF(_STROKE_W)
@@ -269,11 +273,96 @@ class PetRenderer:
 
         self._stops = C.THEMES.get(name, C.THEMES[C.DEFAULT_THEME])
         self._theme_name = name if name in C.THEMES else C.DEFAULT_THEME
+        # 装饰描述与皮肤同步切换（未知皮肤回落 default 全空描述，不抛异常）
+        self._decor = decor_for_theme(self._theme_name)
 
     def theme_stops(self) -> tuple[tuple[float, str], ...]:
         """返回当前主题的渐变停靠点（供托盘图标等外部取色复用）。"""
 
         return self._stops
+
+    # ------------------------------------------------------------------ #
+    # 主题造型装饰（阶段 D：造型元素增强）
+    # ------------------------------------------------------------------ #
+    #: 粒子基础下落 / 上浮速度（px/s；实际速度 = 基础 + 确定性散列 * 6.0）。
+    _DECOR_BASE_SPEED: Final[float] = 8.0
+    #: 粒子横向摆动基础幅度（px；实际幅度 = 基础 + 确定性散列 * 3.0）。
+    _DECOR_SWAY_BASE: Final[float] = 3.0
+    #: 粒子尺寸基准（逻辑画布单位；实际尺寸 = 基准 + 确定性散列 * 0.6 → [0.9, 1.5]）。
+    _DECOR_SIZE_BASE: Final[float] = 0.9
+    #: 粒子纵向回绕缓冲：y 落域 = [-缓冲, 画布高 + 缓冲)，出画后从另一侧回绕。
+    _DECOR_WRAP_PAD: Final[float] = 12.0
+
+    @staticmethod
+    def has_decor_of(decor: C.ThemeDecor) -> bool:
+        """判断一份装饰描述是否含**任何**可见元素。"""
+
+        return not (
+            decor.particle == "none"
+            and decor.backdrop == "none"
+            and decor.accessory == "none"
+        )
+
+    def has_decor(self) -> bool:
+        """当前皮肤是否带可见装饰（``default`` 恒 False；供脏区收窄判断）。"""
+
+        return self.has_decor_of(self._decor)
+
+    def set_decor_phase(self, seconds: float) -> None:
+        """注入装饰动画相位（秒）。
+
+        粒子位置是 ``(decor, phase)`` 的**纯函数**：同相位必同坐标。UI 层每帧
+        注入单调递增的秒数即可驱动动画；测试固定相位即可确定性复现 —— **禁止**
+        在渲染路径里用运行期 ``random``（可复现性红线）。
+        """
+
+        self._decor_phase = float(seconds)
+
+    @staticmethod
+    def _decor_rand(index: int, salt: int) -> float:
+        """确定性伪随机 ∈ [0, 1)：经典 ``sin`` 散列（同 (index, salt) 必同值）。"""
+
+        v = math.sin(index * 127.1 + salt * 311.7) * 43758.5453
+        return v - math.floor(v)
+
+    def decor_particle_positions(
+        self, phase: float | None = None,
+    ) -> tuple[tuple[float, float, float], ...]:
+        """计算当前皮肤全部粒子的 ``[(x, y, size), …]``（逻辑画布坐标）。
+
+        位置是 ``(decor, phase)`` 的**纯函数**：基准位置由索引经确定性散列得出，
+        纵向按 ``phase * speed`` 匀速运动并在画布外回绕（落域
+        ``[-12, 192)``），横向叠加正弦摆动（落域 ``[-10, 170]``）。
+
+        Args:
+            phase: 显式相位（秒）；``None`` 时用内部 :meth:`set_decor_phase` 注入的相位。
+
+        Returns:
+            元组列表（``default`` / 无粒子皮肤返回空元组）。
+        """
+
+        d = self._decor
+        if d.particle == "none" or d.particle_count <= 0:
+            return ()
+        t = self._decor_phase if phase is None else float(phase)
+        span_x = _GEO_CANVAS_W - 4.0           # x 基准 ∈ [2, 158]，叠加摆动后仍不出 [-10, 170]
+        span_y = _GEO_CANVAS_H                 # y 基准 ∈ [0, 180)
+        wrap = self._DECOR_WRAP_PAD            # y 落域 = [-12, 192)
+        period = _GEO_CANVAS_H + 2.0 * wrap    # 纵向回绕周期
+        rising = d.particle == "bubble"        # 气泡上浮，其余（雪 / 花瓣 / 叶）下落
+        particles: list[tuple[float, float, float]] = []
+        for i in range(d.particle_count):
+            base_x = 2.0 + self._decor_rand(i, 1) * span_x
+            base_y = self._decor_rand(i, 2) * span_y
+            speed = self._DECOR_BASE_SPEED + self._decor_rand(i, 3) * 6.0
+            sway = self._DECOR_SWAY_BASE + self._decor_rand(i, 4) * 3.0
+            wfreq = 0.5 + self._decor_rand(i, 5) * 0.8
+            size = self._DECOR_SIZE_BASE + self._decor_rand(i, 6) * 0.6
+            drift = speed * t if rising else -speed * t
+            y = ((base_y + drift + wrap) % period + period) % period - wrap
+            x = base_x + sway * math.sin(wfreq * t + self._decor_rand(i, 7) * 6.283)
+            particles.append((x, y, size))
+        return tuple(particles)
 
     def paint(
         self,
@@ -297,6 +386,8 @@ class PetRenderer:
             painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
             painter.scale(scale, scale)
 
+            self._draw_decor_backdrop(painter)
+            self._draw_decor_particles(painter)
             self._draw_glow(painter, pose)
             self._draw_tail(painter, pose)
             self._draw_body(painter, pose)
@@ -305,6 +396,137 @@ class PetRenderer:
             self._draw_arms(painter, pose)
             self._draw_face(painter, pose)
             self._draw_zzz(painter, pose)
+            self._draw_decor_accessory(painter, pose)
+        finally:
+            painter.restore()
+
+    def _draw_decor_backdrop(self, painter: QPainter) -> None:
+        """布景层（最底）：春 = 画布顶端垂下的柳枝（阶段 D）。"""
+
+        d = self._decor
+        if d.backdrop == "none":
+            return
+        painter.save()
+        try:
+            color = QColor(d.backdrop_color)
+            branch_pen = QPen(color)
+            branch_pen.setWidthF(2.2)
+            branch_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(branch_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            # 三条自顶端垂下的弧线柳枝（横向错开，长短不一）
+            for i, (bx, drop, bend) in enumerate(((34.0, 52.0, 10.0), (80.0, 64.0, -8.0), (126.0, 48.0, 9.0))):
+                path_len = drop + self._decor_rand(i, 11) * 10.0
+                painter.drawLine(QPointF(bx, 0.0), QPointF(bx + bend, path_len * 0.55))
+                painter.drawLine(QPointF(bx + bend, path_len * 0.55), QPointF(bx + bend * 0.4, path_len))
+                # 柳枝上的小叶滴
+                leaf_pen = QPen(color)
+                leaf_pen.setWidthF(1.4)
+                painter.setPen(leaf_pen)
+                for k in range(4):
+                    ly = 10.0 + (path_len - 14.0) * (k + self._decor_rand(i * 4 + k, 12)) / 4.0
+                    lx = bx + bend * (ly / max(1.0, path_len))
+                    painter.drawLine(QPointF(lx, ly), QPointF(lx + 3.5, ly + 2.5))
+                painter.setPen(branch_pen)
+        finally:
+            painter.restore()
+
+    def _draw_decor_particles(self, painter: QPainter) -> None:
+        """粒子层：雪（圆）/ 花瓣（斜椭圆）/ 红叶（长斜椭圆）/ 气泡（圆环）。"""
+
+        d = self._decor
+        if d.particle == "none" or d.particle_count <= 0:
+            return
+        painter.save()
+        try:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(QColor(d.particle_color)))
+            for x, y, size in self.decor_particle_positions():
+                painter.save()
+                try:
+                    painter.translate(x, y)
+                    if d.particle == "snow":
+                        painter.drawEllipse(QPointF(0, 0), 1.6 * size, 1.6 * size)
+                    elif d.particle == "petal":
+                        painter.rotate(38.0 * math.sin(self._decor_phase * 0.9 + x))
+                        painter.drawEllipse(QPointF(0, 0), 2.4 * size, 1.3 * size)
+                    elif d.particle == "leaf":
+                        painter.rotate(52.0 * math.sin(self._decor_phase * 1.1 + y))
+                        painter.drawEllipse(QPointF(0, 0), 3.0 * size, 1.2 * size)
+                    elif d.particle == "bubble":
+                        painter.setBrush(Qt.BrushStyle.NoBrush)
+                        ring = QPen(QColor(d.particle_color))
+                        ring.setWidthF(1.1)
+                        painter.setPen(ring)
+                        painter.drawEllipse(QPointF(0, 0), 2.6 * size, 2.6 * size)
+                        painter.setPen(Qt.PenStyle.NoPen)
+                finally:
+                    painter.restore()
+        finally:
+            painter.restore()
+
+    def _draw_decor_accessory(self, painter: QPainter, pose: PetPose) -> None:
+        """配件层（最顶，画在 ZZZ 之后）：圣诞帽 / 围巾 / 小花 / 灯笼。
+
+        锚定于体心 ``(cx, cy + pose.body_y)``，随呼吸上下浮动（与脸一致）。
+        """
+
+        d = self._decor
+        if d.accessory == "none":
+            return
+        cx = _GEO_BODY_CX
+        cy = _GEO_BODY_CY + pose.body_y
+        painter.save()
+        try:
+            main = QColor(d.accessory_color)
+            accent = QColor(d.accessory_accent)
+            painter.setPen(Qt.PenStyle.NoPen)
+            if d.accessory == "santa_hat":
+                # 歪戴圣诞帽：红色三角 + 白绒边 + 白绒球（头顶偏左）
+                painter.setBrush(QBrush(main))
+                hat = QPolygonF([
+                    QPointF(cx - 20.0, cy - 30.0),
+                    QPointF(cx + 16.0, cy - 30.0),
+                    QPointF(cx - 6.0, cy - 58.0),
+                ])
+                painter.drawPolygon(hat)
+                painter.setBrush(QBrush(accent))
+                painter.drawEllipse(QPointF(cx - 2.0, cy - 29.0), 19.0, 5.5)
+                painter.drawEllipse(QPointF(cx - 6.0, cy - 58.0), 4.0, 4.0)
+            elif d.accessory == "scarf":
+                # 颈间围巾：横带 + 垂穗（身体下沿 y ≈ cy+30）
+                painter.setBrush(QBrush(main))
+                painter.drawRoundedRect(QRectF(cx - 26.0, cy + 22.0, 52.0, 9.0), 4.5, 4.5)
+                painter.drawRoundedRect(QRectF(cx + 8.0, cy + 28.0, 10.0, 20.0), 4.0, 4.0)
+                painter.setBrush(QBrush(accent))
+                for k in range(3):
+                    painter.drawEllipse(
+                        QPointF(cx + 12.0 + (k - 1) * 3.0, cy + 49.0), 1.4, 1.4,
+                    )
+            elif d.accessory == "flower":
+                # 头顶右侧五瓣小花 + 黄芯
+                fx, fy = cx + 24.0, cy - 26.0
+                painter.setBrush(QBrush(main))
+                for k in range(5):
+                    ang = math.radians(72.0 * k - 90.0)
+                    painter.drawEllipse(
+                        QPointF(fx + 4.2 * math.cos(ang), fy + 4.2 * math.sin(ang)),
+                        2.6, 2.6,
+                    )
+                painter.setBrush(QBrush(accent))
+                painter.drawEllipse(QPointF(fx, fy), 2.2, 2.2)
+            elif d.accessory == "lantern":
+                # 头侧挂灯笼：细绳 + 椭圆灯体 + 金色灯盖/灯穗
+                lx, ly_top = cx - 30.0, cy - 24.0
+                painter.setPen(QPen(QColor(C.COLORS["ink"]), 1.0))
+                painter.drawLine(QPointF(lx, ly_top - 8.0), QPointF(lx, ly_top))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QBrush(main))
+                painter.drawEllipse(QPointF(lx, ly_top + 9.0), 6.5, 9.0)
+                painter.setBrush(QBrush(accent))
+                painter.drawRect(QRectF(lx - 3.5, ly_top - 1.5, 7.0, 3.0))
+                painter.drawRect(QRectF(lx - 3.5, ly_top + 16.5, 7.0, 3.0))
+                painter.drawEllipse(QPointF(lx, ly_top + 22.5), 1.5, 1.5)
         finally:
             painter.restore()
 

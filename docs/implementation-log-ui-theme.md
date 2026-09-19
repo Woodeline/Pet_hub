@@ -329,3 +329,117 @@ commit：`1f18197 feat(palette): 光晕随主题派生 + PROP_OUTLINE 道具描�
 4. 游走与 A5 小动作共用 `REST_THRESHOLD_S`（120s）后的门控节奏，但**相互独立**（游走由窗口 `QTimer` 驱动，小动作由模型帧循环驱动）——两者理论上可同时发生，未做互斥。
 
 
+
+---
+
+## 阶段 D（2026-09-19）：主题造型装饰 + 位置漂移根因修复 + teardown 崩溃修复
+
+> 本阶段由主理人（齐活林）在工程师触发模型服务 429 限额后**亲手实现**；修复期间发生一次
+> 「变异还原误用 `git checkout --` 抹掉未提交改动」的工作区事故（详见本节末尾的事故记录），
+> 三处实现按测试规格重建后重做全部变异验证。
+
+### D1. 位置漂移根因修复（用户报告的 BUG）
+
+**根因**：`_on_wander_tick` 只门控了「拖拽 / 悬停 / 不可见」，**没有空闲时长门控**；而
+`start_wander()` 随 `start_animation()` 在应用启动即开表 —— 宠物一启动就每 `WANDER_TICK_MS`
+随机走一步、offset 无限累积到 ±20px 且**永不回到锚点**，表现为持续位置漂移。方案 §G3
+本要求「游走与 C1 共用同一空闲阈值 `REST_THRESHOLD_S`」，C1 实现时把这条门控丢了。
+
+**修法（复用同一空闲口径，v1.1 §G3）**：
+- `core/pet_model.py` 新增只读 `calm_seconds` 属性与 `is_quiet_for_wander()`（`_calm_seconds`
+  与偶发小动作的调度**同源**：门控不满足即清零）；
+- `ui/pet_window.py::_on_wander_tick` 在拖拽/悬停判定之后追加
+  `if not self._model.is_quiet_for_wander(): return`。
+
+**回归测试**（`tests/test_idle_wander.py` 新增 6 条）：calm=0 时游走零步进 / calm 达阈值后
+正常步进 / 拖拽门控语义不被 calm 门控**遮蔽**（`test_wander_paused_while_dragging` 改为在
+calm 充足前提下断言，防止它靠 calm=0 挡住而沦为空测）等。
+
+### D2. teardown 原生崩溃（QA 阻断项）根因修复
+
+QA 判定：分支 30/40 崩溃 vs 基线 0/80；消融证明必要文件 = `test_idle_wander.py`、主导对象 =
+窗口级动画定时器。主理人复现实验补充：空载 24/24 全绿、并发 20/20 全绿（复现率随时序窗口
+在 1.6%~75% 间漂移）——**概率性崩溃不可作为验收手段**。
+
+**确定性不变量守卫**（`tests/conftest.py` 新增 autouse fixture）：跟踪每个用例创建的全部
+`PetWindow`，用例结束时断言 `has_active_timers()` 为 False（先断言、再强制收尾 + processEvents），
+把「概率性 abort」换成「确定性 FAIL」。
+
+**该守卫立功**：重建过程中它确定性抓出一处此前只以 ~1.6% 概率出现的真实泄漏 ——
+**窗口 `show()` 时若光标落在窗内，Qt 异步投递的 `enterEvent` 可能在 `close()` 之后才到达**，
+`_hover_timer.start()` 在已关闭窗口上重新启动悬停定时器（离屏调试用例实测：close 后
+`wait(50)` 内 `_hover_timer` 由 False 变 True）。这正是 QA 环境崩溃的机制之一。
+
+**源侧加固**（`ui/pet_window.py`）：
+1. `enterEvent` 前置**可见性守卫**：不可见窗口的 enter 事件是伪事件，直接吞掉（根因修复）；
+2. `closeEvent` 停全部三个定时器 + **按绑定方法显式 `disconnect()`**（PySide6 6.9 对未连接
+   信号断开不抛异常只发 RuntimeWarning，「未连接」即目标状态，就地 `catch_warnings` 压掉；
+   `try/except RuntimeError` 保留作旧版兼容）；
+3. `_on_frame` 前置**可见性守卫**（不可见帧节拍不触碰渲染状态）；
+4. 新增只读 `has_active_timers()`（`_timer` / `_wander_timer` / `_hover_timer` 任一活跃即 True，
+   供 conftest 守卫探针）。
+
+### D3. 主题造型装饰（阶段 D 主体：造型元素增强）
+
+皮肤此前**只靠颜色**区分。本阶段为 7 套皮肤按设定叠加**造型装饰**，色值全部集中在 core
+（`ui/` 零裸 hex 红线不变），`default` 全空（品牌基准形态不被污染）：
+
+| 皮肤 | 粒子 | 布景 | 配件 |
+|---|---|---|---|
+| default | 无 | 无 | 无 |
+| spring（春） | 花瓣 ×6 飘落 | 垂柳枝（顶端三条弧线 + 叶滴） | 头顶五瓣小花 |
+| summer（夏） | 气泡 ×7 上浮（圆环） | — | — |
+| autumn（秋） | 红叶 ×8 飘落（斜椭圆） | — | — |
+| winter（冬） | 雪花 ×8 飘落（圆点） | — | 颈间围巾（横带+垂穗） |
+| spring_festival（春节） | — | — | 头侧小灯笼（绳+灯体+金盖+金穗） |
+| christmas（圣诞） | 雪花 ×10 飘落 | — | 歪戴圣诞帽（红三角+白绒边+白绒球） |
+
+**实现结构**：
+- `core/constants.py`：新增冻结数据类 `ThemeDecor` + `THEME_DECOR` 表 + 三个取值白名单
+  （`THEME_DECOR_PARTICLES/BACKDROPS/ACCESSORIES`），同步 `__all__`；
+- `core/theme.py`：纯函数 `decor_for_theme(name)`（未知名回落 default 全空，不抛异常）；
+- `ui/pet_renderer.py`：`set_theme` 同步取装饰；`decor_particle_positions(phase)` 是
+  `(decor, phase)` 的**纯函数**（确定性 `sin` 散列布点，禁运行期 random；纵向按
+  `phase*speed` 匀速 + 画布外回绕（落域 [-12,192)），横向正弦摆动（落域 [-10,170]））；
+  绘制分三层：布景（最底）→ 本体 → 配件（最顶，锚定体心随呼吸浮动）；
+  `has_decor()` 供脏区判断；
+- `ui/pet_window.py`：`pet_rect()` 对带装饰皮肤**回退整窗**（粒子会被收窄矩形裁掉）；
+  `_on_frame` 每帧注入 `set_decor_phase(time.monotonic())`；
+- `tools/render_theme_preview.py`：新增 `--decor-phase` 参数（证据图粒子位置可控）。
+
+**视觉证据**：`C:/Users/王佐成/WorkBuddy/软件开发/_ui-review-phase-d/d1-{7 皮肤}.png`
+（`--decor-phase 6.0`，主理人逐张目检：装饰与主题风格协调、default 干净、无裁切）。
+
+### D4. QA 覆盖缺口补齐（G1 / G2）
+
+- **G1**：`tests/test_themes.py` 新增 6 套非默认皮肤的**字面色值锚点**（spring/summer/autumn/
+  winter/spring_festival/christmas 各 5 停靠点全等，不引用常量自身）—— 此前只有 default 被
+  C3 锁定，其余 6 套色值静默漂移抓不到；
+- **G2**：`tests/test_idle_wander.py::test_posture_pose_deltas_literal_anchor` 锁定全部 6 个
+  `SurpriseKind` 姿态的最具辨识度增量通道（字面量）。
+
+### 阶段 D 变异验证（在**最终代码**上逐条破坏 → FAIL → `cp` 备份法还原 → diff 确认一致）
+
+| # | 破坏点 | 观察到 |
+|---|---|---|
+| M1 | spring 0.50 停靠色值 `#B2DE96→#B2DE97` | `test_themes` 字面量锚 **FAIL** |
+| M2 | `LOAF.head_y 3.0→3.5` | `test_posture_pose_deltas_literal_anchor` **FAIL** |
+| M3 | 游走空闲门控改 `if False` | `test_idle_wander` 漂移回归组 **FAIL** |
+| M4 | `_draw_decor_particles` 改 no-op | `test_paint_with_decor_differs_from_no_decor` 等 **FAIL** |
+| M5 | `pet_rect` 装饰整窗回退改 `if False` | `test_pet_rect_falls_back_to_full_window_with_decor` **FAIL** |
+| M6 | `enterEvent` 去掉可见性守卫 | `test_close_event_stops_wander_timer` teardown 守卫 **ERROR**（确定性命中） |
+
+### ⚠️ 工作区事故记录（本阶段流程教训）
+
+变异还原两次误用 `git checkout -- <file>`，把**未提交**的阶段 D 实现连同变异一起抹掉
+（第一次连带抹掉工程师中断前留在 `pet_window.py` 的未提交加固）。三处实现按**幸存的
+完整测试套件**（规格即测试）重建，并在最终代码上**重做全部 6 条变异**。规程修正：
+**对含未提交改动的文件做变异，还原只允许 `cp` 备份法**；同一文件的多处 Edit 必须**串行**
+（并行写同一文件发生过一次覆盖竞态）。
+
+### 阶段 D 收尾状态
+
+- 全量：**1106 passed / rc=0**（基线 1048 → +58：漂移回归 6 + 装饰 31 + G1 锚 7 + G2 锚 1 +
+  其余锚点/守卫相关）；工作区 `git status --porcelain` 仅含本阶段待提交文件；
+- commit：`fix(window)` 崩溃+漂移修复、`feat(theme)` 造型装饰（两笔，见 git log）；
+- 未 push / 未 merge / 版本号仍 0.5.0 / 仓库零图片素材。

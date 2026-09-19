@@ -159,4 +159,20 @@ def glow_for_theme(name: str, sleeping: bool) -> str:
     )
 
 
-__all__ = ["resolve_theme", "theme_stops", "glow_for_theme"]
+def decor_for_theme(name: str) -> C.ThemeDecor:
+    """取主题的造型装饰描述；未知名称回落 ``default``（防御性，**不抛异常**）。
+
+    ``default`` 的装饰描述为全空（无粒子 / 无布景 / 无配件），因此**任何**非法输入
+    都会安全退化成「不画装饰」，与 ``theme_stops`` 的回落策略一致。
+
+    Args:
+        name: 主题名（可为任意值）。
+
+    Returns:
+        :class:`~desktop_pet.core.constants.ThemeDecor`（不可变）。
+    """
+
+    return C.THEME_DECOR.get(name, C.THEME_DECOR[C.DEFAULT_THEME])
+
+
+__all__ = ["resolve_theme", "theme_stops", "glow_for_theme", "decor_for_theme"]

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
 from typing import Final
 
@@ -285,6 +286,92 @@ TRAY_MENU_THEME: Final[str] = "主题"
 
 #: 主题重估间隔（毫秒）：每日一次（配合 app 层跨日检测，跨月零点自动换肤）。
 THEME_RECHECK_MS: Final[int] = 24 * 60 * 60 * 1000
+
+# --------------------------------------------------------------------------- #
+# 4a-2. 主题造型装饰（阶段 D：造型元素增强）
+# --------------------------------------------------------------------------- #
+# 说明：皮肤此前**只靠颜色**区分（THEMES 渐变表）；本表为每套皮肤叠加与设定协调的
+# **造型装饰**（粒子 / 布景 / 配件），全部色值集中在 core（ui/ 层零裸 hex 红线不变）。
+# ``default`` 全空：品牌基准形态不被装饰污染；``ui`` 侧拿到的描述是**不可变**数据类。
+
+
+@dataclass(frozen=True)
+class ThemeDecor:
+    """一套皮肤的造型装饰描述（不可变；未知皮肤回落 ``default`` 全空描述）。
+
+    Attributes:
+        particle: 粒子形状（``THEME_DECOR_PARTICLES`` 白名单成员）。
+        particle_color: 粒子色（``#RRGGBB`` 大写）。
+        particle_count: 粒子数量（0..16；``particle == "none"`` 时必须为 0）。
+        backdrop: 布景元素（``THEME_DECOR_BACKDROPS`` 白名单成员）。
+        backdrop_color: 布景色（``#RRGGBB`` 大写）。
+        accessory: 随身配件（``THEME_DECOR_ACCESSORIES`` 白名单成员）。
+        accessory_color: 配件主色（``#RRGGBB`` 大写）。
+        accessory_accent: 配件点缀色（``#RRGGBB`` 大写）。
+    """
+
+    particle: str = "none"
+    particle_color: str = "#FFFFFF"
+    particle_count: int = 0
+    backdrop: str = "none"
+    backdrop_color: str = "#FFFFFF"
+    accessory: str = "none"
+    accessory_color: str = "#FFFFFF"
+    accessory_accent: str = "#FFFFFF"
+
+
+#: 粒子形状白名单（数据完整性守卫用）。
+THEME_DECOR_PARTICLES: Final[frozenset[str]] = frozenset(
+    {"none", "snow", "petal", "leaf", "bubble"}
+)
+#: 布景元素白名单。
+THEME_DECOR_BACKDROPS: Final[frozenset[str]] = frozenset({"none", "willow"})
+#: 随身配件白名单。
+THEME_DECOR_ACCESSORIES: Final[frozenset[str]] = frozenset(
+    {"none", "flower", "scarf", "lantern", "santa_hat"}
+)
+
+#: 皮肤 → 造型装饰表（键集合与 :data:`THEMES` 一致；``default`` 全空）。
+THEME_DECOR: Final[dict[str, ThemeDecor]] = {
+    # 品牌基准形态：不画任何装饰
+    "default": ThemeDecor(),
+    # 春：垂柳布景 + 飘落花瓣 + 头顶小花
+    "spring": ThemeDecor(
+        particle="petal", particle_color="#FFC9DA", particle_count=6,
+        backdrop="willow", backdrop_color="#8FCB79",
+        accessory="flower", accessory_color="#FF9EC4", accessory_accent="#FFF3B0",
+    ),
+    # 夏：缓缓上浮的清凉气泡
+    "summer": ThemeDecor(
+        particle="bubble", particle_color="#CFEAF8", particle_count=7,
+        backdrop="none", backdrop_color="#FFFFFF",
+        accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
+    ),
+    # 秋：飘落红叶
+    "autumn": ThemeDecor(
+        particle="leaf", particle_color="#E8A25A", particle_count=8,
+        backdrop="none", backdrop_color="#FFFFFF",
+        accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
+    ),
+    # 冬：雪花 + 颈间围巾
+    "winter": ThemeDecor(
+        particle="snow", particle_color="#F2F8FF", particle_count=8,
+        backdrop="none", backdrop_color="#FFFFFF",
+        accessory="scarf", accessory_color="#7FA8E0", accessory_accent="#FFFFFF",
+    ),
+    # 春节：头侧挂小灯笼
+    "spring_festival": ThemeDecor(
+        particle="none", particle_color="#FFFFFF", particle_count=0,
+        backdrop="none", backdrop_color="#FFFFFF",
+        accessory="lantern", accessory_color="#E4574F", accessory_accent="#FFD166",
+    ),
+    # 圣诞：雪花 + 圣诞帽
+    "christmas": ThemeDecor(
+        particle="snow", particle_color="#F2F8FF", particle_count=10,
+        backdrop="none", backdrop_color="#FFFFFF",
+        accessory="santa_hat", accessory_color="#E4574F", accessory_accent="#FFFFFF",
+    ),
+}
 
 # --------------------------------------------------------------------------- #
 # 4b. Design Token（UI 视觉升级 P0）—— 语义色 / 间距 / 字号 / 圆角
@@ -857,6 +944,12 @@ __all__ = [
     "THEME_ALLOWED",
     "TRAY_MENU_THEME",
     "THEME_RECHECK_MS",
+    # 主题造型装饰（阶段 D）
+    "ThemeDecor",
+    "THEME_DECOR",
+    "THEME_DECOR_PARTICLES",
+    "THEME_DECOR_BACKDROPS",
+    "THEME_DECOR_ACCESSORIES",
     # Design Token（UI 视觉升级 P0）
     "SEMANTIC_COLORS",
     "SPACING",

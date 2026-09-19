@@ -250,6 +250,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--outdir", required=True, help="输出目录（建议在仓库外）")
     parser.add_argument("--stage", required=True, help="文件名前缀，如 b1-before / b1-desat5")
     parser.add_argument("--scale", type=float, default=0.8, help="渲染缩放（默认 0.8）")
+    parser.add_argument(
+        "--decor-phase", type=float, default=0.0,
+        help="装饰动画相位（秒）；粒子位置是该相位的纯函数（阶段 D 证据用）",
+    )
     args = parser.parse_args(argv)
 
     outdir = Path(args.outdir).expanduser()
@@ -261,6 +265,7 @@ def main(argv: list[str] | None = None) -> int:
     # 字体就绪：离屏下先确保中文字体族可用（打印诊断），再渲染任何含中文的帧。
     ensure_cjk_font()
     renderer = PetRenderer()
+    renderer.set_decor_phase(args.decor_phase)
     if args.stage == MICRO_STAGE:
         written = micro_series(renderer, outdir, args.scale)
     elif args.stage == IDLE_STAGE:

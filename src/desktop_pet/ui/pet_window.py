@@ -208,6 +208,9 @@ class PetWindow(QWidget):
         # 光晕铺满整窗的状态（睡觉 / 兴奋）无法收窄 → 回退整窗矩形，避免裁掉光晕。
         if pose.glow_alpha > PetRenderer.GLOW_ALPHA_EPSILON:
             return self.rect()
+        # 主题装饰（粒子 / 布景）铺满整窗 → 同样无法收窄（阶段 D）。
+        if self._renderer.has_decor():
+            return self.rect()
         bounds = PetRenderer.body_bounds(pose, self._scale)
         # 与窗口求交，确保任何情况下都落在窗口内（防御缩放假值/边界误差）。
         return bounds.intersected(self.rect())
@@ -522,6 +525,8 @@ class PetWindow(QWidget):
             return
         self._update_tail_evade()
         self._update_gaze()
+        # 装饰动画相位 = 单调时钟（秒）；粒子位置是相位的纯函数（阶段 D）。
+        self._renderer.set_decor_phase(time.monotonic())
         self.frame_tick.emit(time.monotonic())
 
 
