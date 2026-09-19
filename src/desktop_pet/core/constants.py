@@ -194,7 +194,8 @@ PROP_OUTLINE: Final[str] = "#4A4A4A"
 DECOR_BEACH_AWNING: Final[str] = "#E4574F"  # 遮阳棚棚顶红（与灯笼主红同族）
 DECOR_BEACH_POLE: Final[str] = "#8A6B4F"    # 遮阳棚立柱（暖棕）
 DECOR_SUN_GOLD: Final[str] = "#FFD166"      # 太阳 / 灯笼灯盖金（与烟花同色族）
-DECOR_MAPLE_VEIN: Final[str] = "#F6C453"    # 秋·枫叶黄色叶脉（红黄相间）
+DECOR_MAPLE_VEIN: Final[str] = "#F6C453"    # 秋·枫叶黄色叶脉 / 金色叶片（红黄相间）
+DECOR_MAPLE_ORANGE: Final[str] = "#E8973A"  # 秋·枫叶橙色叶片（红/橙/金三色逐叶散列）
 DECOR_MOUNTAIN_BODY: Final[str] = "#B9CFE8"  # 冬·雪山山体（雾蓝；r<232 不入前爪近白判定带）
 DECOR_MOUNTAIN_SNOW: Final[str] = "#DCE9F5"  # 冬·雪山积雪 / 山脚雪原（近白雪，同样 r<232）
 DECOR_MOUNTAIN_HAZE: Final[str] = "#D2E0F0"  # 冬·最远山脊（空气透视：更浅更淡）
@@ -233,12 +234,13 @@ THEMES: Final[dict[str, tuple[tuple[float, str], ...]]] = {
         (1.00, "#4A9DC6"),
     ),
     # 秋：暖米 → 枫橙
+    # 秋：暖金浅米 → 锈红（阶段 G 加深中后段，秋意更浓、与枫叶粒子同族）
     "autumn": (
         (0.00, "#FBE7CC"),
-        (0.25, "#F5CE9E"),
-        (0.50, "#EDB270"),
-        (0.75, "#DE9349"),
-        (1.00, "#C4762E"),
+        (0.25, "#F6CB92"),
+        (0.50, "#EDA05C"),
+        (0.75, "#D97E36"),
+        (1.00, "#B85C1E"),
     ),
     # 冬：雪青白 → 冷靛蓝
     "winter": (
@@ -939,6 +941,7 @@ __all__ = [
     "DECOR_BEACH_POLE",
     "DECOR_SUN_GOLD",
     "DECOR_MAPLE_VEIN",
+    "DECOR_MAPLE_ORANGE",
     "DECOR_MOUNTAIN_BODY",
     "DECOR_MOUNTAIN_SNOW",
     "DECOR_MOUNTAIN_HAZE",

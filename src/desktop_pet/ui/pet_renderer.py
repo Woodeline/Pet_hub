@@ -390,7 +390,9 @@ class PetRenderer:
             sway = self._DECOR_SWAY_BASE + self._decor_rand(i, 4) * 3.0
             wfreq = 0.5 + self._decor_rand(i, 5) * 0.8
             size = self._DECOR_SIZE_BASE + self._decor_rand(i, 6) * 0.6
-            drift = speed * t if rising else -speed * t
+            # 下落 = y 随时间**增大**（屏幕坐标向下为正）：自顶端飘入、底端回绕。
+            # 阶段 F 曾把符号写反导致所有粒子「向上飘」，阶段 G 修正。
+            drift = -speed * t if rising else speed * t
             y = ((base_y + drift + wrap) % period + period) % period - wrap
             x = base_x + sway * math.sin(wfreq * t + self._decor_rand(i, 7) * 6.283)
             particles.append((x, y, size))
@@ -782,24 +784,54 @@ class PetRenderer:
                         painter.setBrush(QBrush(color))
                         painter.drawEllipse(QPointF(0, 0), 2.4 * size, 1.3 * size)
                     elif d.particle == "leaf":
-                        # 红黄相间的掌形大枫叶（阶段 F）：红色主体 + 黄色叶脉高光，
-                        # 尺寸比阶段 E 的细长椭圆放大约 1.6 倍，旋转飘落更醒目。
-                        painter.rotate(52.0 * math.sin(self._decor_phase * 1.1 + y))
-                        leaf_red = QColor(color)
-                        leaf_red.setAlphaF(alpha)
-                        leaf_yellow = QColor(C.DECOR_MAPLE_VEIN)
-                        leaf_yellow.setAlphaF(alpha)
-                        # 五裂掌形：中心椭圆 + 左右各两片外展小椭圆（近似枫叶轮廓）
-                        painter.setBrush(QBrush(leaf_red))
-                        painter.drawEllipse(QPointF(0.0, 0.0), 5.0 * size, 2.4 * size)
-                        for ang in (-62.0, 62.0):
-                            for dist in (1.0, 1.8):
-                                px = dist * 3.4 * size * math.sin(math.radians(ang))
-                                py = -dist * 3.0 * size * math.cos(math.radians(ang))
-                                painter.drawEllipse(QPointF(px, py), 2.1 * size, 1.4 * size)
-                        # 黄色叶脉（中心一道亮脉，红黄相间观感）
-                        painter.setBrush(QBrush(leaf_yellow))
-                        painter.drawEllipse(QPointF(0.0, -0.6 * size), 4.0 * size, 0.9 * size)
+                        # 五裂掌形真枫叶（阶段 G 重画）：单一多边形勾出**尖裂片 +
+                        # 深缺刻**轮廓（对照真实红枫叶），红/橙/金三色逐叶散列
+                        # 变化 + 黄色叶脉 + 深色叶柄，下落时叠加双正弦翻滚。
+                        rot = (
+                            38.0 * math.sin(self._decor_phase * 1.1 + y)
+                            + 24.0 * math.sin(self._decor_phase * 0.7 + x)
+                        )
+                        painter.rotate(rot)
+                        tone = self._decor_rand(idx, 9)
+                        if tone < 0.34:
+                            leaf_main = QColor(color)            # 红（装饰表配置基色）
+                        elif tone < 0.67:
+                            leaf_main = QColor(C.DECOR_MAPLE_ORANGE)  # 橙
+                        else:
+                            leaf_main = QColor(C.DECOR_MAPLE_VEIN)    # 金
+                        leaf_main.setAlphaF(alpha)
+                        unit = (
+                            (0.0, -5.0), (1.1, -3.6), (0.7, -2.9),
+                            (2.6, -3.3), (2.0, -1.9), (3.6, -2.1),
+                            (2.7, -0.7), (3.1, 0.8), (1.5, 0.5),
+                            (1.1, 1.7), (0.4, 1.1), (0.0, 2.0),
+                            (-0.4, 1.1), (-1.1, 1.7), (-1.5, 0.5),
+                            (-3.1, 0.8), (-2.7, -0.7), (-3.6, -2.1),
+                            (-2.0, -1.9), (-2.6, -3.3), (-0.7, -2.9),
+                            (-1.1, -3.6),
+                        )
+                        painter.setPen(Qt.PenStyle.NoPen)
+                        painter.setBrush(QBrush(leaf_main))
+                        painter.drawPolygon(QPolygonF([
+                            QPointF(px * size, py * size) for px, py in unit
+                        ]))
+                        # 黄色叶脉：一主脉 + 两对侧脉（细线，红黄相间观感）
+                        vein = QPen(QColor(C.DECOR_MAPLE_VEIN))
+                        vein.setWidthF(0.7)
+                        vein_color = QColor(C.DECOR_MAPLE_VEIN)
+                        vein_color.setAlphaF(alpha * 0.85)
+                        vein.setColor(vein_color)
+                        painter.setPen(vein)
+                        painter.drawLine(QPointF(0.0, 1.8 * size), QPointF(0.0, -4.2 * size))
+                        painter.drawLine(QPointF(0.0, 0.4 * size), QPointF(2.3 * size, -1.7 * size))
+                        painter.drawLine(QPointF(0.0, 0.4 * size), QPointF(-2.3 * size, -1.7 * size))
+                        # 叶柄（深色调细线，从叶底伸出）
+                        stem_color = QColor(leaf_main.darker(135))
+                        stem_color.setAlphaF(alpha)
+                        stem = QPen(stem_color)
+                        stem.setWidthF(0.9)
+                        painter.setPen(stem)
+                        painter.drawLine(QPointF(0.0, 2.0 * size), QPointF(0.0, 3.4 * size))
                     elif d.particle == "firework":
                         self._draw_firework(painter, idx, x, y, size, color, alpha)
                 finally:
