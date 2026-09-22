@@ -3,7 +3,8 @@
 - ``core/`` 零 Qt/GUI 依赖（架构 §1.2 硬性要求）。
 - 依赖方向单向：``core`` 不 import ``ui``/``app``；``ui`` 不 import ``app``。
 - ``src/`` 下无 ``print(``（统一 logging）。
-- 无任何图片素材文件（零外部素材承诺）。
+- 无任何入库图片素材（零外部素材承诺；``skins/`` 为用户本地皮肤包投放区，
+  已 gitignore、仅个人自用，不计入仓库素材）。
 - ``constants.py`` 关键阈值与 PRD 一致（防实现与需求漂移）。
 """
 
@@ -98,6 +99,7 @@ def test_core_imports_without_loading_qt(project_root: Path) -> None:
         "import desktop_pet.core.mastered_store\n"
         "import desktop_pet.core.daily_log_store\n"
         "import desktop_pet.core.weighted_picker\n"
+        "import desktop_pet.core.skin_pack\n"
         "loaded = [m for m in sys.modules if m.startswith('PySide6')]\n"
         "assert not loaded, 'core 导入过程加载了 Qt: %r' % loaded\n"
         "print('CORE_IS_QT_FREE')\n"
@@ -193,6 +195,8 @@ def test_no_image_assets(project_root: Path) -> None:
         and p.suffix.lower() in _IMAGE_SUFFIXES
         and ".venv" not in p.parts
         and "__pycache__" not in p.parts
+        # skins/ 为用户本地皮肤包（gitignore，含第三方版权素材），不属于仓库素材
+        and "skins" not in p.parts
     ]
     assert not offenders, f"发现图片素材（违背零外部素材承诺）：{offenders}"
 
