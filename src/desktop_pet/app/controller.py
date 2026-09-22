@@ -50,6 +50,7 @@ from desktop_pet.ui.log_window import LogWindow
 from desktop_pet.ui.motion_ui import show_window_animated
 from desktop_pet.ui.pet_renderer import PetRenderer
 from desktop_pet.ui.pet_window import PetWindow
+from desktop_pet.ui.skin_renderer import build_skin_renderer
 from desktop_pet.ui.tray import TrayController
 from desktop_pet.ui.vocab_window import VocabWindow
 from desktop_pet.ui.word_detail_window import WordDetailWindow
@@ -86,7 +87,11 @@ class PetAppController(QObject):
         # 核心逻辑组件
         self._model: PetModel = PetModel()
         self._renderer: PetRenderer = PetRenderer()
-        self._window: PetWindow = PetWindow(self._model, self._renderer, self._cfg.scale)
+        # 皮肤包帧图渲染通道（Phase 2）：加载失败或无 skins/ 时回落矢量渲染。
+        self._skin_renderer = build_skin_renderer()
+        self._window: PetWindow = PetWindow(
+            self._model, self._renderer, self._cfg.scale, self._skin_renderer
+        )
         self._bubble: BubbleWindow = BubbleWindow()
         self._icon = PetRenderer.build_tray_icon()
         self._tray: TrayController = TrayController(self._icon, self._cfg)

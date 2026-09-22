@@ -35,6 +35,7 @@ from desktop_pet.core import motion
 from desktop_pet.core.constants import Gesture
 from desktop_pet.core.pet_model import PetModel
 from desktop_pet.ui.pet_renderer import PetRenderer
+from desktop_pet.ui.skin_renderer import SkinPackRenderer
 
 logger = logging.getLogger(__name__)
 
@@ -51,13 +52,21 @@ class PetWindow(QWidget):
     #: 帧循环节拍：携带当前时刻（秒）。供 Controller 驱动状态机/模型推进
     frame_tick = Signal(float)
 
-    def __init__(self, model: PetModel, renderer: PetRenderer, scale: float) -> None:
+    def __init__(
+        self,
+        model: PetModel,
+        renderer: PetRenderer,
+        scale: float,
+        skin_renderer: SkinPackRenderer | None = None,
+    ) -> None:
         """构造宠物窗口。
 
         Args:
             model: 姿态模型。
             renderer: 矢量渲染器。
             scale: 初始缩放档（0.8 / 1.0 / 1.2）。
+            skin_renderer: 皮肤包帧图渲染器（可选）。为 ``None`` 或未激活时
+                走矢量渲染；激活时 :meth:`paintEvent` 改走皮肤包帧图。
         """
 
         super().__init__()
@@ -73,6 +82,7 @@ class PetWindow(QWidget):
 
         self._model: PetModel = model
         self._renderer: PetRenderer = renderer
+        self._skin_renderer: SkinPackRenderer | None = skin_renderer
         self._scale: float = float(scale)
         self._fps: int = C.FPS_IDLE
 
@@ -205,6 +215,9 @@ class PetWindow(QWidget):
         """
 
         pose = self._model.pose()
+        # 皮肤包帧图：帧图内容不可预测（可能铺满画布），无法收窄 → 回退整窗。
+        if self._skin_renderer is not None and self._skin_renderer.active:
+            return self.rect()
         # 光晕铺满整窗的状态（睡觉 / 兴奋）无法收窄 → 回退整窗矩形，避免裁掉光晕。
         if pose.glow_alpha > PetRenderer.GLOW_ALPHA_EPSILON:
             return self.rect()
@@ -224,17 +237,37 @@ class PetWindow(QWidget):
     # 绘制
     # ------------------------------------------------------------------ #
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
-        """绘制一帧矢量猫咪。"""
+        """绘制一帧：启用皮肤包时走帧图，否则走矢量团子猫。"""
 
         painter = QPainter(self)
         try:
-            self._renderer.paint(painter, self._model.pose(), self._scale, self.size())
+            if self._skin_renderer is not None and self._skin_renderer.active:
+                slot = self._current_skin_slot()
+                self._skin_renderer.paint(
+                    painter, slot, time.monotonic(), self._scale
+                )
+            else:
+                self._renderer.paint(
+                    painter, self._model.pose(), self._scale, self.size()
+                )
         finally:
             painter.end()
 
-    # ------------------------------------------------------------------ #
-    # 鼠标事件
-    # ------------------------------------------------------------------ #
+    def _current_skin_slot(self) -> str:
+        """把当前宠物状态映射为皮肤包槽位（default/drag/fall/patpat）。
+
+        优先级：拖拽 > 悬停抚摸 > 默认。映射出的槽位若皮肤包未定义动作，
+        由 :class:`SkinPackRenderer` 内部回落（``action_for`` 返回 None → 不画，
+        调用方再回落 ``default``）。
+        """
+
+        if self._model.is_dragging():
+            if self._skin_renderer is not None and self._skin_renderer.has_action("drag"):
+                return "drag"
+        if self._hover_active:
+            if self._skin_renderer is not None and self._skin_renderer.has_action("patpat"):
+                return "patpat"
+        return "default"
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         """按下：记录拖拽原点（左键）。"""
 

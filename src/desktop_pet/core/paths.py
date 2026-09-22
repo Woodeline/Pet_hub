@@ -58,4 +58,25 @@ def word_details_path() -> Path:
     return package_data_dir() / C.WORD_DETAILS_FILE_NAME
 
 
-__all__ = ["is_frozen", "package_data_dir", "word_bank_path", "word_details_path"]
+def skins_dir() -> Path:
+    """返回用户自装皮肤包根目录（``skins/``，本地投放、不入库）。
+
+    - 冻结环境：``Path(sys.executable).parent / "skins"``（exe 同目录，便于用户投放）。
+    - 源码环境：``<repo>/skins``（``__file__`` 上溯三级到仓库根）。
+
+    该目录已被 ``.gitignore`` 排除（第三方素材仅限本地自用，绝不入库），
+    因此本函数**始终返回意图路径**，即使目录尚不存在也不抛异常。
+    """
+
+    if is_frozen():
+        return Path(sys.executable).resolve().parent / "skins"
+    return Path(__file__).resolve().parent.parent.parent / "skins"
+
+
+__all__ = [
+    "is_frozen",
+    "package_data_dir",
+    "word_bank_path",
+    "word_details_path",
+    "skins_dir",
+]
