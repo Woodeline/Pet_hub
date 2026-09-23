@@ -557,7 +557,7 @@ class PetAppController(QObject):
         if not self._today_str:
             self._today_str = self._local_date_str()
 
-        # 停止判定：达到每日上限 或 当日已展示词全部掌握 → 一次性通知后今日不再弹
+        # 停止判定：达到每日上限 → 一次性通知后今日不再弹
         # 仅自动路径受限；手动「立即显示」传 ignore_daily_limit=True 可突破（用户决策）
         if not ignore_daily_limit and self._jp_stop_for_today():
             if not self._today_done_notified:
@@ -752,13 +752,17 @@ class PetAppController(QObject):
         return datetime.now().strftime("%Y-%m-%d")
 
     def _jp_stop_for_today(self) -> bool:
-        """当日停止判定：达到每日上限，或当日已展示词已全部掌握。"""
+        """当日停止判定：仅达到每日上限时停止。
+
+        不再用 ``all_mastered``（「当日已展示词全部点了掌握」）作为早停条件——
+        那会让用户对第一个展示词点一次「记住了」就误判为「全部掌握」、当天后续
+        单词全部停摆（跨天才恢复）。「当前等级词库已全部掌握」这一语义已由
+        :meth:`_show_word_bubble` 中 :meth:`WeightedWordPicker.pick` 返回 ``None``
+        的分支正确兜底，无需在此重复判定。
+        """
 
         today = self._today_str or self._local_date_str()
-        return (
-            self._daily_log.count_for(today) >= self._cfg.jp_daily_limit
-            or self._daily_log.all_mastered(today)
-        )
+        return self._daily_log.count_for(today) >= self._cfg.jp_daily_limit
 
     def _dispose_word(self, status: str, now: float) -> None:
         """单飞处置当前展示词（三态互斥：一次展示恰好落一种终态）。

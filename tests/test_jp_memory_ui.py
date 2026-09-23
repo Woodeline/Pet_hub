@@ -287,10 +287,16 @@ def test_controller_daily_limit_stops(controller: PetAppController) -> None:
     assert controller._current_word is None  # 达上限不再展示
 
 
-def test_controller_all_mastered_stops_early(controller: PetAppController) -> None:
+def test_controller_all_mastered_does_not_stop_early(controller: PetAppController) -> None:
+    """当日已展示词全部点了掌握，也不应早停——「全部掌握」只由抽取空池兜底判断。
+
+    回归：曾因 `_jp_stop_for_today` 混入 `all_mastered` 判定，导致点一次「记住了」
+    就 count==mastered、当天后续单词全部停摆（跨天才恢复）。
+    """
+
     controller._daily_log.add_entry("2025-01-01", _log_entry(1, C.DAILY_LOG_STATUS_MASTERED))
     controller._daily_log.add_entry("2025-01-01", _log_entry(2, C.DAILY_LOG_STATUS_MASTERED))
-    assert controller._jp_stop_for_today() is True
+    assert controller._jp_stop_for_today() is False
 
 
 def test_controller_cross_day_resets(controller: PetAppController, monkeypatch) -> None:

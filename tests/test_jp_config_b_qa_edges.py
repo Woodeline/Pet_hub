@@ -170,13 +170,18 @@ def test_show_now_blocked_by_limit_notifies(controller: PetAppController) -> Non
     assert controller._today_done_notified is True  # 已给「今日完成」通知
 
 
-def test_show_now_blocked_by_all_mastered_notifies(controller: PetAppController) -> None:
+def test_show_now_not_blocked_by_all_mastered(controller: PetAppController) -> None:
+    """当日已展示词全部点了掌握，也不应拦截「立即显示」——仅每日上限才是硬停止。
+
+    回归：曾因 `_jp_stop_for_today` 混入 `all_mastered`，点一次「记住了」就误停当天。
+    """
+
     controller._daily_log.add_entry("2025-01-01", _log_entry(1, C.DAILY_LOG_STATUS_MASTERED))
     controller._daily_log.add_entry("2025-01-01", _log_entry(2, C.DAILY_LOG_STATUS_MASTERED))
     controller._today_done_notified = False
     controller._on_jp_show_now()
-    assert controller._current_word is None
-    assert controller._today_done_notified is True
+    assert controller._current_word is not None
+    assert controller._today_done_notified is False
 
 
 def test_show_now_dispose_then_hit_limit_no_new_word(controller: PetAppController) -> None:
