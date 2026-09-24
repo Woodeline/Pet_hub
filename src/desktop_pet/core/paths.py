@@ -70,7 +70,7 @@ def skins_dir() -> Path:
 
     if is_frozen():
         return Path(sys.executable).resolve().parent / "skins"
-    return Path(__file__).resolve().parent.parent.parent / "skins"
+    return Path(__file__).resolve().parent.parent.parent.parent / "skins"
 
 
 __all__ = [

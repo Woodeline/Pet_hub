@@ -67,6 +67,26 @@ def isolated_appdata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture(autouse=True)
+def isolated_skins_dir(
+    tmp_path_factory, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    """把 ``skins_dir()`` 重定向到空的临时目录，隔离用户自装皮肤包。
+
+    本机 ``skins/`` 可能装有第三方皮肤素材（如 DyberPet 原神 MOD），一旦
+    :class:`PetAppController` 装配时经 ``build_skin_renderer`` 加载，会把
+    数十帧 ``QPixmap`` 常驻内存，推高 FR-31 内存基线并污染「零素材」类断言。
+    测试一律在空投放区下运行；皮肤包专项测试（test_skin_pack / test_skin_renderer）
+    用 ``tmp_path`` 自行构造包，不依赖本 fixture。
+    """
+
+    from desktop_pet.core import paths
+
+    empty = tmp_path_factory.mktemp("skins-empty")
+    monkeypatch.setattr(paths, "skins_dir", lambda: empty)
+    return empty
+
+
+@pytest.fixture(autouse=True)
 def no_leaked_pet_window_timers(monkeypatch: pytest.MonkeyPatch, qapp) -> None:
     """**确定性不变量守卫**：任何用例结束时不得留下活跃的 ``PetWindow`` 定时器。
 

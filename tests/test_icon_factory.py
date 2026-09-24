@@ -155,5 +155,6 @@ def test_icon_rendering_creates_no_image_assets(qapp, project_root) -> None:
         and path.suffix.lower() in _IMAGE_SUFFIXES
         and ".venv" not in path.parts
         and "__pycache__" not in path.parts
+        and "skins" not in path.parts  # 用户本地皮肤包投放区（gitignore，含第三方素材）
     ]
     assert not offenders, f"图标绘制落盘了图片素材：{offenders}"

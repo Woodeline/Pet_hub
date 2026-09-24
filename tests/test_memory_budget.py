@@ -17,6 +17,9 @@ from desktop_pet.core.config import AppConfig, ConfigStore
 
 _MB = 1024.0 * 1024.0
 
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_SRC_ROOT = _PROJECT_ROOT / "src"
+
 
 class _PROCESS_MEMORY_COUNTERS(ctypes.Structure):
     _fields_ = [
@@ -61,40 +64,95 @@ def test_working_set_measurement_is_available() -> None:
 
 
 def test_memory_budget_under_120mb(qtbot, tmp_path: Path) -> None:
-    """FR-31（P0）：完整装配 + 运行帧循环后，Working Set 应 < 120MB。"""
+    """FR-31（P0）：完整装配 + 运行帧循环后，Working Set 应 < 120MB。
+
+    在**独立子进程**中测量：pytest 全量运行时前序用例会累积 Qt 对象常驻内存，
+    在宿主进程内测会混入无关残留。子进程隔离后测的是核心程序的真实常驻内存。
+    皮肤包投放区经 ``isolated_skins_dir``（空目录）排除第三方素材。
+    """
 
     mb_missing = working_set_mb()
     if mb_missing is None:
         pytest.skip("当前环境无法测量 Working Set，跳过（不做编造）")
 
-    from PySide6.QtWidgets import QApplication
+    import os
+    import subprocess
+    import textwrap
 
-    from desktop_pet.app.controller import PetAppController
+    empty_skins = tmp_path / "skins-empty"
+    empty_skins.mkdir()
 
-    # 关闭键盘监听，避免测试时钩住用户的真实键盘
-    store = ConfigStore(tmp_path / "desktop-pet" / "config.json")
-    store.save(AppConfig(listen_enabled=False))
+    # 子进程脚本：装配 controller + 60 帧 + 测 Working Set，打印结果到 stdout。
+    script = textwrap.dedent(
+        f"""
+        import sys, os, time, ctypes, ctypes.wintypes as wt
+        from pathlib import Path
 
-    app = QApplication.instance()
-    assert isinstance(app, QApplication)
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        sys.path.insert(0, r"{_SRC_ROOT}")
+        sys.path.insert(0, r"{_PROJECT_ROOT}")
 
-    controller = PetAppController(app, store)
-    try:
-        controller.start()
-        # 运行 ~2 秒的帧循环（30fps）
-        import time
+        from desktop_pet.core import paths
+        from desktop_pet.core.config import AppConfig, ConfigStore
+        from desktop_pet.app.controller import PetAppController
 
-        for _ in range(60):
-            controller._on_frame_tick(time.monotonic())
+        # 皮肤包投放区重定向到空目录（测试隔离，不加载本机 skins/）
+        paths.skins_dir = lambda: Path(r"{empty_skins}")
+
+        class _PMC(ctypes.Structure):
+            _fields_ = [("cb", wt.DWORD), ("PageFaultCount", wt.DWORD),
+                        ("PeakWorkingSetSize", ctypes.c_size_t),
+                        ("WorkingSetSize", ctypes.c_size_t),
+                        ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                        ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                        ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                        ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                        ("PagefileUsage", ctypes.c_size_t),
+                        ("PeakPagefileUsage", ctypes.c_size_t)]
+
+        def wsmb():
+            fn = ctypes.windll.psapi.GetProcessMemoryInfo
+            fn.argtypes = [wt.HANDLE, ctypes.POINTER(_PMC), wt.DWORD]
+            fn.restype = wt.BOOL
+            c = _PMC(); c.cb = ctypes.sizeof(c)
+            h = ctypes.windll.kernel32.GetCurrentProcess()
+            fn(h, ctypes.byref(c), ctypes.sizeof(c))
+            return c.WorkingSetSize / (1024.0 * 1024.0)
+
+        from PySide6.QtWidgets import QApplication
+        app = QApplication.instance() or QApplication([])
+
+        store = ConfigStore(Path(r"{tmp_path}") / "desktop-pet" / "config.json")
+        store.save(AppConfig(listen_enabled=False))
+
+        controller = PetAppController(app, store)
+        try:
+            controller.start()
+            for _ in range(60):
+                controller._on_frame_tick(time.monotonic())
+                app.processEvents()
+            print(f"MEM_MB={{wsmb():.1f}}")
+        finally:
+            controller.shutdown()
             app.processEvents()
+        """
+    )
 
-        mb = working_set_mb()
-        print(f"\n[memory] 完整装配+60帧后 Working Set = {mb:.1f} MB (上限 120MB)")
-        assert mb is not None
-        assert mb < 120.0, f"内存超限：{mb:.1f}MB >= 120MB (FR-31)"
-    finally:
-        controller.shutdown()
-        app.processEvents()
+    proc = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert proc.returncode == 0, f"子进程失败：\n{proc.stderr}"
+
+    import re
+
+    match = re.search(r"MEM_MB=([\d.]+)", proc.stdout)
+    assert match, f"未解析到内存读数：\n{proc.stdout}"
+    mb = float(match.group(1))
+    print(f"\n[memory] 独立进程完整装配+60帧后 Working Set = {mb:.1f} MB (上限 120MB)")
+    assert mb < 120.0, f"内存超限：{mb:.1f}MB >= 120MB (FR-31)"
 
 
 def test_memory_stable_over_many_frames(qtbot, tmp_path: Path) -> None:
