@@ -245,7 +245,13 @@ class DailyLogStore:
         return {entry.id for entry in self._days.get(str(day), [])}
 
     def all_mastered(self, day: str) -> bool:
-        """当日「已展示 > 0 且 已掌握 == 已展示」，即所有展示词均已标记掌握。"""
+        """当日「已展示 > 0 且 已掌握 == 已展示」，即所有展示词均已标记掌握。
+
+        注意：该方法已**不再用于停止判定**（``_jp_stop_for_today`` 只按每日上限判断）。
+        它曾被误用于「当日全部掌握即早停」，导致用户对第一个词点「记住了」就误触发
+        （count==mastered_count），当天后续单词全部停摆。保留本方法仅为既有调用方
+        （学习记录窗口状态栏展示）与兼容性，不再承载业务停止语义。
+        """
 
         count = self.count_for(day)
         return count > 0 and self.mastered_count_for(day) == count

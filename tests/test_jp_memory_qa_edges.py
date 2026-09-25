@@ -134,7 +134,7 @@ def test_show_word_bubble_noop_when_current_word_exists(controller: PetAppContro
 
 
 # --------------------------------------------------------------------------- #
-# 5. 每日上限 / all_mastered 到达后不再展示
+# 5. 每日上限到达后不再展示（all_mastered 不再作为早停条件）
 # --------------------------------------------------------------------------- #
 def test_daily_limit_reached_no_show(controller: PetAppController) -> None:
     for i in range(1, 6):  # limit = 5
@@ -145,13 +145,13 @@ def test_daily_limit_reached_no_show(controller: PetAppController) -> None:
     assert controller._current_word is None
 
 
-def test_all_mastered_early_stop_no_show(controller: PetAppController) -> None:
-    # shown=2 > 0 且 mastered==2，未达上限 5，也应提前停
+def test_all_mastered_does_not_early_stop(controller: PetAppController) -> None:
+    # shown=2 > 0 且 mastered==2，未达上限 5，不应提前停（回归：曾误判早停）
     controller._daily_log.add_entry("2025-01-01", _log_entry(1, C.DAILY_LOG_STATUS_MASTERED))
     controller._daily_log.add_entry("2025-01-01", _log_entry(2, C.DAILY_LOG_STATUS_MASTERED))
-    assert controller._jp_stop_for_today() is True
+    assert controller._jp_stop_for_today() is False
     controller._show_word_bubble(0.0)
-    assert controller._current_word is None
+    assert controller._current_word is not None
 
 
 # --------------------------------------------------------------------------- #
