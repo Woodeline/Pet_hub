@@ -24,6 +24,13 @@ logger = logging.getLogger(__name__)
 #: ``scale`` 允许的容差（浮点比较）
 _SCALE_EPSILON: Final[float] = 1e-6
 
+#: 日志 / 回显时必须打码的字段（**保存到磁盘不脱敏**）。
+#: 新增任何密钥类字段都要登记于此，否则会明文写进 ``%APPDATA%\desktop-pet\app.log``。
+_SECRET_FIELDS: Final[frozenset[str]] = frozenset({"deepseek_api_key"})
+
+#: 脱敏占位符（仅当原值非空时替换；空值保持空，便于从日志区分「未配置」）
+_REDACTED: Final[str] = "***"
+
 
 def _coerce_int(value: Any, default: int) -> int:
     """把任意值安全转换为 int；bool 视为非法（避免 True→1 的语义混淆）。"""
@@ -204,10 +211,16 @@ class AppConfig:
     word_detail_llm_timeout_s: float = C.LLM_TIMEOUT_S
     word_detail_llm_retries: int = C.LLM_RETRIES
 
-    def to_dict(self) -> dict[str, Any]:
-        """序列化为可 JSON 化的字典。"""
+    def to_dict(self, *, redact: bool = False) -> dict[str, Any]:
+        """序列化为可 JSON 化的字典。
 
-        return {
+        Args:
+            redact: ``True`` 时把 :data:`_SECRET_FIELDS` 中的非空字段替换为
+                ``***``。**仅用于日志 / 回显**；写盘必须用 ``redact=False``
+                （默认），否则会把占位符存成真实配置。
+        """
+
+        data: dict[str, Any] = {
             "version": int(self.version),
             "window_x": int(self.window_x),
             "window_y": int(self.window_y),
@@ -228,6 +241,11 @@ class AppConfig:
             "word_detail_llm_timeout_s": float(self.word_detail_llm_timeout_s),
             "word_detail_llm_retries": int(self.word_detail_llm_retries),
         }
+        if redact:
+            for field in _SECRET_FIELDS:
+                if data.get(field):
+                    data[field] = _REDACTED
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AppConfig":
@@ -351,7 +369,7 @@ class ConfigStore:
         raw = self._read_raw()
         try:
             cfg = AppConfig.from_dict(raw)
-            logger.info("配置加载完成：%s", cfg.to_dict())
+            logger.info("配置加载完成：%s", cfg.to_dict(redact=True))
             return cfg
         except Exception:  # noqa: BLE001
             logger.exception("构造配置对象失败（%s），使用全默认值", self._path)
@@ -383,7 +401,7 @@ class ConfigStore:
                 except OSError:
                     pass
                 raise
-            logger.info("配置已保存：%s", cfg.to_dict())
+            logger.info("配置已保存：%s", cfg.to_dict(redact=True))
         except Exception:  # noqa: BLE001 —— 边界处绝不冒泡崩溃
             logger.exception("保存配置失败（%s），忽略本次保存", self._path)
 

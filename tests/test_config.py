@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -422,3 +423,52 @@ def test_skin_name_default_and_roundtrip(config_store: ConfigStore) -> None:
     loaded = config_store.load()
     assert loaded.skin_name == "Nahida"
     assert loaded.to_dict()["skin_name"] == "Nahida"
+
+
+# --------------------------------------------------------------------------- #
+# 4c. API Key 日志脱敏（安全红线：明文绝不进 app.log）
+# --------------------------------------------------------------------------- #
+_SECRET = "sk-super-secret-key-do-not-log"
+
+
+def test_to_dict_redact_masks_nonempty_secret() -> None:
+    """``redact=True`` 时非空密钥打码为 ``***``；其余字段不受影响。"""
+
+    cfg = AppConfig(deepseek_api_key=_SECRET, window_x=11)
+    raw = cfg.to_dict()
+    red = cfg.to_dict(redact=True)
+    assert raw["deepseek_api_key"] == _SECRET      # 默认不脱敏（写盘用）
+    assert red["deepseek_api_key"] == "***"
+    assert red["window_x"] == 11                   # 非敏感字段原样
+    # 键集合一致：脱敏只改值，不删字段
+    assert set(raw) == set(red)
+
+
+def test_to_dict_redact_keeps_empty_secret_empty() -> None:
+    """未配置（空）时保持空串，便于从日志区分「未配置」与「已配置」。"""
+
+    red = AppConfig(deepseek_api_key="").to_dict(redact=True)
+    assert red["deepseek_api_key"] == ""
+
+
+def test_save_keeps_real_secret_on_disk(config_store: ConfigStore, config_path: Path) -> None:
+    """脱敏只针对日志：磁盘必须存真值，否则联网兜底会失效。"""
+
+    config_store.save(AppConfig(deepseek_api_key=_SECRET))
+    data = json.loads(config_path.read_text(encoding="utf-8"))
+    assert data["deepseek_api_key"] == _SECRET
+
+
+def test_save_and_load_logs_never_contain_plaintext_key(
+    config_store: ConfigStore, caplog: pytest.LogCaptureFixture
+) -> None:
+    """FR：保存与加载的 INFO 日志都不得出现明文 Key（回归防护）。"""
+
+    with caplog.at_level(logging.INFO, logger="desktop_pet.core.config"):
+        config_store.save(AppConfig(deepseek_api_key=_SECRET))
+        loaded = config_store.load()
+
+    assert loaded.deepseek_api_key == _SECRET        # 功能不受影响
+    assert caplog.text                                   # 确实产生了日志
+    assert _SECRET not in caplog.text                # 无明文
+    assert "***" in caplog.text                      # 已打码

@@ -510,6 +510,19 @@ class PetAppController(QObject):
             )
         logger.info("皮肤包切换：%s → %s", value, getattr(new_renderer, "pack_name", "矢量"))
 
+    def reveal(self) -> None:
+        """让宠物显形并前置（供单实例守卫在二次启动时调用，也用于外部唤起）。
+
+        与 :meth:`_on_restore` 的区别：额外 ``activateWindow()`` —— 用户此时
+        刚双击了 exe，期望窗口立刻到前台，而不只是「已在显示」。
+        """
+
+        self._on_restore()
+        try:
+            self._window.activateWindow()
+        except Exception:  # noqa: BLE001
+            logger.debug("前置宠物窗口失败（已忽略）", exc_info=True)
+
     def _on_minimize(self) -> None:
         """最小化到托盘（FR-22）。"""
 

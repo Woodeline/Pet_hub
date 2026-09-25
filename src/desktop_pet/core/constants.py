@@ -452,6 +452,9 @@ AUTOSTART_REG_PATH: Final[str] = r"Software\Microsoft\Windows\CurrentVersion\Run
 AUTOSTART_REG_KEY: Final[str] = "DesktopPet"
 APP_DISPLAY_NAME: Final[str] = "大圣喵酱"
 
+#: 单实例守卫的命名管道名（QLocalServer key）。全局唯一，避免与其他程序冲突。
+SINGLE_INSTANCE_KEY: Final[str] = "desktop-pet-single-instance-v1"
+
 # --------------------------------------------------------------------------- #
 # 7. 动画平滑系数（帧率无关插值，架构 §9.4）
 # --------------------------------------------------------------------------- #
@@ -978,6 +981,8 @@ __all__ = [
     "TRAY_SKIN_LABELS",
     "TRAY_NOTIFY_SKIN_APPLIED",
     "TRAY_NOTIFY_SKIN_FALLBACK",
+    # 单实例守卫
+    "SINGLE_INSTANCE_KEY",
     # 主题造型装饰（阶段 D）
     "ThemeDecor",
     "THEME_DECOR",

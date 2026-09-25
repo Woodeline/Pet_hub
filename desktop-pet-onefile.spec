@@ -51,7 +51,9 @@ a = Analysis(
         'PySide6.QtUiTools',
         'PySide6.QtTest',
         'PySide6.QtSql',
-        'PySide6.QtNetwork',
+        # ⚠️ 不要排除 QtNetwork：单实例守卫（app/single_instance.py）依赖
+        # QLocalServer/QLocalSocket；排除后守卫会因 ImportError 被 try/except
+        # 静默吞掉，表现为「打包版双击两次起两只猫」——实机验证必查此项。
         'PySide6.QtXml',
         'PySide6.QtConcurrent',
         'PySide6.QtHelp',

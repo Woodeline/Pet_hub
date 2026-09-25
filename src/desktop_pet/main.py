@@ -98,18 +98,32 @@ def main() -> int:
     # 使用托盘 + Tool 窗口，关闭"最后窗口关闭即退出"以免最小化到托盘时退出
     app.setQuitOnLastWindowClosed(False)
 
+    # 单实例守卫（必须在 QApplication 之后：QLocalServer 依赖 Qt 事件机制）：
+    # 已有实例在跑时，通知它显形（从托盘恢复并前置），本进程安静退出。
+    from desktop_pet.app.single_instance import SingleInstanceGuard
+
+    guard = SingleInstanceGuard(C.SINGLE_INSTANCE_KEY)
+    if not guard.acquire():
+        return 0
+
     try:
         # 延迟导入，确保 QApplication 已存在（Qt 托盘/绘制对象需要）
         from desktop_pet.app.controller import PetAppController
 
         store = ConfigStore(ConfigStore.default_path())
         controller = PetAppController(app, store)
+        # 二次启动 → 已有实例的宠物显形并前置
+        guard.activated.connect(controller.reveal)
         controller.start()
     except Exception:  # noqa: BLE001 —— 启动失败给出日志并返回非零码
         logger.exception("桌面宠物启动失败")
+        guard.release()
         return 1
 
-    return app.exec()
+    try:
+        return app.exec()
+    finally:
+        guard.release()
 
 
 if __name__ == "__main__":
