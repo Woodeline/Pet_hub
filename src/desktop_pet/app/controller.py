@@ -87,8 +87,9 @@ class PetAppController(QObject):
         # 核心逻辑组件
         self._model: PetModel = PetModel()
         self._renderer: PetRenderer = PetRenderer()
-        # 皮肤包帧图渲染通道（Phase 2）：加载失败或无 skins/ 时回落矢量渲染。
-        self._skin_renderer = build_skin_renderer()
+        # 皮肤包帧图渲染通道（Phase 2）：按 ``cfg.skin_name`` 加载（``vector`` 显式
+        # 关闭、``""`` 自动取首个可用包）；无 skins/ 或包损坏时回落矢量渲染。
+        self._skin_renderer = build_skin_renderer(self._cfg.skin_name)
         self._window: PetWindow = PetWindow(
             self._model, self._renderer, self._cfg.scale, self._skin_renderer
         )
@@ -267,6 +268,7 @@ class PetAppController(QObject):
         self._tray.autostart_toggled.connect(self._set_autostart)
         self._tray.reduce_motion_toggled.connect(self._on_reduce_motion_toggled)
         self._tray.theme_selected.connect(self._on_theme_selected)
+        self._tray.skin_selected.connect(self._on_skin_selected)
         self._tray.quit_requested.connect(self.shutdown)
 
         # 日语学习
@@ -481,6 +483,32 @@ class PetAppController(QObject):
         self._cfg.theme = value
         self._apply_theme()
         self._persist()
+
+    def _on_skin_selected(self, value: str) -> None:
+        """切换皮肤包（托盘「皮肤」子菜单，单选）。
+
+        写 ``cfg.skin_name`` → 重建渲染器并热替换到窗口 → 同步菜单勾选 → 落地配置。
+        指定包不存在时 ``build_skin_renderer`` 回落到自动选择（不报错，仅记日志），
+        勾选态也随 :meth:`TrayController.set_skin_checked` 同步为「自动」。
+        """
+
+        value = str(value)
+        self._cfg.skin_name = value
+        new_renderer = build_skin_renderer(value)
+        self._skin_renderer = new_renderer
+        self._window.set_skin_renderer(new_renderer)
+        self._tray.set_skin_checked(value)
+        self._persist()
+        if new_renderer is not None:
+            self._tray.notify(
+                C.APP_DISPLAY_NAME,
+                C.TRAY_NOTIFY_SKIN_APPLIED.format(name=new_renderer.pack_name),
+            )
+        elif value not in (C.SKIN_NAME_AUTO, C.SKIN_NAME_VECTOR):
+            self._tray.notify(
+                C.APP_DISPLAY_NAME, C.TRAY_NOTIFY_SKIN_FALLBACK.format(name=value)
+            )
+        logger.info("皮肤包切换：%s → %s", value, getattr(new_renderer, "pack_name", "矢量"))
 
     def _on_minimize(self) -> None:
         """最小化到托盘（FR-22）。"""
@@ -1068,6 +1096,7 @@ class PetAppController(QObject):
             self._renderer.set_theme(name)
             self._refresh_tray_icon(name)
             self._tray.set_theme_checked(self._cfg.theme)
+            self._tray.set_skin_checked(self._cfg.skin_name)
             self._window.update()
         except Exception:  # noqa: BLE001
             logger.exception("应用主题失败（已忽略）")

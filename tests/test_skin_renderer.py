@@ -172,6 +172,62 @@ def test_paint_unknown_slot_leaves_canvas_blank(qtbot, pack: SkinPack) -> None: 
     assert center.alpha() == 0  # 未画任何帧 → 全透明
 
 
+def test_paint_oversized_pack_fits_base_canvas(qtbot, tmp_path: Path) -> None:  # noqa: ARG001
+    """声明画布超出 BASE（DyberPet 社区包 200px 级）：加载有警告、绘制等比缩进画布。"""
+
+    from desktop_pet.core import constants as C
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QImage, QPainter
+
+    root = tmp_path / "big_cat"
+    action_dir = root / "action"
+    action_dir.mkdir(parents=True)
+    # 帧图与声明画布同尺寸（社区包惯例：300×320，实际渲染时统一缩到 fitted）
+    (action_dir / "stand_0.png").write_bytes(_png_bytes(300, 320, (120, 140, 200)))
+    (action_dir / "drag_0.png").write_bytes(_png_bytes(300, 320, (160, 120, 200)))
+    (action_dir / "fall_0.png").write_bytes(_png_bytes(300, 320, (110, 160, 200)))
+    (root / "pet_conf.json").write_text(
+        '{"width": 300, "height": 320, "scale": 1.0, '
+        '"default": "default", "drag": "drag", "fall": "fall"}',
+        encoding="utf-8",
+    )
+    (root / "act_conf.json").write_text(
+        '{"default": {"images": "stand"}, '
+        '"drag": {"images": "drag"}, "fall": {"images": "fall"}}',
+        encoding="utf-8",
+    )
+    pack = load_skin_pack(root)
+    assert pack.warnings  # 超限警告已产生
+
+    renderer = SkinPackRenderer(pack)
+    assert renderer.active is True
+    img = QImage(int(C.BASE_W), int(C.BASE_H), QImage.Format.Format_ARGB32)
+    img.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(img)
+    try:
+        renderer.paint(painter, "default", 0.0, 1.0)
+    finally:
+        painter.end()
+
+    # fitted 160×170.67：帧等比铺满宽度，中心命中帧色
+    center = img.pixelColor(int(C.BASE_W) // 2, int(C.BASE_H) // 2)
+    assert center.alpha() > 0
+    assert (center.red(), center.green(), center.blue()) == (120, 140, 200)
+    # 右下角留白（170.67 < 180 高度方向未铺满）
+    corner = img.pixelColor(int(C.BASE_W) - 1, int(C.BASE_H) - 1)
+    assert corner.alpha() == 0
+
+
+def test_lazy_load_keeps_unmapped_actions_out_of_cache(pack: SkinPack) -> None:
+    """只预载 action_map 引用的动作；未引用动作的帧在首次用到时才进缓存。"""
+
+    renderer = SkinPackRenderer(pack)
+    # fixture 包 action_map = {default: idle, drag: drag, fall: fall}，
+    # idle 的 4 帧 + drag 3 帧 + fall 3 帧 = 10 帧已预载；未映射动作不存在。
+    assert len(renderer._frames) == 10
+    assert all(p is not None for p in renderer._frames.values())
+
+
 def test_paint_applies_anchor_offset(qtbot, pack: SkinPack) -> None:  # noqa: ARG001
     from PySide6.QtCore import Qt
     from PySide6.QtGui import QImage, QPainter
@@ -203,3 +259,93 @@ def _pixmap_key(pixmap) -> tuple[int, int, int, int]:
     img = pixmap.toImage()
     c = img.pixelColor(img.width() // 2, img.height() // 2)
     return (c.red(), c.green(), c.blue(), c.alpha())
+
+
+# --------------------------------------------------------------------------- #
+# 包选择：build_skin_renderer(preferred) / available_skin_packs
+# --------------------------------------------------------------------------- #
+def _make_min_pack(root: Path, rgb: tuple[int, int, int]) -> Path:
+    """在 root 下生成一个最小合法皮肤包（含必需三槽位）。"""
+
+    action = root / "action"
+    action.mkdir(parents=True)
+    for prefix in ("stand", "drag", "fall"):
+        (action / f"{prefix}_0.png").write_bytes(_png_bytes(64, 80, rgb))
+    (root / "pet_conf.json").write_text(
+        '{"width": 64, "height": 80, "default": "default", '
+        '"drag": "drag", "fall": "fall"}',
+        encoding="utf-8",
+    )
+    (root / "act_conf.json").write_text(
+        '{"default": {"images": "stand"}, '
+        '"drag": {"images": "drag"}, "fall": {"images": "fall"}}',
+        encoding="utf-8",
+    )
+    return root
+
+
+@pytest.fixture()
+def skins_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """把 skins_dir() 重定向到临时投放区，并放入两个包（AAA 在小写排序在前）。"""
+
+    from desktop_pet.core import paths
+
+    root = tmp_path / "skins"
+    root.mkdir()
+    _make_min_pack(root / "AAA", (10, 20, 30))
+    _make_min_pack(root / "ZZZ", (200, 210, 220))
+    monkeypatch.setattr(paths, "skins_dir", lambda: root)
+    return root
+
+
+def test_available_skin_packs_lists_valid_only(skins_root: Path) -> None:
+    """列出通过校验的包；损坏包不入列。"""
+
+    from desktop_pet.ui.skin_renderer import available_skin_packs
+
+    (skins_root / "Broken").mkdir()
+    (skins_root / "Broken" / "pet_conf.json").write_text("{}", encoding="utf-8")
+    assert available_skin_packs() == ["AAA", "ZZZ"]
+
+
+def test_build_auto_picks_first_alphabetically(skins_root: Path) -> None:
+    from desktop_pet.ui.skin_renderer import build_skin_renderer
+
+    r = build_skin_renderer("")
+    assert r is not None and r.pack_name == "AAA"
+
+
+def test_build_preferred_selects_named_pack(skins_root: Path) -> None:
+    """指定包名优先（解决「多包共存时只能取首个」）。"""
+
+    from desktop_pet.ui.skin_renderer import build_skin_renderer
+
+    r = build_skin_renderer("ZZZ")
+    assert r is not None and r.pack_name == "ZZZ"
+
+
+def test_build_vector_returns_none(skins_root: Path) -> None:
+    """显式矢量：即使有可用包也不加载。"""
+
+    from desktop_pet.ui.skin_renderer import build_skin_renderer
+
+    assert build_skin_renderer("vector") is None
+
+
+def test_build_unknown_name_falls_back_to_auto(skins_root: Path) -> None:
+    """指定包不存在 → 回落自动选择（不抛异常）。"""
+
+    from desktop_pet.ui.skin_renderer import build_skin_renderer
+
+    r = build_skin_renderer("NoSuchPack")
+    assert r is not None and r.pack_name == "AAA"
+
+
+def test_build_empty_dir_returns_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """无 skins/ 目录 → 返回 None（调用方回落矢量）。"""
+
+    from desktop_pet.core import paths
+    from desktop_pet.ui.skin_renderer import build_skin_renderer
+
+    monkeypatch.setattr(paths, "skins_dir", lambda: tmp_path / "nope")
+    assert build_skin_renderer("") is None

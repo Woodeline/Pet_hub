@@ -189,14 +189,49 @@ def test_missing_frames_raises(tmp_path: Path) -> None:
     assert any("ghost" in issue for issue in exc_info.value.issues)
 
 
-def test_canvas_over_base_raises(tmp_path: Path) -> None:
-    root = _make_pack(tmp_path, pet_conf_mutate={"width": C.BASE_W + 1})
-    with pytest.raises(SkinPackError):
-        load_skin_pack(root)
+def test_canvas_over_base_warns_and_fits(tmp_path: Path) -> None:
+    """画布超出程序画布（BASE_W/BASE_H）不再致命：记警告、保留原值，渲染层等比适配。"""
 
-    root2 = _make_pack(tmp_path / "b", pet_conf_mutate={"height": C.BASE_H + 1})
-    with pytest.raises(SkinPackError):
-        load_skin_pack(root2)
+    root = _make_pack(
+        tmp_path, pet_conf_mutate={"width": C.BASE_W + 1, "height": C.BASE_H + 1}
+    )
+    pack = load_skin_pack(root)
+    assert pack.width == C.BASE_W + 1
+    assert pack.height == C.BASE_H + 1
+    assert any(str(C.BASE_W) in w for w in pack.warnings)
+    assert any(str(C.BASE_H) in w for w in pack.warnings)
+
+
+def test_fitted_size_scales_and_clamps(tmp_path: Path) -> None:
+    """fitted_size = width×height × scale，超出画布时等比收缩到铺满较短边。"""
+
+    import math
+
+    # 未超限：显示尺寸 = 声明尺寸 × scale（64×80 × 1.2 = 76.8×96）
+    pack = load_skin_pack(_make_pack(tmp_path))
+    assert pack.fitted_size(C.BASE_W, C.BASE_H) == (76.8, 96.0)
+
+    # 超限（DyberPet 社区包典型：300×320）：铺满 160 宽边 → 160×170.67
+    big = load_skin_pack(
+        _make_pack(tmp_path / "big", pet_conf_mutate={"width": 300, "height": 320})
+    )
+    fw, fh = big.fitted_size(C.BASE_W, C.BASE_H)
+    assert math.isclose(fw, 160.0)
+    assert math.isclose(fh, 170.6667, abs_tol=1e-3)
+    # 宽高比保持
+    assert math.isclose(fw / fh, 300 / 320, rel_tol=1e-3)
+
+
+def test_fitted_size_upscales_when_scale_larger(tmp_path: Path) -> None:
+    """小画布 + 大 scale：scale 生效放大，但不超过程序画布（如 Fungi 130×1.5→160）。"""
+
+    pack = load_skin_pack(
+        _make_pack(tmp_path / "f", pet_conf_mutate={"width": 130, "height": 130,
+                                                    "scale": 1.5})
+    )
+    fw, fh = pack.fitted_size(C.BASE_W, C.BASE_H)
+    assert fw == float(C.BASE_W)  # 195 超出 → 收缩到 160
+    assert fh == float(C.BASE_W)
 
 
 @pytest.mark.parametrize("bad", [0, -1, 1.5, True])

@@ -178,6 +178,8 @@ def test_load_after_save_is_json_readable(config_store: ConfigStore, config_path
         "reduce_motion",
         # 增量改造：新增主题皮肤（UI 视觉升级 阶段 A；CONFIG_VERSION 保持 1）
         "theme",
+        # 增量改造：新增皮肤包（MOD）选择（Aranara/Nahida 适配；CONFIG_VERSION 保持 1）
+        "skin_name",
         "jp_enabled", "jp_level",
         "jp_bubble_duration_s", "jp_daily_limit",
         # 增量改造：DeepSeek 联网 / 中文详情配置（CONFIG_VERSION 保持 1）
@@ -388,3 +390,35 @@ def test_theme_default_is_literal_default(config_store: ConfigStore) -> None:
     loaded = config_store.load()
     assert loaded.theme == "winter"
     assert loaded.to_dict()["theme"] == "winter"
+
+
+# --------------------------------------------------------------------------- #
+# 4b. 皮肤包（MOD）选择：skin_name 容错与往返
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("Aranara", "Aranara"),          # 包名原样保留（不做白名单）
+        ("  Nahida  ", "Nahida"),        # 去首尾空白
+        ("", ""),                        # 空串 = 自动选择（合法）
+        ("vector", "vector"),            # 显式矢量
+        (123, ""),                       # 非字符串回落默认（自动）
+        (None, ""),
+        (["Nahida"], ""),
+    ],
+)
+def test_skin_name_coercion(raw, expected) -> None:
+    """包名不做白名单（用户自行投放），仅类型安全；不存在由渲染层回落。"""
+
+    cfg = AppConfig.from_dict({"skin_name": raw})
+    assert cfg.skin_name == expected
+
+
+def test_skin_name_default_and_roundtrip(config_store: ConfigStore) -> None:
+    """默认值为空串（自动），且可往返序列化。"""
+
+    assert AppConfig().skin_name == ""
+    config_store.save(AppConfig(skin_name="Nahida"))
+    loaded = config_store.load()
+    assert loaded.skin_name == "Nahida"
+    assert loaded.to_dict()["skin_name"] == "Nahida"

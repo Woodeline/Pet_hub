@@ -100,6 +100,21 @@ class SkinPack:
             return None
         return self.actions[name]
 
+    def fitted_size(self, canvas_w: int, canvas_h: int) -> tuple[float, float]:
+        """返回应用 ``scale`` 后、等比收缩到不超出 ``canvas_w × canvas_h`` 的显示尺寸。
+
+        DyberPet 社区包的画布普遍大于本程序画布（160×180），因此渲染前需按
+        ``min(1, canvas_w/disp_w, canvas_h/disp_h)`` 统一缩放，保持宽高比、
+        铺满较短边。宽高在加载时已校验为 ≥1、``scale`` >0，恒有正结果。
+        """
+
+        disp_w = self.width * self.scale
+        disp_h = self.height * self.scale
+        if disp_w <= 0.0 or disp_h <= 0.0:
+            return (0.0, 0.0)
+        fit = min(1.0, canvas_w / disp_w, canvas_h / disp_h)
+        return (disp_w * fit, disp_h * fit)
+
 
 # --------------------------------------------------------------------------- #
 # 内部解析工具
@@ -125,15 +140,30 @@ def _is_num(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
-def _parse_canvas(pet_raw: dict[str, Any], issues: list[str]) -> tuple[int, int]:
-    """解析画布尺寸；越界（超出 BASE_W/BASE_H）或非法即记问题。"""
+def _parse_canvas(
+    pet_raw: dict[str, Any], issues: list[str], warnings: list[str]
+) -> tuple[int, int]:
+    """解析画布尺寸；非正整数即记问题。
+
+    超出 ``BASE_W`` / ``BASE_H`` **不再致命**（DyberPet 社区包普遍 200px 级，
+    如 Nahida 300×320）：记警告，渲染层按 :meth:`SkinPack.fitted_size`
+    等比缩放适配程序画布。
+    """
 
     width = pet_raw.get("width")
     height = pet_raw.get("height")
-    if not _is_int(width) or not 1 <= width <= C.BASE_W:
-        issues.append(f"pet_conf.width 必须是 1~{C.BASE_W} 的整数，实际：{width!r}")
-    if not _is_int(height) or not 1 <= height <= C.BASE_H:
-        issues.append(f"pet_conf.height 必须是 1~{C.BASE_H} 的整数，实际：{height!r}")
+    if not _is_int(width) or not 1 <= width:
+        issues.append(f"pet_conf.width 必须是 ≥1 的整数，实际：{width!r}")
+    elif width > C.BASE_W:
+        warnings.append(
+            f"pet_conf.width {width} 超出程序画布宽度 {C.BASE_W}（渲染时等比缩放适配）"
+        )
+    if not _is_int(height) or not 1 <= height:
+        issues.append(f"pet_conf.height 必须是 ≥1 的整数，实际：{height!r}")
+    elif height > C.BASE_H:
+        warnings.append(
+            f"pet_conf.height {height} 超出程序画布高度 {C.BASE_H}（渲染时等比缩放适配）"
+        )
     return width, height
 
 
@@ -274,7 +304,7 @@ def load_skin_pack(root: Path) -> SkinPack:
     if issues:
         raise SkinPackError(issues)
 
-    width, height = _parse_canvas(pet_raw, issues)
+    width, height = _parse_canvas(pet_raw, issues, warnings)
     scale = _parse_scale(pet_raw, issues)
     action_map = _parse_action_map(pet_raw, issues, warnings)
 

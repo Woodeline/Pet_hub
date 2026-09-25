@@ -130,6 +130,16 @@ class PetWindow(QWidget):
         self._apply_size()
         self.update()
 
+    def set_skin_renderer(self, skin_renderer: SkinPackRenderer | None) -> None:
+        """热替换皮肤包渲染器（``None`` = 回落矢量渲染）并整窗重绘。
+
+        切换后帧图内容与铺满范围都变，脏区收窄不再适用，故走整窗 ``update()``
+        （与主题切换同理）。
+        """
+
+        self._skin_renderer = skin_renderer
+        self.update()
+
     def set_fps(self, fps: int) -> None:
         """设置帧率（动态切换定时器间隔，FR-34）。"""
 

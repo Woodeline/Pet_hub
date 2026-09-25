@@ -1,6 +1,6 @@
 # desktop-pet · 大圣喵风格桌面宠物
 
-**当前版本：v0.5.1** ｜ Python 3.13 + PySide6 ｜ 1212 项自动化测试全绿
+**当前版本：v0.5.1** ｜ Python 3.13 + PySide6 ｜ 1148 项自动化测试全绿
 
 一只常驻 Windows 桌面、会"陪你敲键盘"的治愈系程序化猫咪。
 监听全局键盘敲击并同步做出"敲键盘"动画，在**空闲 / 专注 / 休息 / 睡觉**四态间
@@ -44,6 +44,8 @@ https://github.com/Woodeline/Pet_hub/releases/latest
 | 日语学习 | 单词泡泡 + 「记住了 / 新单词」按钮 + 生词本 / 学习记录窗；每日配额与泡泡时长可调 | JP-01~19 |
 | 释义查询 | 「纯中文五要素」详情窗；查找链 = 打包词库 → 本地缓存 → LLM 联网兜底，**离线可用** | — |
 | 视觉设计系统 | 语义色 / 间距 / 字号 / 圆角四组设计 token + QSS 主题生成器 + 程序化图标工厂 | — |
+| 主题皮肤 | 6 套配色主题（四季自动换肤 + 节日），跨月零点自动重估 | — |
+| 皮肤包（MOD） | 直接投放 DyberPet 社区皮肤包：托盘「皮肤」子菜单切换、多包共存、超大画布自动等比适配 | — |
 | 无障碍 | 「减少动效」开关（托盘与配置均可切换），降低动画幅度 | — |
 
 ---
@@ -175,6 +177,8 @@ pytest -q
 | `bubble_enabled` | bool | `true` | 气泡提示开关 |
 | `autostart` | bool | `false` | 开机自启 |
 | `reduce_motion` | bool | `false` | 减少动效开关 |
+| `theme` | str | `"default"` | 配色主题：`default` / 四季 / 节日 / `auto`（按月份自动换肤） |
+| `skin_name` | str | `""` | 皮肤包（MOD）选择：`""`=自动取首个可用包，`"vector"`=矢量猫咪，其余=包名（目录名） |
 | `jp_enabled` | bool | `false` | 日语学习模块开关 |
 | `jp_level` | str | `"N5"` | 日语等级（JLPT） |
 | `jp_bubble_duration_s` | int | `30` | 单词泡泡显示时长（秒），可选 10/30/60/120 |
@@ -240,15 +244,20 @@ desktop-pet/
 │  │  ├─ log_window.py         # 日志窗口
 │  │  ├─ vocab_window.py       # 生词本 / 学习记录窗
 │  │  ├─ word_detail_window.py # 释义详情窗
-│  │  └─ word_detail_worker.py # 释义请求线程
+│  │  ├─ word_detail_worker.py # 释义请求线程
+│  │  ├─ skin_renderer.py      # 皮肤包帧图渲染通道（MOD）
+│  │  └─ pet_renderer.py       # QPainter 矢量猫咪（含主题装饰特效）
 │  ├─ data/                    # 打包词库与释义数据（离线可用）
 │  └─ app/                     # 组装层
 │     ├─ keyboard_listener.py  # pynput 守护线程 + 跨线程信号桥
 │     └─ controller.py         # 装配 / 接线 / 生命周期
-├─ tests/                      # 45 个测试文件 / 1212 项用例 + 人工验收清单
+├─ skins/                      # 皮肤包投放区（gitignore，第三方素材不入库）
+├─ tests/                      # 47 个测试文件 / 1148 项用例 + 人工验收清单
 ├─ tools/                      # 词库与审阅页构建脚本
-├─ docs/                       # PRD / 架构 / 类图 / 时序图 / 参数总表
-├─ overview.md                 # 交付总览
+├─ scripts/                    # 皮肤包下载等辅助脚本
+├─ docs/                       # PRD / 架构 / 类图 / 时序图 / 参数总表 / 皮肤包规范
+│                              #   （皮肤包规范见 docs/skin-pack.md）
+├─ overview.md                 # 交付总览（v0.1 历史快照）
 ├─ requirements.txt
 ├─ requirements-dev.txt
 └─ pyproject.toml

@@ -109,6 +109,18 @@ def _coerce_theme(value: Any, default: str) -> str:
     return default
 
 
+def _coerce_skin_name(value: Any, default: str) -> str:
+    """皮肤包名：非字符串回默认；空串是合法值（= 自动选择）。
+
+    不做包名白名单校验 —— 包由用户在 ``skins/`` 自行投放；不存在的包名由
+    渲染层回落自动选择（:func:`build_skin_renderer`），此处只保证类型安全。
+    """
+
+    if isinstance(value, str):
+        return value.strip()
+    return default
+
+
 def _coerce_duration(value: Any, default: int) -> int:
     """把学习泡泡时长收敛到档位 ``JP_BUBBLE_DURATION_OPTIONS``；非法值回落默认。"""
 
@@ -181,6 +193,7 @@ class AppConfig:
     autostart: bool = False
     reduce_motion: bool = False
     theme: str = C.DEFAULT_THEME
+    skin_name: str = C.DEFAULT_SKIN_NAME
     jp_enabled: bool = False
     jp_level: str = C.JP_DEFAULT_LEVEL
     jp_bubble_duration_s: int = C.JP_BUBBLE_DURATION_S
@@ -204,6 +217,7 @@ class AppConfig:
             "autostart": bool(self.autostart),
             "reduce_motion": bool(self.reduce_motion),
             "theme": str(self.theme),
+            "skin_name": str(self.skin_name),
             "jp_enabled": bool(self.jp_enabled),
             "jp_level": str(self.jp_level),
             "jp_bubble_duration_s": int(self.jp_bubble_duration_s),
@@ -240,6 +254,9 @@ class AppConfig:
             autostart=_coerce_bool(get("autostart"), defaults.autostart),
             reduce_motion=_coerce_bool(get("reduce_motion"), defaults.reduce_motion),
             theme=_coerce_theme(get("theme"), defaults.theme),
+            # 包名是用户投放的任意目录名，不做白名单（仅类型/空值校验）；
+            # 不存在的包由 build_skin_renderer 回落自动选择，不弹错误。
+            skin_name=_coerce_skin_name(get("skin_name"), defaults.skin_name),
             jp_enabled=_coerce_bool(get("jp_enabled"), defaults.jp_enabled),
             jp_level=_coerce_level(get("jp_level"), defaults.jp_level),
             jp_bubble_duration_s=_coerce_duration(

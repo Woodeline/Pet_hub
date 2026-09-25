@@ -214,6 +214,22 @@ DECOR_MOUNTAIN_HAZE: Final[str] = "#D2E0F0"  # 冬·最远山脊（空气透视�
 DEFAULT_THEME: Final[str] = "default"
 AUTO_THEME: Final[str] = "auto"
 
+# --------------------------------------------------------------------------- #
+# 4c-2. 皮肤包（MOD）选择 —— 与主题皮肤（配色渐变）互不干扰的另一通道
+# --------------------------------------------------------------------------- #
+#: ``cfg.skin_name`` 取值：``""`` = 自动（扫描 skins/ 取首个可用包）；
+#: ``"vector"`` = 不启用皮肤包、走矢量团子猫；其余 = 指定包名（目录名）。
+SKIN_NAME_AUTO: Final[str] = ""
+SKIN_NAME_VECTOR: Final[str] = "vector"
+DEFAULT_SKIN_NAME: Final[str] = SKIN_NAME_AUTO
+TRAY_MENU_SKIN: Final[str] = "皮肤"
+TRAY_SKIN_LABELS: Final[dict[str, str]] = {
+    SKIN_NAME_VECTOR: "默认猫咪（矢量）",
+    SKIN_NAME_AUTO: "自动（首个可用皮肤包）",
+}
+TRAY_NOTIFY_SKIN_APPLIED: Final[str] = "已切换皮肤：{name}"
+TRAY_NOTIFY_SKIN_FALLBACK: Final[str] = "皮肤包 {name} 不可用，已回落到自动选择"
+
 THEMES: Final[dict[str, tuple[tuple[float, str], ...]]] = {
     # 默认：品牌柔和全息彩虹（引用既有对象）
     "default": BODY_GRADIENT_STOPS,
@@ -954,6 +970,14 @@ __all__ = [
     "THEME_ALLOWED",
     "TRAY_MENU_THEME",
     "THEME_RECHECK_MS",
+    # 皮肤包（MOD）选择
+    "SKIN_NAME_AUTO",
+    "SKIN_NAME_VECTOR",
+    "DEFAULT_SKIN_NAME",
+    "TRAY_MENU_SKIN",
+    "TRAY_SKIN_LABELS",
+    "TRAY_NOTIFY_SKIN_APPLIED",
+    "TRAY_NOTIFY_SKIN_FALLBACK",
     # 主题造型装饰（阶段 D）
     "ThemeDecor",
     "THEME_DECOR",

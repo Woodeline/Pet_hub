@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QPainter, QPixmap
 
 from desktop_pet.core import constants as C
@@ -25,7 +26,7 @@ from desktop_pet.core.skin_pack import SkinPack, load_skin_pack
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["SkinPackRenderer"]
+__all__ = ["SkinPackRenderer", "build_skin_renderer", "available_skin_packs"]
 
 
 class SkinPackRenderer:
@@ -37,13 +38,18 @@ class SkinPackRenderer:
     """
 
     def __init__(self, pack: SkinPack) -> None:
-        """构造渲染器并预加载所有帧图为 ``QPixmap``（失败帧记为 None）。"""
+        """构造渲染器并预加载**已映射槽位**的帧图为 ``QPixmap``（失败帧记为 None）。
+
+        只预载 ``action_map`` 引用的动作：DyberPet 社区包动辄数百帧
+        （Nahida 743 帧，全量解码约 190MB，会击穿 120MB 内存预算），
+        其余动作在 :meth:`current_frame` 首次用到时按需加载。
+        """
 
         self._pack: SkinPack = pack
         self._active: bool = True
         #: 帧图缓存：包根相对帧路径 → QPixmap（加载失败的帧为 None，绘制时跳过）。
         self._frames: dict[str, QPixmap | None] = {}
-        self._load_frames()
+        self._preload_mapped_frames()
 
     # ------------------------------------------------------------------ #
     # 只读探针
@@ -61,12 +67,14 @@ class SkinPackRenderer:
         return self._pack.name
 
     def has_action(self, slot: str) -> bool:
-        """指定槽位是否有可用动作（含帧图加载成功）。"""
+        """指定槽位是否有可用动作。
+
+        ``load_skin_pack`` 已保证每个动作在磁盘上有 ≥1 张帧图，故此处只需
+        校验槽位映射与动作定义存在，不必要求帧已进缓存（缓存是按需填充的）。
+        """
 
         spec = self._pack.action_for(slot)
-        if spec is None:
-            return False
-        return any(self._frames.get(f) is not None for f in spec.frames)
+        return spec is not None and bool(spec.frames)
 
     # ------------------------------------------------------------------ #
     # 选帧
@@ -99,8 +107,7 @@ class SkinPackRenderer:
         # 帧率：frame_refresh 秒一帧，act_num 展开后循环。
         idx = int(phase_s / spec.frame_refresh_s) % total
         path = expanded[idx]
-        pixmap = self._frames.get(path)
-        return pixmap, spec.anchor
+        return self._frame(path), spec.anchor
 
     # ------------------------------------------------------------------ #
     # 绘制
@@ -125,60 +132,135 @@ class SkinPackRenderer:
         if pixmap is None or pixmap.isNull():
             return
 
+        # 画布适配：帧图已在加载时统一缩放到 fitted 尺寸（见 _shrink_to_fit），
+        # 绘制只剩「窗口缩放 × anchor 修正（按同一 fit 系数换算）」。
+        fitted_w, _fitted_h = self._pack.fitted_size(C.BASE_W, C.BASE_H)
+        if fitted_w <= 0.0:
+            return
+        s = fitted_w / self._pack.width
         painter.save()
         try:
             painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-            # 画布基准：皮肤包帧图按包内 width/height 尺寸设计，缩放至逻辑画布。
-            # anchor 是相对宠物固定位置的像素平移修正，映射到画布后叠加。
             painter.scale(scale, scale)
-            painter.translate(ax, ay)
-            target_w = self._pack.width
-            target_h = self._pack.height
-            painter.drawPixmap(0, 0, target_w, target_h, pixmap)
+            painter.translate(ax * s, ay * s)
+            painter.drawPixmap(0, 0, pixmap)
         finally:
             painter.restore()
 
     # ------------------------------------------------------------------ #
     # 内部
     # ------------------------------------------------------------------ #
-    def _load_frames(self) -> None:
-        """预加载所有动作的全部帧图为 ``QPixmap``（惰性容错：失败帧记 None）。"""
+    def _preload_mapped_frames(self) -> None:
+        """预加载 ``action_map`` 引用的全部动作的帧图（惰性容错：失败帧记 None）。"""
 
         action_dir = self._pack.root / "action"
-        for spec in self._pack.actions.values():
+        seen: set[str] = set()
+        for action_name in self._pack.action_map.values():
+            spec = self._pack.actions.get(action_name)
+            if spec is None:
+                continue
             for name in spec.frames:
-                if name in self._frames:
+                if name in seen:
                     continue
-                path = action_dir / name
-                try:
-                    pixmap = QPixmap(str(path))
-                    if pixmap.isNull():
-                        logger.warning("皮肤包帧图加载失败（忽略该帧）：%s", path)
-                        self._frames[name] = None
-                    else:
-                        self._frames[name] = pixmap
-                except Exception:  # noqa: BLE001 —— 单帧失败不阻断整包
-                    logger.warning("皮肤包帧图读取异常（忽略该帧）：%s", path, exc_info=True)
-                    self._frames[name] = None
+                seen.add(name)
+                self._frames[name] = self._load_one(action_dir / name)
+
+    def _frame(self, name: str) -> QPixmap | None:
+        """按需取帧：缓存未命中时从磁盘加载（含失败记 None，不阻断绘制）。"""
+
+        if name not in self._frames:
+            self._frames[name] = self._load_one(self._pack.root / "action" / name)
+        return self._frames[name]
+
+    def _load_one(self, path) -> QPixmap | None:
+        """读取单张帧图并缩放到 fitted 尺寸；失败返回 ``None``（跳过该帧）。"""
+
+        try:
+            pixmap = QPixmap(str(path))
+            if pixmap.isNull():
+                logger.warning("皮肤包帧图加载失败（忽略该帧）：%s", path)
+                return None
+            return self._shrink_to_fit(pixmap)
+        except Exception:  # noqa: BLE001 —— 单帧失败不阻断整包
+            logger.warning("皮肤包帧图读取异常（忽略该帧）：%s", path, exc_info=True)
+            return None
+
+    def _shrink_to_fit(self, pixmap: QPixmap) -> QPixmap:
+        """把帧图按 ``fitted_size/pack 尺寸`` 的系数一次性缩放（含放大）。
+
+        社区包帧图普遍 200px 级（Nahida 239×268），若按原尺寸缓存，
+        预载帧约 51MB、逼近 120MB 内存预算（FR-31）；统一缩到 fitted 尺寸
+        （≤160×180）后单帧 ≤112KB。绘制侧因此无需再做画布适配缩放。
+        """
+
+        fitted_w, _ = self._pack.fitted_size(C.BASE_W, C.BASE_H)
+        if fitted_w <= 0.0 or self._pack.width <= 0:
+            return pixmap
+        factor = fitted_w / self._pack.width
+        if abs(factor - 1.0) < 1e-3:
+            return pixmap
+        target_w = max(1, int(round(pixmap.width() * factor)))
+        target_h = max(1, int(round(pixmap.height() * factor)))
+        return pixmap.scaled(
+            target_w,
+            target_h,
+            Qt.AspectRatioMode.IgnoreAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
 
 
-def build_skin_renderer() -> SkinPackRenderer | None:
-    """从 ``skins/`` 目录加载**第一个可用的**皮肤包并构造渲染器。
+def available_skin_packs() -> list[str]:
+    """列出 ``skins/`` 下**通过校验**的皮肤包名（按目录名排序）。
 
-    扫描 ``skins_dir()`` 下的一级子目录，逐个尝试 :func:`load_skin_pack`；
-    首个加载成功且帧图可用者胜出。全部失败返回 ``None``（调用方回落矢量渲染）。
-
-    返回:
-        构造好的 :class:`SkinPackRenderer`；无可用皮肤包时返回 ``None``。
+    供托盘「皮肤」子菜单构建；校验失败的包不入列（日志已记明跳过原因）。
     """
 
     from desktop_pet.core.paths import skins_dir
 
     root = skins_dir()
     if not root.is_dir():
+        return []
+    names: list[str] = []
+    for cand in sorted(p for p in root.iterdir() if p.is_dir()):
+        try:
+            load_skin_pack(cand)
+        except Exception:  # noqa: BLE001 —— 损坏包不入菜单
+            continue
+        names.append(cand.name)
+    return names
+
+
+def build_skin_renderer(preferred: str = "") -> SkinPackRenderer | None:
+    """加载皮肤包并构造渲染器。
+
+    Args:
+        preferred: 期望的包名（``cfg.skin_name``）。
+            - ``""``（自动）：扫描 ``skins_dir()``，取**首个**校验通过的包；
+            - ``"vector"``：显式要求矢量渲染 → 直接返回 ``None``；
+            - 其他：优先加载该包，不存在或损坏时**回落自动选择**。
+
+    Returns:
+        构造好的 :class:`SkinPackRenderer`；无可用皮肤包（或显式矢量）时返回 ``None``。
+    """
+
+    from desktop_pet.core.paths import skins_dir
+
+    name = str(preferred or "").strip()
+    if name == C.SKIN_NAME_VECTOR:
+        return None
+
+    root = skins_dir()
+    if not root.is_dir():
         return None
 
     candidates = sorted(p for p in root.iterdir() if p.is_dir())
+    if name:
+        # 指定包优先；找不到时保持原顺序回落自动（不报错，日志说明）。
+        head = [p for p in candidates if p.name == name]
+        if not head:
+            logger.warning("指定的皮肤包不存在：%s（回落自动选择）", name)
+        candidates = head + [p for p in candidates if p.name != name]
+
     for cand in candidates:
         try:
             pack = load_skin_pack(cand)

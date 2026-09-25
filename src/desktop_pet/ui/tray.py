@@ -37,6 +37,8 @@ class TrayController(QObject):
     autostart_toggled = Signal(bool)
     reduce_motion_toggled = Signal(bool)
     theme_selected = Signal(str)
+    #: 皮肤包（MOD）切换：取值 ``vector`` / ``""``(自动) / 包名
+    skin_selected = Signal(str)
     quit_requested = Signal()
     bubble_toggled = Signal(bool)
     # —— 日语学习（ui 层只发信号，业务判定在 app/controller）——
@@ -77,6 +79,10 @@ class TrayController(QObject):
         self._theme_menu: QMenu | None = None
         self._theme_group: QActionGroup | None = None
         self._theme_actions: dict[str, QAction] = {}
+        # 皮肤包（MOD）菜单组（「矢量」+「自动」+ 各已装包，单选）
+        self._skin_menu: QMenu | None = None
+        self._skin_group: QActionGroup | None = None
+        self._skin_actions: dict[str, QAction] = {}
         # —— 日语学习菜单组（菜单按大类重组：开关 + 子项收进同一个「日语学习」子菜单）——
         self._jp_menu: QMenu | None = None
         self._action_jp: QAction | None = None
@@ -178,6 +184,57 @@ class TrayController(QObject):
             action.blockSignals(True)
             action.setChecked(key == target)
             action.blockSignals(False)
+
+    def set_skin_checked(self, value: str) -> None:
+        """同步「皮肤」单选勾选状态（``blockSignals``，**不触发信号**）。
+
+        指定包名可能不在菜单里（该包被删除/损坏，已回落自动）：此时勾选
+        「自动」项，避免菜单无任何勾选的误导状态。
+        """
+
+        target = str(value)
+        keys = set(self._skin_actions)
+        if target not in keys:
+            target = C.SKIN_NAME_AUTO
+        for key, action in self._skin_actions.items():
+            action.blockSignals(True)
+            action.setChecked(key == target)
+            action.blockSignals(False)
+
+    def refresh_skin_menu(self) -> None:
+        """按 ``skins/`` 当前实装情况重建「皮肤」子菜单项。
+
+        包可能在程序运行期间被投放/删除，故菜单每次弹出前重建；勾选态由
+        :meth:`set_skin_checked` 单独同步（重建后需重调）。
+        """
+
+        menu = self._skin_menu
+        if menu is None:
+            return
+        current = self._cfg.skin_name
+        menu.clear()
+        self._skin_actions = {}
+        group = QActionGroup(self._menu)
+        group.setExclusive(True)
+        self._skin_group = group
+
+        from desktop_pet.ui.skin_renderer import available_skin_packs
+
+        items: list[tuple[str, str]] = [
+            (C.SKIN_NAME_VECTOR, C.TRAY_SKIN_LABELS[C.SKIN_NAME_VECTOR]),
+            (C.SKIN_NAME_AUTO, C.TRAY_SKIN_LABELS[C.SKIN_NAME_AUTO]),
+        ]
+        items.extend((name, name) for name in available_skin_packs())
+        for value, label in items:
+            action = QAction(label, menu)
+            action.setCheckable(True)
+            action.setChecked(value == current)
+            action.triggered.connect(
+                lambda _checked=False, v=value: self.skin_selected.emit(v)
+            )
+            group.addAction(action)
+            menu.addAction(action)
+            self._skin_actions[value] = action
 
 
     def set_jp_checked(self, checked: bool) -> None:
@@ -339,6 +396,11 @@ class TrayController(QObject):
             self._theme_menu.addAction(action)
             self._theme_actions[value] = action
 
+        # —— 皮肤包子菜单（「矢量」+「自动」+ 各已装包）；弹出前经 aboutToShow 重建 ——
+        self._skin_menu = QMenu(C.TRAY_MENU_SKIN, self._menu)
+        self._skin_menu.aboutToShow.connect(self.refresh_skin_menu)
+        self.refresh_skin_menu()
+
         self._action_minimize = QAction("最小化到托盘", self._menu)
         self._action_minimize.triggered.connect(self.minimize_requested.emit)
 
@@ -378,9 +440,10 @@ class TrayController(QObject):
         jp.addAction(self._action_jp_log)
         menu.addMenu(jp)
         menu.addSeparator()
-        # 「外观」两兄弟：大小 + 主题（主题皮肤单选归为一类）
+        # 「外观」三兄弟：大小 + 主题（配色）+ 皮肤（MOD 包）
         menu.addMenu(scale_menu)
         menu.addMenu(self._theme_menu)
+        menu.addMenu(self._skin_menu)
         menu.addSeparator()
         menu.addAction(self._action_autostart)
         menu.addAction(self._action_reduce_motion)
