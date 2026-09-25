@@ -152,11 +152,6 @@ class PetWindow(QWidget):
         self._timer.stop()
         self.stop_wander()
 
-    def restore_position(self, x: int, y: int) -> None:
-        """恢复到指定位置（重启恢复，FR-36），同时把它设为新的游走锚点（offset 归零）。"""
-
-        self.set_anchor(x, y)
-
     def set_anchor(self, x: int, y: int) -> None:
         """把 ``(x, y)`` 设为游走锚点、复位瞬态偏移，并把窗口移到锚点。
 

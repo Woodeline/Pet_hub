@@ -69,7 +69,6 @@ _GEO_MOUTH_DY: Final[float] = 9.0
 _GEO_BLUSH_DX: Final[float] = 27.0
 _GEO_BLUSH_DY: Final[float] = 5.0
 _GEO_BLUSH_RX: Final[float] = 9.0
-_GEO_BLUSH_RY: Final[float] = 5.5
 
 # 后肢：参考图为「头身融合的单个圆球」，不另绘可分辨的后腿 —— 团子底部自然收束
 # 即视觉上的后肢；此处仅保留语义说明，避免多余的侧面凸块破坏圆润剪影。

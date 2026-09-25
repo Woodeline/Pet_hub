@@ -318,7 +318,6 @@ classDiagram
         +__init__(model: PetModel, renderer: PetRenderer, scale: float)
         +set_scale(scale: float) None
         +set_fps(fps: int) None
-        +restore_position(x: int, y: int) None
         +paintEvent(event: QPaintEvent) None
         +mousePressEvent(event: QMouseEvent) None
         +mouseMoveEvent(event: QMouseEvent) None
