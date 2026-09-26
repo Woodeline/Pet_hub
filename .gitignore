@@ -50,3 +50,4 @@ app.log
 /_*
 # 诊断遗留文件（非下划线前缀，单独排除）
 /shell_ok.txt
+/pytest*_out*.txt

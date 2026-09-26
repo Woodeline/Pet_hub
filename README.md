@@ -1,6 +1,6 @@
 # desktop-pet · 大圣喵风格桌面宠物
 
-**当前版本：v0.5.2** ｜ Python 3.13 + PySide6 ｜ 1183 项自动化测试全绿
+**当前版本：v0.6.0** ｜ Python 3.13 + PySide6 ｜ 1303 项自动化测试全绿
 
 一只常驻 Windows 桌面、会"陪你敲键盘"的治愈系程序化猫咪。
 监听全局键盘敲击并同步做出"敲键盘"动画，在**空闲 / 专注 / 休息 / 睡觉**四态间
@@ -48,6 +48,14 @@ https://github.com/Woodeline/Pet_hub/releases/latest
 | 主题皮肤 | 6 套配色主题（四季自动换肤 + 节日），跨月零点自动重估 | — |
 | 皮肤包（MOD） | 直接投放 DyberPet 社区皮肤包：托盘「皮肤」子菜单切换、多包共存、超大画布自动等比适配 | — |
 | 无障碍 | 「减少动效」开关（托盘与配置均可切换），降低动画幅度 | — |
+
+---
+
+## 皮肤与素材说明
+
+- 本程序**不包含、不分发任何皮肤素材**：仓库与 Release 资产中均无第三方版权的图片 / 音频文件，`skins/` 目录已被 `.gitignore` 排除。
+- 程序原生支持 **DyberPet 社区皮肤包格式（MOD）**：把获取到的皮肤包放入程序同目录的 `skins/` 文件夹，即可在托盘「外观 → 皮肤」中切换（规范见 `docs/skin-pack.md`）。
+- 本地开发调试时使用的示例皮肤素材来源于开源项目 [ChaozhongLiu/DyberPet_GenshinImpact](https://github.com/ChaozhongLiu/DyberPet_GenshinImpact)，感谢原作者的开源贡献；素材版权归原作者所有，请前往原项目按其开源许可获取使用。
 
 ---
 
@@ -277,9 +285,9 @@ desktop-pet/
 │     ├─ keyboard_listener.py  # pynput 守护线程 + 跨线程信号桥
 │     └─ controller.py         # 装配 / 接线 / 生命周期
 ├─ skins/                      # 皮肤包投放区（gitignore，第三方素材不入库）
-├─ tests/                      # 49 个测试文件 / 1183 项用例 + 人工验收清单
+├─ tests/                      # 55 个测试文件 / 1303 项用例 + 人工验收清单
 ├─ tools/                      # 词库与审阅页构建脚本
-├─ scripts/                    # 皮肤包下载等辅助脚本
+├─ scripts/                    # 皮肤包下载 / 发布等辅助脚本
 ├─ docs/                       # PRD / 架构 / 类图 / 时序图 / 参数总表 / 皮肤包规范
 │                              #   （皮肤包规范见 docs/skin-pack.md）
 ├─ overview.md                 # 交付总览（v0.1 历史快照）
