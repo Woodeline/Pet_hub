@@ -337,7 +337,11 @@ def test_controller_duration_and_daily_limit_slots(controller: PetAppController)
 
 
 def test_controller_show_now_disposes_current_and_shows_new(controller: PetAppController) -> None:
-    """方案 A：立即显示时若当前词在展示，先未处理当前词再弹新词（shown_today +1）。"""
+    """方案 A：立即显示时若当前词在展示，先未处理当前词再弹新词；新手动词不计入每日数量。
+
+    解耦（R1/R2）：旧自动词落「未处理」仍正常计数（0→1）；新手动词为手动展示，
+    弹出但不写入当日日志。
+    """
 
     controller._show_word_bubble(0.0)
     first = controller._current_word
@@ -350,6 +354,8 @@ def test_controller_show_now_disposes_current_and_shows_new(controller: PetAppCo
     assert controller._current_word.id != first.id
     assert controller._daily_log.count_for("2025-01-01") == 1
     assert controller._daily_log.unprocessed_count_for("2025-01-01") == 1
+    # 新手动词不计入：当日日志仍只含旧自动词那一条记录
+    assert controller._daily_log.shown_ids_for("2025-01-01") == {first.id}
 
 
 def test_controller_show_now_bypasses_gap(controller: PetAppController) -> None:

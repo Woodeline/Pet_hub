@@ -39,7 +39,7 @@
 | FR-27 | 点击 → 开心 + 弹跳 1.5s | P1 | `ui/pet_window.py`(点击判定) + `core/pet_model.py`(trigger_click) |
 | FR-28 | 悬停 ≥1s → 开心/眯眼 | P1 | `ui/pet_window.py`(enter/leaveEvent) + `core/pet_model.py`(set_hover) |
 | FR-29 | 拖拽 → 被拎起姿态 | P1 | `ui/pet_window.py`(drag) + `core/pet_model.py`(set_dragging) |
-| FR-30 | 气泡对话提示，2~4s 淡出，不遮挡托盘 | P1 | `ui/bubble.py` + `core/constants.py`(文案表) |
+| FR-30 | 气泡对话提示，2~4s 淡出，不遮挡托盘；**自动触发为排期制**（帧循环每 20~60s 随机主动展示一条，安静待机也说话）；**敲击组走独立 20~60s 敲击窗**（稳态打字也触发）；**自定义台词按触发源分两组，自动侧统一过滤键盘关键字**（2026-09-26） | P1 | `ui/bubble.py` + `ui/bubble_text_dialog.py` + `core/constants.py`(文案表 / 节奏常量) + `core/config.py` |
 | FR-31 | 内存 < 120MB | P0 | 全局（见 §6 性能分析） |
 | FR-32 | 空闲 CPU < 2% | P0 | 全局（见 §6 性能分析） |
 | FR-33 | 活跃 CPU < 10% | P1 | `ui/pet_window.py`（按需重绘/脏区域刷新） |
@@ -675,7 +675,7 @@ pytest -q
 | 状态枚举 `Mood` | `core/constants.py` |
 | 表情枚举 `Expression` | `core/constants.py` |
 | 手势枚举 `Gesture` | `core/constants.py` |
-| 时间阈值（`HIGH_FREQ_WINDOW_MS=300`、`HIGH_FREQ_THRESHOLD=3`、`IDLE_START_S=20`、`REST_THRESHOLD_S=120`、`SLEEP_THRESHOLD_S=300`、`MIN_DWELL_S=5`、`WAKE_SULKY_S=3`、`BLINK_MIN_S/MAX_S=3/6`、`BREATH_PERIOD_S=3.0`、`TAIL_MIN_S/MAX_S=2/4`、`YAWN_MIN_S/MAX_S=15/30`、`HOVER_TRIGGER_S=1.0`、`CLICK_ANIM_S=1.5`、`DRAG_THRESHOLD_PX=5`、`BUBBLE_MIN_GAP_S=3`） | `core/constants.py` |
+| 时间阈值（`HIGH_FREQ_WINDOW_MS=300`、`HIGH_FREQ_THRESHOLD=3`、`IDLE_START_S=20`、`REST_THRESHOLD_S=120`、`SLEEP_THRESHOLD_S=300`、`MIN_DWELL_S=5`、`WAKE_SULKY_S=3`、`BLINK_MIN_S/MAX_S=3/6`、`BREATH_PERIOD_S=3.0`、`TAIL_MIN_S/MAX_S=2/4`、`YAWN_MIN_S/MAX_S=15/30`、`HOVER_TRIGGER_S=1.0`、`CLICK_ANIM_S=1.5`、`DRAG_THRESHOLD_PX=5`、`BUBBLE_MIN_GAP_S=3`、`BUBBLE_MIN_INTERVAL_S/MAX_INTERVAL_S=20/60`（自动窗与敲击窗各一，互不挤占）） | `core/constants.py` |
 | 帧率（`FPS_ACTIVE=30`、`FPS_IDLE=15`、`FPS_SLEEP=8`） | `core/constants.py` |
 | 配色 `COLORS: dict[str,str]` | `core/constants.py`（PRD §4.2 全部 HEX） |
 | 窗口尺寸 `BASE_W=160`、`BASE_H=180`、`SCALES=(0.8,1.0,1.2)` | `core/constants.py` |

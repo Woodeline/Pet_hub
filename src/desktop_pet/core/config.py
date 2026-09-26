@@ -141,7 +141,11 @@ def _coerce_bubble_text_pack(value: Any, default: str) -> str:
 def _coerce_bubble_texts_custom(value: Any, default: list[str]) -> list[str]:
     """自定义台词池：字符串列表清洗（strip/去空/去重/限长）；非法整体回默认。
 
-    空列表是合法值（= 不启用自定义，回落预设台词包）。
+    空列表是合法值（= 该组未配置）。**两组自定义池共用本函数**：
+    ``bubble_texts_custom``（自动触发组）与 ``bubble_texts_custom_keyboard``（敲击组）。
+
+    注意：本函数**不做**键盘关键字过滤 —— 关键字门控是「展示时按触发源」判定的
+    （见 ``constants.filter_keyboard_texts``），保留原样入库才能让用户在两组之间搬移文案。
     """
 
     if not isinstance(value, list):
@@ -209,7 +213,10 @@ class AppConfig:
         listen_enabled: 全局键盘监听开关。
         bubble_enabled: 气泡提示开关（PRD Q-01 的"静音"含义）。
         bubble_text_pack: 情绪气泡预设台词包名（default/energy/gentle）。
-        bubble_texts_custom: 自定义台词池；**非空即优先于预设包**（空 = 不启用）。
+        bubble_texts_custom: 自定义台词池·**自动触发组**；非空即优先于预设包（空 = 未配置）。
+            其中含键盘关键字的条目在展示时被过滤，永不被自动触发（需求 C-1/C-3）。
+        bubble_texts_custom_keyboard: 自定义台词池·**敲击键盘组**；仅由全局键盘监听驱动时
+            使用，不做键盘关键字过滤（需求 C-4）。
         autostart: 开机自启开关。
         reduce_motion: 减少动效（对应 prefers-reduced-motion），默认 ``False``。
         theme: 主题皮肤（``default`` / 四季 / 节日 / ``auto``），默认 ``default``。
@@ -232,6 +239,7 @@ class AppConfig:
     bubble_enabled: bool = True
     bubble_text_pack: str = C.DEFAULT_BUBBLE_TEXT_PACK
     bubble_texts_custom: list[str] = field(default_factory=list)
+    bubble_texts_custom_keyboard: list[str] = field(default_factory=list)
     autostart: bool = False
     reduce_motion: bool = False
     theme: str = C.DEFAULT_THEME
@@ -268,6 +276,7 @@ class AppConfig:
             "skin_name": str(self.skin_name),
             "bubble_text_pack": str(self.bubble_text_pack),
             "bubble_texts_custom": [str(t) for t in self.bubble_texts_custom],
+            "bubble_texts_custom_keyboard": [str(t) for t in self.bubble_texts_custom_keyboard],
             "jp_enabled": bool(self.jp_enabled),
             "jp_level": str(self.jp_level),
             "jp_bubble_duration_s": int(self.jp_bubble_duration_s),
@@ -317,6 +326,9 @@ class AppConfig:
             ),
             bubble_texts_custom=_coerce_bubble_texts_custom(
                 get("bubble_texts_custom"), defaults.bubble_texts_custom
+            ),
+            bubble_texts_custom_keyboard=_coerce_bubble_texts_custom(
+                get("bubble_texts_custom_keyboard"), defaults.bubble_texts_custom_keyboard
             ),
             jp_enabled=_coerce_bool(get("jp_enabled"), defaults.jp_enabled),
             jp_level=_coerce_level(get("jp_level"), defaults.jp_level),

@@ -227,6 +227,8 @@ def test_no_image_assets(project_root: Path) -> None:
         ("CLICK_ANIM_S", 1.5),
         ("DRAG_THRESHOLD_PX", 5),
         ("BUBBLE_MIN_GAP_S", 3.0),
+        ("BUBBLE_MIN_INTERVAL_S", 20.0),
+        ("BUBBLE_MAX_INTERVAL_S", 60.0),
         ("FPS_ACTIVE", 30),
         ("FPS_IDLE", 15),
         ("FPS_SLEEP", 8),

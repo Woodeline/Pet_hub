@@ -539,6 +539,17 @@ BUBBLE_FADE_OUT_S: Final[float] = 0.3
 BUBBLE_MIN_DURATION_S: Final[float] = 2.0
 BUBBLE_MAX_DURATION_S: Final[float] = 4.0
 
+# 情绪气泡节奏（20 秒 ~ 1 分钟随机）—— 两个**相互独立**的窗口（2026-09-26 需求 C 重做）：
+# - **自动窗**（controller._next_bubble_ts）：帧循环到点**主动**展示一条自动组文案
+#   （递归排期：每成功展示一条就重排 now+20~60s 随机）——安静待机时宠物也会周期性
+#   说话，取代旧行为「敲一次就弹一次（只有 3s 硬下限）」与「只在事件来时才说话」。
+# - **敲击窗**（controller._next_kb_bubble_ts）：真实敲击键盘触发敲击组文案的独立
+#   节奏（稳态敲击也触发），与自动窗互不挤占。
+# 鼠标悬停 / 点击走 immediate 路径，不受两个窗口约束（保留「移上去立即显示一条」），
+# 但仍受 BUBBLE_MIN_GAP_S 硬下限保护，避免鼠标反复进出时连弹。
+BUBBLE_MIN_INTERVAL_S: Final[float] = 20.0
+BUBBLE_MAX_INTERVAL_S: Final[float] = 60.0
+
 # 气泡几何（逻辑像素，PRD §4.3）
 BUBBLE_CORNER_RADIUS: Final[float] = 8.0
 BUBBLE_PAD_X: Final[float] = 10.0
@@ -712,13 +723,64 @@ NEUTRAL_POSE: Final[dict[str, float]] = {
 # --------------------------------------------------------------------------- #
 # 9. 气泡台词（PRD §5 台词表，按表情分组）
 # --------------------------------------------------------------------------- #
+# —— 键盘敲击**专属**文案键 ——
+# 这四个键只可能由 `_on_keystroke`（全局键盘监听）驱动：
+#   - FOCUS / EXCITED：高频敲击进入专注 / 持续高频兴奋
+#   - SURPRISED：长时间空闲后的首次敲键
+#   - SULKY：睡觉中被敲键唤醒
+# 鼠标手势路径只使用 Expression.HAPPY；帧循环自动迁移只使用 Mood.*；
+# 因此本节中这四个键的文案**必须**含键盘关键字（见 BUBBLE_KEYBOARD_KEYWORDS），
+# 以保证「文案内容与触发方式相匹配」，且只在真正敲键盘时才可能被看到。
+# ⚠️ tests/test_bubble_trigger_rhythm.py 对此有守护断言。
+KEYBOARD_BUBBLE_EXPRESSIONS: Final[frozenset[Expression]] = frozenset(
+    {Expression.FOCUS, Expression.EXCITED, Expression.SURPRISED, Expression.SULKY}
+)
+#: 键盘专属文案至少需命中其中之一
+BUBBLE_KEYBOARD_KEYWORDS: Final[tuple[str, ...]] = (
+    "键盘", "敲", "打字", "码字", "手速", "按键",
+)
+
+
+def has_keyboard_keyword(text: str) -> bool:
+    """判断一条台词是否含键盘关键字（需求 C-1 的单一事实源）。
+
+    「**自动触发**」来源（状态机迁移 / 休息态呵欠 / 鼠标悬停与点击）不得展示
+    含键盘关键字的台词 —— 这类台词只在真正敲击键盘时才允许出现。
+
+    Args:
+        text: 待判定的台词文本。
+
+    Returns:
+        ``True`` = 含至少一个 :data:`BUBBLE_KEYBOARD_KEYWORDS` 中的词。
+    """
+
+    return any(kw in text for kw in BUBBLE_KEYBOARD_KEYWORDS)
+
+
+def filter_keyboard_texts(texts: "list[str]") -> list[str]:
+    """剔除含键盘关键字的台词（自动触发来源的池清洗，需求 C-1 / C-3）。
+
+    自动来源（含鼠标悬停的 ``immediate`` 路径）对**任何**来源的池都套用本过滤：
+    自定义自动组、预设台词包、内置 :data:`BUBBLE_TEXTS` 一视同仁，保证「鼠标摸一下
+    看到的文案不含键盘词」。
+
+    Args:
+        texts: 原始台词列表（自定义池 / 预设包 / 内置表均可）。
+
+    Returns:
+        过滤后的新列表；全部条目都被过滤时返回空列表（调用方据此决定是否回落 / 放弃展示）。
+    """
+
+    return [t for t in texts if not has_keyboard_keyword(t)]
+
+
 BUBBLE_TEXTS: Final[dict[Expression | Mood, list[str]]] = {
     Expression.HAPPY: ["嘿嘿，摸摸头~", "好开心！(≧▽≦)", "被你摸到啦~"],
-    Expression.FOCUS: ["一起加油！💪", "你敲得真快！", "我陪你一起努力~"],
-    Expression.EXCITED: ["哇！好快好快！", "冲鸭！٩(๑>◡<๑)۶", "状态拉满！"],
+    Expression.FOCUS: ["键盘敲得真快！", "哒哒哒，我听着你敲呢~", "一起码字，加油！"],
+    Expression.EXCITED: ["键盘都要冒火星啦！", "哇！这手速太快了！", "噼里啪啦，敲得飞起！"],
     Expression.SLEEPY: ["有点困了呢…", "歇一会儿吧~", "要不要喝口水？"],
-    Expression.SURPRISED: ["咦？你回来啦！", "吓我一跳！", "突然冒出来~"],
-    Expression.SULKY: ["唔…打扰我做梦了…", "哼，人家还没睡够…", "轻一点啦…"],
+    Expression.SURPRISED: ["咦？又回到键盘前啦！", "吓我一跳，你敲得好突然！", "键盘一响我就醒了~"],
+    Expression.SULKY: ["唔…键盘声把我吵醒了…", "哼，键盘响个不停…", "轻一点敲啦…"],
     Expression.YAWN: ["哈啊~ 好困…", "该休息啦~", "打个大大的呵欠~"],
     Expression.SLEEPING: ["Zzz…", "嘘，我在做梦呢~"],
     Mood.IDLE: ["需要我陪着你吗？", "我在呢~", "要不要摸摸我呀？"],
@@ -726,25 +788,33 @@ BUBBLE_TEXTS: Final[dict[Expression | Mood, list[str]]] = {
     Mood.SLEEP: ["Zzz…", "嘘，我在做梦呢~"],
 }
 
+# —— 自定义台词池（**两组**，2026-09-26 需求 C）——
+# 两组均为「一行一条」，非空时优先于预设台词包；**按触发来源分工**：
+#   - ``cfg.bubble_texts_custom``（自动触发组）：状态机迁移 / 休息态呵欠 / 鼠标悬停
+#     与点击时可用。**其中含键盘关键字的条目会被 constants.filter_keyboard_texts
+#     剔除**，即这类条目永远不会被自动触发（需求 C-1 / C-3）。
+#   - ``cfg.bubble_texts_custom_keyboard``（敲击键盘组）：仅由全局键盘监听
+#     （``_on_keystroke``）驱动时可用，不做关键字过滤 —— 敲击时看到键盘文案才自然。
+# 两组都为空时回落预设台词包（预设包未覆盖的情绪键再回落 BUBBLE_TEXTS）。
+
 # —— 预设台词包：``cfg.bubble_text_pack`` 可选值（"default" 即上面的 BUBBLE_TEXTS）——
-# 各包只需覆盖部分情绪键，未覆盖的键回落 BUBBLE_TEXTS；cfg.bubble_texts_custom
-# 非空时优先于一切预设包（对所有情绪统一使用）。
+# 各包只需覆盖部分情绪键，未覆盖的键回落 BUBBLE_TEXTS。
 BUBBLE_TEXT_PACK_ENERGY: Final[str] = "energy"
 BUBBLE_TEXT_PACK_GENTLE: Final[str] = "gentle"
 BUBBLE_TEXT_PACKS: Final[dict[str, dict[Expression | Mood, list[str]]]] = {
     BUBBLE_TEXT_PACK_ENERGY: {
         Expression.HAPPY: ["嘿嘿，最开心啦！(๑•̀ㅂ•́)و✧", "元气满满！", "摸摸头，充电 100%！"],
-        Expression.FOCUS: ["冲鸭！(ง •̀_•́)ง", "今天也是高效的一天！", "这波操作很稳！"],
-        Expression.EXCITED: ["哇塞，火力全开！", "速度起飞了！", "来劲了来劲了！"],
+        Expression.FOCUS: ["键盘给我冲！(ง •̀_•́)ง", "今天也是高效码字的一天！", "这波手速很稳！"],
+        Expression.EXCITED: ["哇塞，键盘火力全开！", "手速起飞了！", "越敲越来劲！"],
         Expression.SLEEPY: ["不行了不行了…先冲一杯！", "眼睛要闭上了…", "再撑一小会儿…"],
         Mood.IDLE: ["等你回来一起冲！", "摸鱼也要元气满满哦~", "我随时待命！"],
         Mood.REST: ["休息是为了走更远的路！", "伸个懒腰，满血复活~"],
     },
     BUBBLE_TEXT_PACK_GENTLE: {
         Expression.HAPPY: ["谢谢你的抚摸，很治愈~", "和你在一起真安心。"],
-        Expression.FOCUS: ["慢慢来，不着急~", "我安静地陪着你。"],
+        Expression.FOCUS: ["键盘声也慢下来了，不着急~", "我安静地陪你敲字。"],
         Expression.SLEEPY: ["累了就早点休息哦。", "要不要喝口温水？"],
-        Expression.SULKY: ["唔…让人家再睡一会儿嘛…"],
+        Expression.SULKY: ["唔…键盘轻一点，让人家再睡会儿…"],
         Expression.YAWN: ["呵啊……夜深了呢。"],
         Mood.IDLE: ["我在这里陪着你。", "记得抬头看看窗外休息一下~"],
         Mood.REST: ["喝口水休息一下吧。", "深呼吸，放松肩膀~"],
@@ -777,9 +847,9 @@ JP_DEFAULT_LEVEL: Final[str] = "N5"
 #: 等级 → 菜单/筛选显示文案（当前与等级同文字，保留为字典以便未来扩展描述）
 JP_LEVEL_LABELS: Final[dict[str, str]] = {level: level for level in JP_LEVELS}
 
-# —— 出现节奏（独立随机间隔，挂在既有帧循环上，不新开 QTimer）——
-JP_WORD_MIN_INTERVAL_S: Final[float] = 25.0
-JP_WORD_MAX_INTERVAL_S: Final[float] = 50.0
+# —— 出现节奏（独立随机间隔，30 秒 ~ 10 分钟，挂在既有帧循环上，不新开 QTimer）——
+JP_WORD_MIN_INTERVAL_S: Final[float] = 30.0
+JP_WORD_MAX_INTERVAL_S: Final[float] = 600.0
 
 # —— 学习泡泡排版（四行多字号，固定内容宽度保证「测量换行宽 == 绘制换行宽」）——
 JP_BUBBLE_WORD_FONT_SIZE: Final[int] = 16          # 日语单词（加粗）
@@ -890,7 +960,8 @@ JP_NOTIFY_SHOW_NOW_BLOCKED: Final[str] = "现在还不能显示新单词哦～"
 # —— 手动「立即显示」不受每日上限约束（用户决策）；以下为手动路径专用反馈文案 ——
 # 每次手动点击都必须给出可见反馈，严禁静默返回（历史缺陷：与自动路径共用一次性标志位）。
 JP_NOTIFY_SHOW_NOW_OVER_LIMIT: Final[str] = (
-    "已立即显示：{word}（{kana}）｜今日已完成 {count}/{limit}，已超出今日目标"
+    "已立即显示：{word}（{kana}）｜今日已完成 {count}/{limit}，"
+    "手动显示不计入每日数量"
 )
 JP_NOTIFY_POOL_EXHAUSTED: Final[str] = "{level} 的词都学完了，换个难度试试～"
 JP_NOTIFY_JP_OFF: Final[str] = "请先开启「日语学习」哦～"
@@ -1039,7 +1110,13 @@ __all__ = [
     "RADIUS",
     "EXPRESSION_POSES",
     "NEUTRAL_POSE",
+    "BUBBLE_MIN_INTERVAL_S",
+    "BUBBLE_MAX_INTERVAL_S",
     "BUBBLE_TEXTS",
+    "KEYBOARD_BUBBLE_EXPRESSIONS",
+    "BUBBLE_KEYBOARD_KEYWORDS",
+    "has_keyboard_keyword",
+    "filter_keyboard_texts",
     # 预设台词包 / 台词自定义
     "BUBBLE_TEXT_PACK_ENERGY",
     "BUBBLE_TEXT_PACK_GENTLE",

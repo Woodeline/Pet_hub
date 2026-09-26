@@ -159,15 +159,22 @@ def test_show_now_blocked_by_sleep(controller: PetAppController) -> None:
     assert controller._current_word is None
 
 
-def test_show_now_blocked_by_limit_notifies(controller: PetAppController) -> None:
+def test_show_now_not_blocked_by_limit_still_shows(controller: PetAppController) -> None:
+    """达每日上限时，「立即显示」仍能弹出新词，且不计入每日数量（语义反转）。
+
+    用户决策 R1/R2：每日配额只由正常自动流程触发；手动展示不受配额约束，
+    也不再置 ``_today_done_notified`` 一次性标志位（每次点击都需可见反馈）。
+    """
+
     for i in range(1, 6):  # limit = 5 → 已满
         controller._daily_log.add_entry(
             "2025-01-01", _log_entry(i, C.DAILY_LOG_STATUS_UNPROCESSED)
         )
     controller._today_done_notified = False
     controller._on_jp_show_now()
-    assert controller._current_word is None
-    assert controller._today_done_notified is True  # 已给「今日完成」通知
+    assert controller._current_word is not None                    # 手动不受配额约束，仍展示
+    assert controller._daily_log.count_for("2025-01-01") == 5       # 未新增记录
+    assert controller._today_done_notified is False                 # 不置一次性标志位
 
 
 def test_show_now_not_blocked_by_all_mastered(controller: PetAppController) -> None:
@@ -184,8 +191,14 @@ def test_show_now_not_blocked_by_all_mastered(controller: PetAppController) -> N
     assert controller._today_done_notified is False
 
 
-def test_show_now_dispose_then_hit_limit_no_new_word(controller: PetAppController) -> None:
-    """当前词在展示 + count=limit-1：立即显示先落未处理触及上限，不再弹新词。"""
+def test_show_now_dispose_then_hit_limit_still_shows_new_word(
+    controller: PetAppController,
+) -> None:
+    """当前词在展示 + count=limit-1：旧自动词落未处理触及上限，新手动词仍弹出且不计入。
+
+    语义反转（R1/R2）：旧词为**自动流程**展示 → 落「未处理」仍正常计数（4→5）；
+    随后手动「立即显示」不受配额约束 → 新词仍弹出，但其记录**不写入**每日日志。
+    """
 
     for i in range(1, 5):  # 4 条，limit=5 未满
         controller._daily_log.add_entry(
@@ -197,10 +210,13 @@ def test_show_now_dispose_then_hit_limit_no_new_word(controller: PetAppControlle
 
     controller._on_jp_show_now()
 
-    # 当前词被先落「未处理」（count 4→5 触顶），随后 _show_word_bubble 被上限拦截
-    assert controller._current_word is None
+    # 旧自动词先落「未处理」（count 4→5 触顶），新手动词仍弹出但不新增记录
+    assert controller._current_word is not None
+    assert controller._current_word.id != first.id
     assert controller._daily_log.count_for("2025-01-01") == 5
     assert controller._daily_log.unprocessed_count_for("2025-01-01") == 5
+    # 新手动词未写入当日日志（当日记录仍只含旧自动词）
+    assert controller._current_word.id not in controller._daily_log.shown_ids_for("2025-01-01")
 
 
 def test_show_now_happy_path_disposes_and_shows(controller: PetAppController) -> None:
@@ -215,8 +231,11 @@ def test_show_now_happy_path_disposes_and_shows(controller: PetAppController) ->
 
     assert controller._current_word is not None
     assert controller._current_word.id != first.id
+    # 旧自动词落「未处理」仍正常计数 1
     assert controller._daily_log.count_for("2025-01-01") == 1
     assert controller._daily_log.unprocessed_count_for("2025-01-01") == 1
+    # 新手动词不计入：当日日志仍只含旧自动词那一条记录
+    assert controller._daily_log.shown_ids_for("2025-01-01") == {first.id}
 
 
 # --------------------------------------------------------------------------- #

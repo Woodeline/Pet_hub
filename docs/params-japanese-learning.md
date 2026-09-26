@@ -95,10 +95,11 @@
 
 | 参数名 | 类型 | 默认值 | 取值范围 | 作用说明 | 必填 |
 | --- | --- | --- | --- | --- | --- |
-| `JP_WORD_MIN_INTERVAL_S` | `float` | `25.0` | `> 0`（推荐 ≥ `BUBBLE_MIN_GAP_S`） | 相邻两次单词展示的最小随机间隔（秒）。 | 是（常量） |
-| `JP_WORD_MAX_INTERVAL_S` | `float` | `50.0` | `≥ JP_WORD_MIN_INTERVAL_S` | 相邻两次单词展示的最大随机间隔（秒）。 | 是（常量） |
+| `JP_WORD_MIN_INTERVAL_S` | `float` | `30.0` | `> 0`（推荐 ≥ `BUBBLE_MIN_GAP_S`） | 相邻两次单词展示的最小随机间隔（秒）。 | 是（常量） |
+| `JP_WORD_MAX_INTERVAL_S` | `float` | `600.0` | `≥ JP_WORD_MIN_INTERVAL_S` | 相邻两次单词展示的最大随机间隔（秒）。 | 是（常量） |
 
-> 实际间隔由 `motion.random_interval(lo, hi)` 在闭区间 `[25, 50]` 秒内均匀随机。
+> 实际间隔由 `motion.random_interval(lo, hi)` 在闭区间 `[30, 600]` 秒内均匀随机（**30 秒 ~ 10 分钟**）。
+> 自动排期路径严格受「每日数量」上限约束；手动「立即显示一个新单词」不受该排期约束，**且其展示的单词不计入每日数量统计**（详见 `docs/change-japanese-quota-decouple.md`）。
 > `hi <= lo` 时退化返回 `lo`（见 `core/motion.py`）。
 
 ---

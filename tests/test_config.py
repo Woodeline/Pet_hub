@@ -183,6 +183,8 @@ def test_load_after_save_is_json_readable(config_store: ConfigStore, config_path
         "skin_name",
         # 增量改造：情绪气泡台词（预设包 + 自定义池；CONFIG_VERSION 保持 1）
         "bubble_text_pack", "bubble_texts_custom",
+        # 增量改造：自定义池拆两组（自动触发组 / 敲击键盘组；CONFIG_VERSION 保持 1）
+        "bubble_texts_custom_keyboard",
         "jp_enabled", "jp_level",
         "jp_bubble_duration_s", "jp_daily_limit",
         # 增量改造：DeepSeek 联网 / 中文详情配置（CONFIG_VERSION 保持 1）
@@ -529,3 +531,56 @@ def test_bubble_texts_custom_roundtrip(config_store: ConfigStore) -> None:
     loaded = config_store.load()
     assert loaded.bubble_texts_custom == texts
     assert loaded.to_dict()["bubble_texts_custom"] == texts
+
+
+# --------------------------------------------------------------------------- #
+# 4b. 敲击键盘组自定义池（2026-09-26 需求 C-4）
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ([" 敲吧敲吧~ ", "键盘敲得真快！", "敲吧敲吧~"], ["敲吧敲吧~", "键盘敲得真快！"]),
+        (["", "  ", "有效"], ["有效"]),
+        ([123, None, "有效"], ["有效"]),
+        ([], []),
+        ("不是列表", []),
+        (None, []),
+    ],
+)
+def test_bubble_texts_custom_keyboard_coercion(raw, expected) -> None:
+    """敲击组复用同一清洗规则（strip/去空/去重/限长）。"""
+
+    cfg = AppConfig.from_dict({"bubble_texts_custom_keyboard": raw})
+    assert cfg.bubble_texts_custom_keyboard == expected
+
+
+def test_bubble_texts_custom_keyboard_does_not_filter_keyword() -> None:
+    """入库**不**做键盘关键字过滤：门控发生在展示时按触发源判定，入库保留原样。
+
+    这样才能让用户在两组之间搬移文案而不丢条目。
+    """
+
+    texts = ["键盘敲得真快！", "摸摸头~"]
+    cfg = AppConfig.from_dict({"bubble_texts_custom_keyboard": texts})
+    assert cfg.bubble_texts_custom_keyboard == texts
+
+
+def test_bubble_texts_custom_keyboard_roundtrip(config_store: ConfigStore) -> None:
+    """两组自定义池相互独立：写一组不影响另一组，落盘后可读回。"""
+
+    auto = ["自动台词A"]
+    hit = ["敲击台词B", "键盘台词C"]
+    config_store.save(AppConfig(bubble_texts_custom=auto, bubble_texts_custom_keyboard=hit))
+    loaded = config_store.load()
+    assert loaded.bubble_texts_custom == auto
+    assert loaded.bubble_texts_custom_keyboard == hit
+    assert loaded.to_dict()["bubble_texts_custom_keyboard"] == hit
+
+
+def test_legacy_config_without_keyboard_pool_loads_empty() -> None:
+    """向后兼容：旧配置文件没有 bubble_texts_custom_keyboard 键 → 敲击组为空，不报错。"""
+
+    cfg = AppConfig.from_dict({"bubble_texts_custom": ["旧的自动组"], "bubble_text_pack": "gentle"})
+    assert cfg.bubble_texts_custom == ["旧的自动组"]
+    assert cfg.bubble_texts_custom_keyboard == []
+    assert cfg.bubble_text_pack == "gentle"

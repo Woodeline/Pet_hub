@@ -63,10 +63,9 @@ logger = logging.getLogger(__name__)
 _MAX_FRAME_DT_S: float = 0.25
 #: 敲击后维持活跃帧率的时长（秒）
 _ACTIVE_HOLD_S: float = 1.0
-#: 触发气泡的"瞬时反馈"表情集合
-_BUBBLE_EXPRESSIONS = frozenset(
-    {Expression.EXCITED, Expression.SURPRISED, Expression.SULKY, Expression.FOCUS}
-)
+#: 触发气泡的"瞬时反馈"表情集合 —— 即**键盘敲击专属文案键**，唯一来源为
+#: ``constants.KEYBOARD_BUBBLE_EXPRESSIONS``（这些键的文案都含键盘关键字，
+#: 且只会由 :meth:`PetAppController._on_keystroke` 驱动，保证文案与触发方式相匹配）。
 
 
 class PetAppController(QObject):
@@ -109,6 +108,13 @@ class PetAppController(QObject):
         self._shutting_down: bool = False
         self._last_frame_ts: float = time.monotonic()
         self._last_bubble_ts: float = float("-inf")
+        # 下一次**自动**情绪气泡的排期时刻：每成功展示一条就重排为 now+20~60s 随机，
+        # 帧循环到点会**主动**展示一条（自动触发是递归定时器，不是仅事件节流；
+        # 鼠标 immediate 不受此限）。首个排期在 start() 里种下（启动 20~60s 后）。
+        self._next_bubble_ts: float = float("-inf")
+        # 下一次**敲击键盘**气泡允许展示的时刻：与自动窗**相互独立**（敲键盘不挤占
+        # 自动闲聊额度，反之亦然）。初始 -inf：启动后第一次敲键即可响应。
+        self._next_kb_bubble_ts: float = float("-inf")
         self._active_until: float = 0.0
         self._next_yawn_ts: float = float("inf")
         self._rng: random.Random = random.Random()
@@ -136,6 +142,10 @@ class PetAppController(QObject):
         self._bubble_text_dialog: BubbleTextDialog | None = None
         self._word_deadline: float = float("inf")
         self._word_disposed: bool = True
+        # 当前展示词是否来自手动「立即显示」路径（决定处置时是否计入每日配额）
+        self._word_manual: bool = False
+        # D2：内存级「当日手动展示过」去重集合（不落盘、不计入 count，跨日清空）
+        self._manual_shown_ids_today: set[str] = set()
         self._today_str: str = ""
         self._today_done_notified: bool = False
         self._level_done_notified: bool = False
@@ -209,6 +219,10 @@ class PetAppController(QObject):
         now = time.monotonic()
         self._last_frame_ts = now
         self._next_yawn_ts = now + motion.random_interval(C.YAWN_MIN_S, C.YAWN_MAX_S)
+        # 首条自动闲聊排在启动 20~60s 后（启动瞬间不说话，两条闲聊之间同为此随机间隔）
+        self._next_bubble_ts = now + motion.random_interval(
+            C.BUBBLE_MIN_INTERVAL_S, C.BUBBLE_MAX_INTERVAL_S, self._rng
+        )
         self._schedule_next_word(now)
         self._running = True
 
@@ -304,10 +318,19 @@ class PetAppController(QObject):
             self._active_until = now + _ACTIVE_HOLD_S
             self._sync_fps_and_visuals(transition)
 
-            if transition.expression in _BUBBLE_EXPRESSIONS:
-                self._show_bubble_for(transition.expression, now)
+            # 敲击路径一律走「敲击键盘组」自定义池（keyboard=True，不做关键字过滤），
+            # 受**独立的** 20~60s 敲击窗节流（避免「敲一次就弹一次」）：
+            # - 键盘专属表情（进专注/兴奋/久违回座/睡觉被吵醒）→ 用该表情键；
+            # - 仅情绪态迁移 → 用目标情绪键；
+            # - 稳态敲击（无迁移）→ 回落 FOCUS 键：只要真在敲键盘，敲击组文案就会
+            #   按节奏出现（需求 C-1「仅在敲击时才允许触发」的正向面——敲了就能看到）。
+            if transition.expression in C.KEYBOARD_BUBBLE_EXPRESSIONS:
+                key = transition.expression
             elif transition.changed:
-                self._show_bubble_for(transition.to_mood, now)
+                key = transition.to_mood
+            else:
+                key = Expression.FOCUS
+            self._show_bubble_for(key, now, keyboard=True)
 
             self._window.set_fps(C.FPS_ACTIVE)
         except Exception:  # noqa: BLE001 —— 键事件异常绝不崩溃
@@ -335,6 +358,8 @@ class PetAppController(QObject):
             if today != self._today_str:
                 self._today_str = today
                 self._today_done_notified = False
+                # 跨日：清空内存级「当日手动展示」去重集合（D2，不落盘）
+                self._manual_shown_ids_today.clear()
                 self._next_word_ts = now
                 # 跨日 → 顺带重估主题（保证跨月零点自动换肤，而非最多等一天）
                 self._recheck_theme()
@@ -363,7 +388,19 @@ class PetAppController(QObject):
             elif self._sm.mood != Mood.REST:
                 self._next_yawn_ts = now + motion.random_interval(C.YAWN_MIN_S, C.YAWN_MAX_S)
 
-            # 学习模式：独立随机节奏（25~50s）展示日语单词（挂在既有帧循环，不新开 QTimer）
+            # 自动触发节奏（需求 C-2：20~60s 随机的**递归排期**）——窗口到点就主动
+            # 展示一条自动组文案，安静待机时宠物也会说话（迁移/呵欠只是在窗口开放
+            # 时抢先供词，展示成功即重排窗口）。睡觉态不闲聊但跳过本周期（防醒来
+            # 瞬间连弹）；被单词泡泡 / 气泡开关抑制时不推进窗口，解除后下一帧补上。
+            if now >= self._next_bubble_ts:
+                if self._sm.mood == Mood.SLEEP:
+                    self._next_bubble_ts = now + motion.random_interval(
+                        C.BUBBLE_MIN_INTERVAL_S, C.BUBBLE_MAX_INTERVAL_S, self._rng
+                    )
+                else:
+                    self._show_bubble_for(self._sm.mood, now)
+
+            # 学习模式：独立随机节奏（30~600s）展示日语单词（挂在既有帧循环，不新开 QTimer）
             if self._cfg.jp_enabled and now >= self._next_word_ts:
                 self._show_word_bubble(now)
                 self._schedule_next_word(now)
@@ -386,13 +423,15 @@ class PetAppController(QObject):
         try:
             gesture = Gesture(int(gesture_value))
             now = time.monotonic()
+            # 鼠标来源一律 immediate：保留「鼠标移到宠物上立即显示一条文案」的行为，
+            # 不受 20~60s 自动节奏窗口约束（仅受 BUBBLE_MIN_GAP_S 硬下限保护，防连弹）。
             if gesture == Gesture.CLICK:
                 self._model.trigger_click()
                 self._active_until = now + C.CLICK_ANIM_S
-                self._show_bubble_for(Expression.HAPPY, now)
+                self._show_bubble_for(Expression.HAPPY, now, immediate=True)
             elif gesture == Gesture.HOVER:
                 self._active_until = now + _ACTIVE_HOLD_S
-                self._show_bubble_for(Expression.HAPPY, now)
+                self._show_bubble_for(Expression.HAPPY, now, immediate=True)
 
             transition = self._sm.on_gesture(gesture, now)
             self._sync_fps_and_visuals(transition)
@@ -451,15 +490,24 @@ class PetAppController(QObject):
                 self._bubble_text_dialog = BubbleTextDialog()
                 self._bubble_text_dialog.applied.connect(self._on_bubble_text_applied)
             dialog = self._bubble_text_dialog
-            dialog.load_state(self._cfg.bubble_text_pack, self._cfg.bubble_texts_custom)
+            dialog.load_state(
+                self._cfg.bubble_text_pack,
+                self._cfg.bubble_texts_custom,
+                self._cfg.bubble_texts_custom_keyboard,
+            )
             dialog.show()
             dialog.raise_()
             dialog.activateWindow()
         except Exception:  # noqa: BLE001
             logger.exception("打开气泡文案设置异常（已忽略）")
 
-    def _on_bubble_text_applied(self, pack: str, custom_texts: list) -> None:
+    def _on_bubble_text_applied(
+        self, pack: str, custom_texts: list, custom_keyboard_texts: list
+    ) -> None:
         """台词设置确认：写配置 → 落地 → 通知（即改即生效，无需重启）。
+
+        两组自定义池**一次事务写入**（自动触发组 + 敲击键盘组），避免只更新一组
+        造成两组语义错位。
 
         清洗复用 config 的 coerce 规则（经 ``from_dict``，单一事实源）——
         对话框虽已清洗，此处兜底防其它调用方传入脏数据。
@@ -468,9 +516,14 @@ class PetAppController(QObject):
         try:
             if pack in C.BUBBLE_TEXT_PACK_ALLOWED:
                 self._cfg.bubble_text_pack = str(pack)
-            self._cfg.bubble_texts_custom = AppConfig.from_dict(
-                {"bubble_texts_custom": list(custom_texts or [])}
-            ).bubble_texts_custom
+            cleaned = AppConfig.from_dict(
+                {
+                    "bubble_texts_custom": list(custom_texts or []),
+                    "bubble_texts_custom_keyboard": list(custom_keyboard_texts or []),
+                }
+            )
+            self._cfg.bubble_texts_custom = cleaned.bubble_texts_custom
+            self._cfg.bubble_texts_custom_keyboard = cleaned.bubble_texts_custom_keyboard
             self._persist()
             self._tray.notify(C.APP_DISPLAY_NAME, C.TRAY_NOTIFY_BUBBLE_TEXT_SAVED)
         except Exception:  # noqa: BLE001
@@ -649,7 +702,7 @@ class PetAppController(QObject):
             self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_BANK_UNAVAILABLE)
 
     def _schedule_next_word(self, now: float) -> None:
-        """按 25~50s 随机间隔排期下一次单词展示（学习关闭时置 ``inf`` 不触发）。"""
+        """按 30~600s 随机间隔排期下一次单词展示（学习关闭时置 ``inf`` 不触发）。"""
 
         if self._cfg.jp_enabled and not self._bank.is_empty():
             self._next_word_ts = now + motion.random_interval(
@@ -659,7 +712,7 @@ class PetAppController(QObject):
             self._next_word_ts = float("inf")
 
     def _show_word_bubble(
-        self, now: float, *, bypass_gap: bool = False, ignore_daily_limit: bool = False
+        self, now: float, *, bypass_gap: bool = False, manual: bool = False
     ) -> None:
         """记忆闭环：停止判定 → 加权抽取 → 展示学习泡泡 + 按钮条（受多重守卫约束）。
 
@@ -667,9 +720,9 @@ class PetAppController(QObject):
             now: 当前时刻（秒）。
             bypass_gap: ``True`` 时跳过 ``BUBBLE_MIN_GAP_S`` 最小间隔（「立即显示」用），
                 仍保留睡觉 / 气泡关 / 词库空守卫。
-            ignore_daily_limit: ``True`` 时跳过「每日上限 / 当日全部掌握」停止判定。
-                **仅手动「立即显示」路径可传 True**（用户决策：手动点击为显式意图，
-                不受每日配额约束）；自动排期路径必须保持 ``False``，严格遵守上限。
+            manual: ``True`` 表示本次展示来自手动「立即显示」路径（用户决策：手动点击为
+                显式意图，不受每日配额约束，且其处置不计入每日数量统计）。
+                **仅手动路径可传 True**；自动排期路径必须保持 ``False``，严格遵守上限。
         """
 
         # 守卫：已有词在展示时不重复抽取；气泡关闭 / 睡觉 / 最小间隔不展示
@@ -686,28 +739,40 @@ class PetAppController(QObject):
             self._today_str = self._local_date_str()
 
         # 停止判定：达到每日上限 → 一次性通知后今日不再弹
-        # 仅自动路径受限；手动「立即显示」传 ignore_daily_limit=True 可突破（用户决策）
-        if not ignore_daily_limit and self._jp_stop_for_today():
+        # 仅自动路径受限；手动「立即显示」传 manual=True 可突破（用户决策）
+        if not manual and self._jp_stop_for_today():
             if not self._today_done_notified:
                 self._today_done_notified = True
                 self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_TODAY_DONE)
             return
 
         today = self._today_str
-        excluded = self._mastered.ids() | self._daily_log.shown_ids_for(today)
+        # 排除集合：已掌握 + 当日已展示（落库）+ 当日手动展示过（D2，内存级去重）
+        excluded = (
+            self._mastered.ids()
+            | self._daily_log.shown_ids_for(today)
+            | self._manual_shown_ids_today
+        )
         vocab_ids = {item.id for item in self._vocab.items()}
         entry = self._picker.pick(self._cfg.jp_level, excluded, vocab_ids)
         if entry is None:
-            if not self._bank.is_empty() and not self._level_done_notified:
+            # 池耗尽：手动路径给专用反馈；自动路径保持既有「等级掌握」一次性通知
+            if manual:
+                self._tray.notify(
+                    C.APP_DISPLAY_NAME,
+                    C.JP_NOTIFY_POOL_EXHAUSTED.format(level=self._cfg.jp_level),
+                )
+            elif not self._bank.is_empty() and not self._level_done_notified:
                 self._level_done_notified = True
                 logger.warning("该等级单词已全部掌握（level=%s）", self._cfg.jp_level)
                 self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_LEVEL_DONE)
             return
 
-        # 单飞状态机：置当前词 / deadline / 未处置标志
+        # 单飞状态机：置当前词 / deadline / 未处置标志 + 手动标记（供 _dispose_word 判定）
         self._current_word = entry
         self._word_deadline = now + self._cfg.jp_bubble_duration_s
         self._word_disposed = False
+        self._word_manual = manual
 
         anchor = self._bubble_anchor()
         self._bubble.set_anchor(anchor)
@@ -744,6 +809,7 @@ class PetAppController(QObject):
                 self._current_word = None
                 self._word_deadline = float("inf")
                 self._word_disposed = True
+                self._word_manual = False
         self._persist()
 
     def _on_jp_level_selected(self, level: str) -> None:
@@ -778,11 +844,17 @@ class PetAppController(QObject):
         self._persist()
 
     def _on_jp_show_now(self) -> None:
-        """托盘「立即显示一个新单词」→ 先等价超时未处理当前词，再立即弹新词（方案 A）。"""
+        """托盘「立即显示一个新单词」→ 先等价超时未处理当前词，再立即弹新词（方案 A）。
+
+        用户决策：手动展示不受每日配额约束 —— 已移除「今日已达上限 → 拦截」的判定；
+        且手动展示的词在处置时不计入每日数量统计（详见 :meth:`_dispose_word`）。
+        每次点击都必须给出可见反馈，严禁静默返回（历史缺陷：与自动路径共用一次性标志位）。
+        """
 
         try:
             now = time.monotonic()
             if not self._cfg.jp_enabled:
+                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_JP_OFF)
                 return
             if not self._cfg.bubble_enabled:
                 self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_NEED_BUBBLE)
@@ -791,30 +863,38 @@ class PetAppController(QObject):
                 self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_SHOW_NOW_BLOCKED)
                 return
             if self._bank.is_empty():
-                if not self._bank_warned:
-                    self._bank_warned = True
-                    self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_BANK_UNAVAILABLE)
-                return
-            if self._jp_stop_for_today():
-                if not self._today_done_notified:
-                    self._today_done_notified = True
-                    self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_TODAY_DONE)
+                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_BANK_UNAVAILABLE)
                 return
 
-            # 当前词在展示 → 先等价超时落「未处理」（shown_today +1）
+            # 当前词在展示 → 先等价超时落「未处理」；是否计数由 _dispose_word 内的
+            # _word_manual 标记天然决定（旧词为自动词则正常计数，为手动词则不计数）。
             if self._current_word is not None and not self._word_disposed:
                 self._dispose_word(C.DAILY_LOG_STATUS_UNPROCESSED, now)
 
-            self._show_word_bubble(now, bypass_gap=True)
+            # manual=True：跳过每日上限停止判定，且处置时不计入每日数量统计
+            self._show_word_bubble(now, bypass_gap=True, manual=True)
             if self._current_word is not None:
+                today = self._today_str or self._local_date_str()
+                count = self._daily_log.count_for(today)
+                limit = self._cfg.jp_daily_limit
+                # 已达/超出目标时用专用文案（明确「手动显示不计入每日数量」）
+                template = (
+                    C.JP_NOTIFY_SHOW_NOW_OVER_LIMIT
+                    if count >= limit
+                    else C.JP_NOTIFY_SHOW_NOW
+                )
                 self._tray.notify(
                     C.APP_DISPLAY_NAME,
-                    C.JP_NOTIFY_SHOW_NOW.format(
-                        word=self._current_word.word, kana=self._current_word.kana
+                    template.format(
+                        word=self._current_word.word,
+                        kana=self._current_word.kana,
+                        count=count,
+                        limit=limit,
                     ),
                 )
         except Exception:  # noqa: BLE001
             logger.exception("立即显示单词异常（已忽略）")
+            self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_SHOW_NOW_FAILED)
 
     def _on_jp_log(self) -> None:
         """打开学习记录窗口（单例，喂入全部日期与当日记录，重开则前置）。"""
@@ -906,21 +986,27 @@ class PetAppController(QObject):
         if entry is None:
             return
 
-        # 2) 置已处置标志，杜绝竞态
+        # 2) 置已处置标志，杜绝竞态；读取并即刻复位「手动展示」标记
+        #    （末尾会排期下一词 / 或被守卫提前 return，标记不残留污染下次自动展示）
         self._word_disposed = True
+        manual = self._word_manual
+        self._word_manual = False
 
         # 3) 立即隐藏气泡与按钮条
         self._bubble.hide_bubble()
         self._button_bar.hide_bar()
 
         # 4) 落库（today 为本地自然日 key，由 app 注入 core）
+        #    解耦规则：手动展示的词仍写长期数据（mastered / vocab，用户决策 D1），
+        #    但**不计入每日数量统计**（每日配额只由正常自动流程触发，用户决策 R1/R2）。
         today = self._today_str or self._local_date_str()
         iso = self._now_iso()
         if status == C.DAILY_LOG_STATUS_MASTERED:
             added = self._mastered.add(entry, iso)
-            self._daily_log.add_entry(
-                today, DailyLogEntry.from_entry(entry, iso, status)
-            )
+            if not manual:
+                self._daily_log.add_entry(
+                    today, DailyLogEntry.from_entry(entry, iso, status)
+                )
             if added:
                 self._tray.notify(
                     C.APP_DISPLAY_NAME,
@@ -930,9 +1016,10 @@ class PetAppController(QObject):
                 self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_MASTERED_DUPLICATE)
         elif status == C.DAILY_LOG_STATUS_VOCAB:
             added = self._vocab.add(entry, iso)
-            self._daily_log.add_entry(
-                today, DailyLogEntry.from_entry(entry, iso, status)
-            )
+            if not manual:
+                self._daily_log.add_entry(
+                    today, DailyLogEntry.from_entry(entry, iso, status)
+                )
             if added:
                 self._tray.notify(
                     C.APP_DISPLAY_NAME,
@@ -943,9 +1030,14 @@ class PetAppController(QObject):
             if self._vocab_window is not None:
                 self._vocab_window.refresh(self._vocab.items())
         elif status == C.DAILY_LOG_STATUS_UNPROCESSED:
-            self._daily_log.add_entry(
-                today, DailyLogEntry.from_entry(entry, iso, status)
-            )
+            if not manual:
+                self._daily_log.add_entry(
+                    today, DailyLogEntry.from_entry(entry, iso, status)
+                )
+
+        # 5) D2：手动词并入「当日不重复展示」去重集合（内存级、不落盘、不计入 count）
+        if manual:
+            self._manual_shown_ids_today.add(entry.id)
 
         # 6) 清状态
         self._current_word = None
@@ -1098,25 +1190,65 @@ class PetAppController(QObject):
             return C.FPS_ACTIVE
         return C.FPS_IDLE
 
-    def _show_bubble_for(self, key: Expression | Mood, now: float | None = None) -> None:
-        """按表情/情绪态随机展示气泡（受开关与最小间隔约束，FR-30）。
+    def _show_bubble_for(
+        self,
+        key: Expression | Mood,
+        now: float | None = None,
+        *,
+        immediate: bool = False,
+        keyboard: bool = False,
+    ) -> bool:
+        """按表情/情绪态随机展示气泡（受开关、硬下限与节奏窗口约束，FR-30）。
+
+        触发节奏（2026-09-26 需求 C 重做：20~60s 随机是「排期」而不只是「节流」）：
+
+        - **自动来源**（帧循环排期器 / 状态机迁移 / 休息态呵欠）：共享**自动窗**
+          ``_next_bubble_ts``。帧循环到点必主动展示一条；迁移/呵欠只是恰好在窗口
+          开放时抢先供词。任一次成功展示都把窗口重排为 ``now + 20~60s`` 随机，
+          因此安静待机时宠物也会每 20~60 秒说一句话。
+        - **键盘敲击**（``keyboard=True``，仅全局键盘监听）：走**独立的敲击窗**
+          ``_next_kb_bubble_ts``（同样 20~60s 随机）。稳态敲击（无情绪迁移）也
+          会触发——真在敲键盘时敲击组文案按节奏可靠出现，又不刷屏。
+        - **鼠标来源**（悬停抚摸 / 点击）：``immediate=True``，跳过两个窗口立即
+          显示（保留「鼠标移到宠物上立即显示一条」）；仍受 ``BUBBLE_MIN_GAP_S``
+          硬下限保护，且展示后推迟自动窗（避免「刚摸一下就被自动闲聊紧跟一条」）。
+
+        文案来源（2026-09-26 需求 C，按**触发源**选池 + 关键字门控）：
+
+        - ``keyboard=True``（仅全局键盘监听）→ 敲击键盘组自定义池，不做关键字过滤；
+        - ``keyboard=False``（其余全部来源，含鼠标 immediate）→ 自动触发组自定义池，
+          **过滤掉含键盘关键字的条目**；过滤后为空则回落预设包（同样过滤）。
+          因此「鼠标移到宠物上」看到的文案一定不含「键盘」等键盘关键字。
 
         Args:
             key: ``Expression`` 或 ``Mood``（作为文案表索引）。
             now: 当前时刻（秒）。若为 ``None`` 则自行读取。
+            immediate: ``True`` = 用户主动的鼠标交互，跳过两个节奏窗口。
+            keyboard: ``True`` = 本次展示由真实键盘敲击驱动（决定用哪个窗口与自定义池）。
+
+        Returns:
+            ``True`` = 本次成功展示（相应窗口已重排）；``False`` = 被守卫拦下
+            （调用方据此决定是否保持排期重试，见帧循环排期器）。
         """
 
         if not self._cfg.bubble_enabled:
-            return
+            return False
         # 学习词展示期间抑制情绪气泡（避免覆盖「展示 → 标记」闭环，设计 §1.5）
         if self._current_word is not None:
-            return
+            return False
         now = float(now) if now is not None else time.monotonic()
+        # ① 硬下限：任何来源都必须满足，防止敲击/迁移同帧叠加或鼠标反复进出连弹
         if (now - self._last_bubble_ts) < C.BUBBLE_MIN_GAP_S:
-            return
-        texts = self._bubble_texts_for(key)
+            return False
+        # ② 节奏窗口（20 秒 ~ 1 分钟随机）：鼠标 immediate 不受限；键盘敲击走
+        #    独立敲击窗，与自动窗互不挤占
+        if not immediate:
+            window = self._next_kb_bubble_ts if keyboard else self._next_bubble_ts
+            if now < window:
+                return False
+        texts = self._bubble_texts_for(key, keyboard=keyboard)
         if not texts:
-            return
+            return False
         text = self._rng.choice(texts)
         self._bubble.set_anchor(self._bubble_anchor())
         duration = motion.random_interval(
@@ -1124,21 +1256,58 @@ class PetAppController(QObject):
         )
         self._bubble.show_message(text, duration)
         self._last_bubble_ts = now
+        # ③ 展示成功后重排对应窗口（20~60s 随机）。鼠标 immediate 用的是自动组
+        #    文案，故推迟自动窗；敲击窗不受鼠标交互影响（两组各自独立节奏）。
+        interval = motion.random_interval(
+            C.BUBBLE_MIN_INTERVAL_S, C.BUBBLE_MAX_INTERVAL_S, self._rng
+        )
+        if keyboard:
+            self._next_kb_bubble_ts = now + interval
+        else:
+            self._next_bubble_ts = now + interval
+        return True
 
-    def _bubble_texts_for(self, key: Expression | Mood) -> list[str] | None:
-        """情绪气泡的台词来源（优先级：自定义池 > 预设台词包 > 内置文案表）。
+    def _bubble_texts_for(
+        self, key: Expression | Mood, *, keyboard: bool = False
+    ) -> list[str] | None:
+        """情绪气泡的台词来源（按**触发源**选池，需求 C-1 / C-3 / C-4）。
 
-        现读 ``self._cfg``：台词设置对话框确认后**即改即生效**，无需重启。
-        只影响情绪气泡；单词泡泡（``show_word``）与日语学习模块零关联。
+        两类触发源各自独立选池：
+
+        - ``keyboard=True``（仅全局键盘监听路径）：敲击键盘组自定义池 > 预设台词包
+          > 内置表；**不做**键盘关键字过滤 —— 敲击时看到键盘文案才自然。
+        - ``keyboard=False``（状态机迁移 / 休息态呵欠 / 鼠标悬停与点击）：自动触发组
+          自定义池 > 预设台词包 > 内置表；**每一级都剔除含键盘关键字的条目**
+          （:func:`constants.filter_keyboard_texts`）。自动组被过滤空时视为「未配置」，
+          继续回落预设包 —— 否则用户误把键盘文案放进自动组就会完全看不到自动气泡。
+
+        Args:
+            key: 文案索引（``Expression`` 或 ``Mood``）。
+            keyboard: 是否由真实键盘敲击驱动。
+
+        Returns:
+            可选台词列表；``None`` / 空列表表示本键无可用台词（调用方放弃展示）。
+            现读 ``self._cfg``：台词设置对话框确认后**即改即生效**，无需重启。
+            只影响情绪气泡；单词泡泡（``show_word``）与日语学习模块零关联。
         """
 
-        custom = self._cfg.bubble_texts_custom
-        if custom:
-            return list(custom)
-        pack_texts = C.BUBBLE_TEXT_PACKS.get(self._cfg.bubble_text_pack, {}).get(key)
-        if pack_texts:
-            return pack_texts
-        return C.BUBBLE_TEXTS.get(key)
+        cfg = self._cfg
+        if keyboard:
+            if cfg.bubble_texts_custom_keyboard:
+                return list(cfg.bubble_texts_custom_keyboard)
+        else:
+            auto_texts = C.filter_keyboard_texts(cfg.bubble_texts_custom)
+            if auto_texts:
+                return auto_texts
+
+        texts = C.BUBBLE_TEXT_PACKS.get(cfg.bubble_text_pack, {}).get(key) or C.BUBBLE_TEXTS.get(
+            key
+        )
+        if not texts:
+            return None
+        if not keyboard:
+            texts = C.filter_keyboard_texts(texts)
+        return texts or None
 
     def _bubble_anchor(self) -> QPoint:
         """计算气泡锚点（宠物头顶的全局坐标）。"""

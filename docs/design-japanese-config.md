@@ -354,7 +354,7 @@ sequenceDiagram
 
     U->>T: 点「立即显示一个新单词」
     T->>C: jp_show_now_requested()
-    C->>C: 守卫：上限/全掌握/睡觉/气泡关/词库空
+    C->>C: 守卫：睡觉/气泡关/词库空（2026-09-26 起不再受每日上限约束）
     alt 被拦截
         C->>T: notify(「今日学习完成」等)
     else 通过
@@ -362,15 +362,15 @@ sequenceDiagram
             C->>C: _dispose_word(UNPROCESSED, now)  # 等价超时
             C->>B: hide_bubble()
             C->>BB: hide_bar()
-            C->>DL: add_entry(UNPROCESSED)  # shown_today +1
+            C->>DL: add_entry(UNPROCESSED)  # 仅当该词来自自动流程；手动词不落库
         end
-        C->>C: 组装 excluded = mastered ∪ shown_ids；vocab_ids
+        C->>C: 组装 excluded = mastered ∪ shown_ids ∪ manual_shown_ids；vocab_ids
         C->>P: pick(level, excluded, vocab_ids)
         P-->>C: VocabEntry
-        C->>C: _current_word=entry；_word_deadline=now+duration；_word_disposed=False
+        C->>C: _current_word=entry；_word_deadline=now+duration；_word_disposed=False；_word_manual=True
         C->>B: show_word(entry, duration)
         C->>BB: show_bar(...)
-        C->>T: notify(「已立即显示：word（kana）」)
+        C->>T: notify(「已立即显示：word（kana）」；达上限时附「手动显示不计入每日数量」)
     end
 ```
 
@@ -443,8 +443,9 @@ sequenceDiagram
   - 改 `tests/test_jp_ui.py`、`tests/test_jp_memory_ui.py`
 - **加什么**：
   1. `tray.py`：删 `jp_add_vocab_requested` + `_action_jp_add_vocab` + `set_jp_current_word`；新增「显示时长」「每日数量」子菜单（`QActionGroup` 互斥单选）+「立即显示」action；新增 `set_jp_duration_checked`/`set_jp_daily_limit_checked`；`set_jp_enabled` 扩展为「难度/显示时长/每日数量/立即显示」置灰、「生词本/学习记录」常亮。
-  2. `controller.py`：`_connect_signals` 接 `jp_duration_selected`/`jp_daily_limit_selected`/`jp_show_now_requested`，删 `_on_jp_add_vocab` 及 `set_jp_current_word` 调用；新增 `_on_jp_duration_selected`/`_on_jp_daily_limit_selected`/`_on_jp_show_now`；`_show_word_bubble(now, bypass_gap=False)`（`bypass_gap=True` 跳过 `BUBBLE_MIN_GAP_S`，**保留**上限/全掌握/睡觉/气泡关守卫）。
-- **验收点**：托盘菜单结构 =「日语学习/难度/显示时长/每日数量/立即显示/生词本/学习记录」；`pytest tests/test_jp_ui.py tests/test_jp_memory_ui.py` 全绿；立即显示方案 A 语义（当前词先未处理、再弹新词、shown_today+1）用例通过。
+  2. `controller.py`：`_connect_signals` 接 `jp_duration_selected`/`jp_daily_limit_selected`/`jp_show_now_requested`，删 `_on_jp_add_vocab` 及 `set_jp_current_word` 调用；新增 `_on_jp_duration_selected`/`_on_jp_daily_limit_selected`/`_on_jp_show_now`；`_show_word_bubble(now, bypass_gap=False)`（`bypass_gap=True` 跳过 `BUBBLE_MIN_GAP_S`，**保留**睡觉/气泡关/词库空守卫）。
+- **验收点**：托盘菜单结构 =「日语学习/难度/显示时长/每日数量/立即显示/生词本/学习记录」；`pytest tests/test_jp_ui.py tests/test_jp_memory_ui.py` 全绿；立即显示方案 A 语义（当前词先未处理、再弹新词）用例通过。
+- ⚠️ **2026-09-26 变更（覆盖本节原语义）**：`_show_word_bubble` 的 `ignore_daily_limit` 参数已重构为 `manual`；手动路径**不再受**每日上限约束、其展示的单词**不计入**每日数量统计（原「shown_today+1」不再适用于手动词，仅适用于被顺带处置的自动词）。详见 `docs/change-japanese-quota-decouple.md`。
 
 #### T03 单词详情窗口 + 异步 Jisho + 双击触发
 
