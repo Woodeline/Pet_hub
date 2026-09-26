@@ -46,6 +46,7 @@ from desktop_pet.core.word_detail_bank import WordDetailBank
 from desktop_pet.core.word_details_cache_store import WordDetailsCacheStore
 from desktop_pet.ui.bubble import BubbleWindow
 from desktop_pet.ui.bubble_button_bar import BubbleButtonBar
+from desktop_pet.ui.bubble_text_dialog import BubbleTextDialog
 from desktop_pet.ui.log_window import LogWindow
 from desktop_pet.ui.motion_ui import show_window_animated
 from desktop_pet.ui.pet_renderer import PetRenderer
@@ -131,6 +132,8 @@ class PetAppController(QObject):
         self._daily_log: DailyLogStore = DailyLogStore(DailyLogStore.default_path())
         self._button_bar: BubbleButtonBar = BubbleButtonBar()
         self._log_window: LogWindow | None = None
+        # 气泡文案设置对话框（单例，重开则前置）
+        self._bubble_text_dialog: BubbleTextDialog | None = None
         self._word_deadline: float = float("inf")
         self._word_disposed: bool = True
         self._today_str: str = ""
@@ -262,6 +265,7 @@ class PetAppController(QObject):
         # 托盘
         self._tray.listen_toggled.connect(self._on_listen_toggled)
         self._tray.bubble_toggled.connect(self._on_bubble_toggled)
+        self._tray.bubble_text_requested.connect(self._on_bubble_text_settings)
         self._tray.scale_selected.connect(self._apply_scale)
         self._tray.minimize_requested.connect(self._on_minimize)
         self._tray.restore_requested.connect(self._on_restore)
@@ -438,6 +442,39 @@ class PetAppController(QObject):
         if not checked:
             self._bubble.hide_bubble()
         self._persist()
+
+    def _on_bubble_text_settings(self) -> None:
+        """打开「气泡文案」设置对话框（单例，重开则前置）。"""
+
+        try:
+            if self._bubble_text_dialog is None:
+                self._bubble_text_dialog = BubbleTextDialog()
+                self._bubble_text_dialog.applied.connect(self._on_bubble_text_applied)
+            dialog = self._bubble_text_dialog
+            dialog.load_state(self._cfg.bubble_text_pack, self._cfg.bubble_texts_custom)
+            dialog.show()
+            dialog.raise_()
+            dialog.activateWindow()
+        except Exception:  # noqa: BLE001
+            logger.exception("打开气泡文案设置异常（已忽略）")
+
+    def _on_bubble_text_applied(self, pack: str, custom_texts: list) -> None:
+        """台词设置确认：写配置 → 落地 → 通知（即改即生效，无需重启）。
+
+        清洗复用 config 的 coerce 规则（经 ``from_dict``，单一事实源）——
+        对话框虽已清洗，此处兜底防其它调用方传入脏数据。
+        """
+
+        try:
+            if pack in C.BUBBLE_TEXT_PACK_ALLOWED:
+                self._cfg.bubble_text_pack = str(pack)
+            self._cfg.bubble_texts_custom = AppConfig.from_dict(
+                {"bubble_texts_custom": list(custom_texts or [])}
+            ).bubble_texts_custom
+            self._persist()
+            self._tray.notify(C.APP_DISPLAY_NAME, C.TRAY_NOTIFY_BUBBLE_TEXT_SAVED)
+        except Exception:  # noqa: BLE001
+            logger.exception("应用气泡文案设置异常（已忽略）")
 
     def _on_reduce_motion_toggled(self, checked: bool) -> None:
         """切换「减少动效」开关（对应 prefers-reduced-motion）。
@@ -1077,7 +1114,7 @@ class PetAppController(QObject):
         now = float(now) if now is not None else time.monotonic()
         if (now - self._last_bubble_ts) < C.BUBBLE_MIN_GAP_S:
             return
-        texts = C.BUBBLE_TEXTS.get(key)
+        texts = self._bubble_texts_for(key)
         if not texts:
             return
         text = self._rng.choice(texts)
@@ -1087,6 +1124,21 @@ class PetAppController(QObject):
         )
         self._bubble.show_message(text, duration)
         self._last_bubble_ts = now
+
+    def _bubble_texts_for(self, key: Expression | Mood) -> list[str] | None:
+        """情绪气泡的台词来源（优先级：自定义池 > 预设台词包 > 内置文案表）。
+
+        现读 ``self._cfg``：台词设置对话框确认后**即改即生效**，无需重启。
+        只影响情绪气泡；单词泡泡（``show_word``）与日语学习模块零关联。
+        """
+
+        custom = self._cfg.bubble_texts_custom
+        if custom:
+            return list(custom)
+        pack_texts = C.BUBBLE_TEXT_PACKS.get(self._cfg.bubble_text_pack, {}).get(key)
+        if pack_texts:
+            return pack_texts
+        return C.BUBBLE_TEXTS.get(key)
 
     def _bubble_anchor(self) -> QPoint:
         """计算气泡锚点（宠物头顶的全局坐标）。"""

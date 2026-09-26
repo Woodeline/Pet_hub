@@ -41,6 +41,8 @@ class TrayController(QObject):
     skin_selected = Signal(str)
     quit_requested = Signal()
     bubble_toggled = Signal(bool)
+    #: 打开「气泡文案」设置对话框
+    bubble_text_requested = Signal()
     # —— 日语学习（ui 层只发信号，业务判定在 app/controller）——
     jp_enabled_toggled = Signal(bool)
     jp_level_selected = Signal(str)
@@ -69,6 +71,7 @@ class TrayController(QObject):
         self._action_restore: QAction | None = None
         self._action_listen: QAction | None = None
         self._action_bubble: QAction | None = None
+        self._action_bubble_text: QAction | None = None
         self._action_minimize: QAction | None = None
         self._action_autostart: QAction | None = None
         self._action_reduce_motion: QAction | None = None
@@ -302,6 +305,9 @@ class TrayController(QObject):
         self._action_bubble.setChecked(bool(self._cfg.bubble_enabled))
         self._action_bubble.toggled.connect(self.bubble_toggled.emit)
 
+        self._action_bubble_text = QAction(C.TRAY_MENU_BUBBLE_TEXT, self._menu)
+        self._action_bubble_text.triggered.connect(self.bubble_text_requested.emit)
+
         # —— 日语学习菜单组（开关 + 难度/显示时长/每日数量子菜单 + 立即显示 + 生词本/记录）——
         self._jp_menu = QMenu(C.JP_MENU_TITLE, self._menu)
         self._action_jp = QAction(C.JP_MENU_ENABLE, self._jp_menu)
@@ -426,6 +432,7 @@ class TrayController(QObject):
         menu.addSeparator()
         menu.addAction(self._action_listen)
         menu.addAction(self._action_bubble)
+        menu.addAction(self._action_bubble_text)
         menu.addSeparator()
         # 「日语学习」子菜单：开关（首项）→ 立即显示 → 节奏三档 → 学习资料
         jp = self._jp_menu

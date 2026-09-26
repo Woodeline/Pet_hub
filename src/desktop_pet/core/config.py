@@ -13,7 +13,7 @@ import json
 import logging
 import os
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final
 
@@ -128,6 +128,37 @@ def _coerce_skin_name(value: Any, default: str) -> str:
     return default
 
 
+def _coerce_bubble_text_pack(value: Any, default: str) -> str:
+    """预设台词包名：白名单校验（照 :func:`_coerce_theme` 先例）。"""
+
+    if isinstance(value, str):
+        candidate = value.strip()
+        if candidate in C.BUBBLE_TEXT_PACK_ALLOWED:
+            return candidate
+    return default
+
+
+def _coerce_bubble_texts_custom(value: Any, default: list[str]) -> list[str]:
+    """自定义台词池：字符串列表清洗（strip/去空/去重/限长）；非法整体回默认。
+
+    空列表是合法值（= 不启用自定义，回落预设台词包）。
+    """
+
+    if not isinstance(value, list):
+        return default
+    cleaned: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        text = item.strip()
+        if not text or text in cleaned:
+            continue
+        cleaned.append(text[: C.BUBBLE_TEXT_CUSTOM_MAX_LEN])
+        if len(cleaned) >= C.BUBBLE_TEXT_CUSTOM_MAX_COUNT:
+            break
+    return cleaned
+
+
 def _coerce_duration(value: Any, default: int) -> int:
     """把学习泡泡时长收敛到档位 ``JP_BUBBLE_DURATION_OPTIONS``；非法值回落默认。"""
 
@@ -177,6 +208,8 @@ class AppConfig:
         scale: 缩放档位，取值 ``0.8 / 1.0 / 1.2``。
         listen_enabled: 全局键盘监听开关。
         bubble_enabled: 气泡提示开关（PRD Q-01 的"静音"含义）。
+        bubble_text_pack: 情绪气泡预设台词包名（default/energy/gentle）。
+        bubble_texts_custom: 自定义台词池；**非空即优先于预设包**（空 = 不启用）。
         autostart: 开机自启开关。
         reduce_motion: 减少动效（对应 prefers-reduced-motion），默认 ``False``。
         theme: 主题皮肤（``default`` / 四季 / 节日 / ``auto``），默认 ``default``。
@@ -197,6 +230,8 @@ class AppConfig:
     scale: float = C.DEFAULT_SCALE
     listen_enabled: bool = True
     bubble_enabled: bool = True
+    bubble_text_pack: str = C.DEFAULT_BUBBLE_TEXT_PACK
+    bubble_texts_custom: list[str] = field(default_factory=list)
     autostart: bool = False
     reduce_motion: bool = False
     theme: str = C.DEFAULT_THEME
@@ -231,6 +266,8 @@ class AppConfig:
             "reduce_motion": bool(self.reduce_motion),
             "theme": str(self.theme),
             "skin_name": str(self.skin_name),
+            "bubble_text_pack": str(self.bubble_text_pack),
+            "bubble_texts_custom": [str(t) for t in self.bubble_texts_custom],
             "jp_enabled": bool(self.jp_enabled),
             "jp_level": str(self.jp_level),
             "jp_bubble_duration_s": int(self.jp_bubble_duration_s),
@@ -275,6 +312,12 @@ class AppConfig:
             # 包名是用户投放的任意目录名，不做白名单（仅类型/空值校验）；
             # 不存在的包由 build_skin_renderer 回落自动选择，不弹错误。
             skin_name=_coerce_skin_name(get("skin_name"), defaults.skin_name),
+            bubble_text_pack=_coerce_bubble_text_pack(
+                get("bubble_text_pack"), defaults.bubble_text_pack
+            ),
+            bubble_texts_custom=_coerce_bubble_texts_custom(
+                get("bubble_texts_custom"), defaults.bubble_texts_custom
+            ),
             jp_enabled=_coerce_bool(get("jp_enabled"), defaults.jp_enabled),
             jp_level=_coerce_level(get("jp_level"), defaults.jp_level),
             jp_bubble_duration_s=_coerce_duration(

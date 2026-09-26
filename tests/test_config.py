@@ -181,6 +181,8 @@ def test_load_after_save_is_json_readable(config_store: ConfigStore, config_path
         "theme",
         # 增量改造：新增皮肤包（MOD）选择（Aranara/Nahida 适配；CONFIG_VERSION 保持 1）
         "skin_name",
+        # 增量改造：情绪气泡台词（预设包 + 自定义池；CONFIG_VERSION 保持 1）
+        "bubble_text_pack", "bubble_texts_custom",
         "jp_enabled", "jp_level",
         "jp_bubble_duration_s", "jp_daily_limit",
         # 增量改造：DeepSeek 联网 / 中文详情配置（CONFIG_VERSION 保持 1）
@@ -472,3 +474,58 @@ def test_save_and_load_logs_never_contain_plaintext_key(
     assert caplog.text                                   # 确实产生了日志
     assert _SECRET not in caplog.text                # 无明文
     assert "***" in caplog.text                      # 已打码
+
+
+# --------------------------------------------------------------------------- #
+# 4d. 情绪气泡台词：预设包 + 自定义池
+# --------------------------------------------------------------------------- #
+def test_bubble_text_pack_coercion_whitelist() -> None:
+    """台词包名走白名单（照 theme 先例）：非法值回落 default。"""
+
+    assert AppConfig.from_dict({"bubble_text_pack": "energy"}).bubble_text_pack == "energy"
+    assert AppConfig.from_dict({"bubble_text_pack": "gentle"}).bubble_text_pack == "gentle"
+    assert AppConfig.from_dict({"bubble_text_pack": "banana"}).bubble_text_pack == "default"
+    assert AppConfig.from_dict({"bubble_text_pack": 123}).bubble_text_pack == "default"
+    assert AppConfig.from_dict({"bubble_text_pack": None}).bubble_text_pack == "default"
+
+
+def test_bubble_text_pack_roundtrip(config_store: ConfigStore) -> None:
+    config_store.save(AppConfig(bubble_text_pack="gentle"))
+    loaded = config_store.load()
+    assert loaded.bubble_text_pack == "gentle"
+    assert loaded.to_dict()["bubble_text_pack"] == "gentle"
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        (["  摸摸我呀~ ", "加油鸭！", "摸摸我呀~"], ["摸摸我呀~", "加油鸭！"]),  # strip + 去重
+        (["", "   ", "有效"], ["有效"]),                                        # 去空
+        ([123, None, "有效"], ["有效"]),                                        # 非字符串跳过
+        ([], []),                                                               # 空 = 合法（不启用）
+        ("不是列表", []),                                                        # 非列表回默认
+        (None, []),
+    ],
+)
+def test_bubble_texts_custom_coercion(raw, expected) -> None:
+    assert AppConfig.from_dict({"bubble_texts_custom": raw}).bubble_texts_custom == expected
+
+
+def test_bubble_texts_custom_limits() -> None:
+    """超长截断到 MAX_LEN；超量截断到 MAX_COUNT。"""
+
+    long_text = "啊" * (C.BUBBLE_TEXT_CUSTOM_MAX_LEN + 10)
+    cfg = AppConfig.from_dict({"bubble_texts_custom": [long_text]})
+    assert len(cfg.bubble_texts_custom[0]) == C.BUBBLE_TEXT_CUSTOM_MAX_LEN
+
+    many = [f"台词{i}" for i in range(C.BUBBLE_TEXT_CUSTOM_MAX_COUNT + 10)]
+    cfg = AppConfig.from_dict({"bubble_texts_custom": many})
+    assert len(cfg.bubble_texts_custom) == C.BUBBLE_TEXT_CUSTOM_MAX_COUNT
+
+
+def test_bubble_texts_custom_roundtrip(config_store: ConfigStore) -> None:
+    texts = ["摸摸我呀~", "加油鸭！"]
+    config_store.save(AppConfig(bubble_texts_custom=texts))
+    loaded = config_store.load()
+    assert loaded.bubble_texts_custom == texts
+    assert loaded.to_dict()["bubble_texts_custom"] == texts
