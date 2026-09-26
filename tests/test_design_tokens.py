@@ -191,6 +191,8 @@ def test_colors_key_set_unchanged_by_p0() -> None:
         "log_status_mastered", "log_status_vocab", "log_status_unprocessed",
         "bubble_shadow", "bubble_divider", "bubble_gradient_bottom",
         "jp_level_chip_bg", "jp_level_chip_text",
+        # 气泡双层描边（贴纸风）
+        "bubble_border", "bubble_halo",
     }
     assert set(C.COLORS) == expected_keys
 

@@ -130,6 +130,9 @@ def test_colors_dict_unchanged_literal() -> None:
         "bubble_gradient_bottom": "#F7EEDF",
         "jp_level_chip_bg": "#7A9E7E",
         "jp_level_chip_text": "#FFFFFF",
+        # 气泡双层描边（贴纸风）
+        "bubble_border": "#5C4330",
+        "bubble_halo": "#FFFFFF",
     }
 
 

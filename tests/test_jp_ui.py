@@ -46,7 +46,9 @@ def test_show_word_sets_mode_and_fixed_width(qtbot) -> None:
     assert bubble._line_translation == "我"
     assert bubble._line_meaning == "第一人称代词"
 
-    expected_w = int(round(C.JP_BUBBLE_MAX_WIDTH + C.BUBBLE_PAD_X * 2.0))
+    expected_w = int(round(
+        C.JP_BUBBLE_MAX_WIDTH + C.BUBBLE_PAD_X * 2.0 + C.BUBBLE_STROKE_MARGIN * 2.0
+    ))
     assert bubble.width() == expected_w, "学习泡泡内容宽度未按 JP_BUBBLE_MAX_WIDTH 固定"
 
     measured = bubble._measure_word()

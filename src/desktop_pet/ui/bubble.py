@@ -204,12 +204,15 @@ class BubbleWindow(QWidget):
             painter.setOpacity(max(0.0, min(1.0, self._alpha)))
 
             tail_h = C.BUBBLE_TAIL_H
+            m = C.BUBBLE_STROKE_MARGIN
             if self._pointing_down:
-                body = QRectF(0.0, 0.0, self.width(), self.height() - tail_h)
+                body = QRectF(
+                    m, m, self.width() - 2.0 * m, self.height() - tail_h - 2.0 * m
+                )
             else:
-                body = QRectF(0.0, tail_h, self.width(), self.height() - tail_h)
-
-            border = QColor(C.COLORS["warm_brown"])
+                body = QRectF(
+                    m, m + tail_h, self.width() - 2.0 * m, self.height() - tail_h - 2.0 * m
+                )
 
             path = QPainterPath()
             path.addRoundedRect(body, C.BUBBLE_CORNER_RADIUS, C.BUBBLE_CORNER_RADIUS)
@@ -238,8 +241,15 @@ class BubbleWindow(QWidget):
             body_fill.setColorAt(0.5, QColor(C.COLORS["bubble_bg"]))
             body_fill.setColorAt(1.0, QColor(C.COLORS["bubble_gradient_bottom"]))
 
-            painter.setPen(QPen(border, 1.8))
+            # 双层描边（贴纸风，设计：任意明暗壁纸均清晰可辨）：
+            # 先画宽白晕（外露约 1.2px 白环，深色壁纸靠它分离），再画深棕内线
+            # （对奶白底对比强）。同一 united path，body+尾巴一次成形。
+            halo = QColor(C.COLORS["bubble_halo"])
+            halo.setAlpha(C.BUBBLE_HALO_ALPHA)
             painter.setBrush(body_fill)
+            painter.setPen(QPen(halo, C.BUBBLE_HALO_WIDTH))
+            painter.drawPath(path)
+            painter.setPen(QPen(QColor(C.COLORS["bubble_border"]), C.BUBBLE_BORDER_WIDTH))
             painter.drawPath(path)
 
             # 文字
@@ -289,8 +299,10 @@ class BubbleWindow(QWidget):
         """在 body 下方绘制多层半透明圆角矩形错位阴影（底部柔和阴影，设计 §A1.1）。"""
 
         base = QColor(C.COLORS["bubble_shadow"])
-        # (向下偏移量, 透明度) —— 越远越淡，形成柔和渐变阴影
-        layers: tuple[tuple[float, int], ...] = ((4.0, 20), (2.5, 14), (1.0, 9))
+        # (向下偏移量, 透明度) —— 越远越淡，形成柔和渐变阴影。
+        # 比旧版（20/14/9）更深：STROKE_MARGIN 让出了绘制空间，且白晕需要
+        # 阴影配合才能在浅色壁纸上提供下缘分离。
+        layers: tuple[tuple[float, int], ...] = ((4.0, 34), (2.5, 24), (1.0, 16))
         painter.save()
         painter.setPen(Qt.PenStyle.NoPen)
         for offset, alpha in layers:
@@ -506,8 +518,10 @@ class BubbleWindow(QWidget):
             measured = self._measure(self._text)
             content_w = min(C.BUBBLE_MAX_WIDTH, max(40.0, measured.width())) + C.BUBBLE_PAD_X * 2.0
         content_h = max(20.0, measured.height()) + C.BUBBLE_PAD_Y * 2.0
-        w = int(round(content_w))
-        h = int(round(content_h)) + int(round(C.BUBBLE_TAIL_H))
+        # 窗口 = 内容 + 双侧描边预留（STROKE_MARGIN，防止描边被窗口边缘裁掉一半）+ 尾巴
+        m2 = C.BUBBLE_STROKE_MARGIN * 2.0
+        w = int(round(content_w)) + int(round(m2))
+        h = int(round(content_h)) + int(round(C.BUBBLE_TAIL_H)) + int(round(m2))
 
         x = int(round(anchor.x() - w / 2.0))
         y_above = int(round(anchor.y() - C.BUBBLE_GAP_TO_PET - h))

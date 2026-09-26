@@ -166,8 +166,8 @@ def test_word_bubble_width_constant_during_typing(qtbot) -> None:
         bubble._reveal = reveal
         widths.append(round(bubble._measure_word().width(), 6))
     assert len(set(widths)) == 1
-    # 窗口宽度 = JP_BUBBLE_MAX_WIDTH + PAD_X*2 = 240 + 20 = 260（字面量）
-    assert bubble.geometry().width() == 260
+    # 窗口宽度 = JP_BUBBLE_MAX_WIDTH + PAD_X*2 + STROKE_MARGIN*2 = 240 + 20 + 8 = 268（字面量）
+    assert bubble.geometry().width() == 268
     bubble.hide_bubble()
 
 

@@ -166,6 +166,9 @@ COLORS: Final[dict[str, str]] = {
     "bubble_gradient_bottom": "#F7EEDF",  # 气泡 body 底部渐变略深
     "jp_level_chip_bg": "#7A9E7E",        # 右上角等级 chip 背景
     "jp_level_chip_text": "#FFFFFF",      # 右上角等级 chip 文字
+    # —— 气泡双层描边（贴纸风：外层白晕 + 内层深线，任意明暗壁纸均清晰）——
+    "bubble_border": "#5C4330",  # 内层描边：比 warm_brown 更深的棕（对奶白底对比更强）
+    "bubble_halo": "#FFFFFF",    # 外层白晕：深色壁纸上把气泡从背景里托出来
 }
 
 # 主体「柔和全息彩虹」渐变（左上前额 → 右下身体前沿的对角线性渐变）。
@@ -545,6 +548,13 @@ BUBBLE_FONT_SIZE: Final[int] = 12
 BUBBLE_TAIL_W: Final[float] = 10.0
 BUBBLE_TAIL_H: Final[float] = 7.0
 BUBBLE_GAP_TO_PET: Final[float] = 6.0  # 气泡与头顶间距
+# 双层描边（贴纸风）：描边画在窗口边缘会被裁掉一半（旧版可见宽度不足 1px 的根因），
+# 故窗口四周预留 STROKE_MARGIN，body 内缩后再画「白晕 + 深线」两遍（同一 united path，
+# 白晕笔更宽、深线居中覆盖，露出的外环即白晕）。白晕外缘 = margin + HALO_WIDTH/2 ≤ margin。
+BUBBLE_BORDER_WIDTH: Final[float] = 2.2    # 内层深棕描边线宽
+BUBBLE_HALO_WIDTH: Final[float] = 4.6      # 外层白晕线宽（绘制时叠 alpha；露出约 1.2px 白环）
+BUBBLE_HALO_ALPHA: Final[int] = 190        # 白晕不透明度（0-255）
+BUBBLE_STROKE_MARGIN: Final[float] = 4.0   # 窗口四周为描边/白晕预留的边距（≥ HALO_WIDTH/2）
 
 # --------------------------------------------------------------------------- #
 # 8. 表情 → 姿态模板（PRD §4.5 视觉差异表）
@@ -715,6 +725,39 @@ BUBBLE_TEXTS: Final[dict[Expression | Mood, list[str]]] = {
     Mood.REST: ["歇一会儿吧~", "要不要喝口水？", "揉揉眼睛继续加油~"],
     Mood.SLEEP: ["Zzz…", "嘘，我在做梦呢~"],
 }
+
+# —— 预设台词包：``cfg.bubble_text_pack`` 可选值（"default" 即上面的 BUBBLE_TEXTS）——
+# 各包只需覆盖部分情绪键，未覆盖的键回落 BUBBLE_TEXTS；cfg.bubble_texts_custom
+# 非空时优先于一切预设包（对所有情绪统一使用）。
+BUBBLE_TEXT_PACK_ENERGY: Final[str] = "energy"
+BUBBLE_TEXT_PACK_GENTLE: Final[str] = "gentle"
+BUBBLE_TEXT_PACKS: Final[dict[str, dict[Expression | Mood, list[str]]]] = {
+    BUBBLE_TEXT_PACK_ENERGY: {
+        Expression.HAPPY: ["嘿嘿，最开心啦！(๑•̀ㅂ•́)و✧", "元气满满！", "摸摸头，充电 100%！"],
+        Expression.FOCUS: ["冲鸭！(ง •̀_•́)ง", "今天也是高效的一天！", "这波操作很稳！"],
+        Expression.EXCITED: ["哇塞，火力全开！", "速度起飞了！", "来劲了来劲了！"],
+        Expression.SLEEPY: ["不行了不行了…先冲一杯！", "眼睛要闭上了…", "再撑一小会儿…"],
+        Mood.IDLE: ["等你回来一起冲！", "摸鱼也要元气满满哦~", "我随时待命！"],
+        Mood.REST: ["休息是为了走更远的路！", "伸个懒腰，满血复活~"],
+    },
+    BUBBLE_TEXT_PACK_GENTLE: {
+        Expression.HAPPY: ["谢谢你的抚摸，很治愈~", "和你在一起真安心。"],
+        Expression.FOCUS: ["慢慢来，不着急~", "我安静地陪着你。"],
+        Expression.SLEEPY: ["累了就早点休息哦。", "要不要喝口温水？"],
+        Expression.SULKY: ["唔…让人家再睡一会儿嘛…"],
+        Expression.YAWN: ["呵啊……夜深了呢。"],
+        Mood.IDLE: ["我在这里陪着你。", "记得抬头看看窗外休息一下~"],
+        Mood.REST: ["喝口水休息一下吧。", "深呼吸，放松肩膀~"],
+        Mood.SLEEP: ["晚安，好梦。"],
+    },
+}
+#: 白名单 = 全部可选台词包名（含内置 default）
+BUBBLE_TEXT_PACK_ALLOWED: Final[frozenset[str]] = frozenset(BUBBLE_TEXT_PACKS) | {"default"}
+DEFAULT_BUBBLE_TEXT_PACK: Final[str] = "default"
+TRAY_MENU_BUBBLE_TEXT: Final[str] = "气泡文案…"
+BUBBLE_TEXT_CUSTOM_MAX_COUNT: Final[int] = 50   # 自定义台词条数上限
+BUBBLE_TEXT_CUSTOM_MAX_LEN: Final[int] = 60     # 单条台词字符数上限
+TRAY_NOTIFY_BUBBLE_TEXT_SAVED: Final[str] = "气泡文案已更新"
 
 # 托盘提示 / 通知文案
 TRAY_TOOLTIP: Final[str] = f"{APP_DISPLAY_NAME} · 桌面宠物"
@@ -997,6 +1040,16 @@ __all__ = [
     "EXPRESSION_POSES",
     "NEUTRAL_POSE",
     "BUBBLE_TEXTS",
+    # 预设台词包 / 台词自定义
+    "BUBBLE_TEXT_PACK_ENERGY",
+    "BUBBLE_TEXT_PACK_GENTLE",
+    "BUBBLE_TEXT_PACKS",
+    "BUBBLE_TEXT_PACK_ALLOWED",
+    "DEFAULT_BUBBLE_TEXT_PACK",
+    "TRAY_MENU_BUBBLE_TEXT",
+    "BUBBLE_TEXT_CUSTOM_MAX_COUNT",
+    "BUBBLE_TEXT_CUSTOM_MAX_LEN",
+    "TRAY_NOTIFY_BUBBLE_TEXT_SAVED",
     "interval_for_fps",
     # 动效去机械化（阶段 A5）
     "BREATH_JITTER",
