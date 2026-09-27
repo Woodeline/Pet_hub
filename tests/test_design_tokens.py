@@ -88,9 +88,9 @@ def test_semantic_color_maps_to_legacy_palette(semantic_key: str, legacy_key: st
 
 
 def test_primary_equals_bubble_text_literal() -> None:
-    """品牌主色即气泡正文色 ``#7A5A42``（计划给定值，防漂移）。"""
+    """品牌主色即气泡正文色 ``#1F2328``（中性化改版锚值，防漂移）。"""
 
-    assert C.SEMANTIC_COLORS["primary"] == "#7A5A42"
+    assert C.SEMANTIC_COLORS["primary"] == "#1F2328"
     assert C.SEMANTIC_COLORS["primary"] == C.COLORS["bubble_text"]
 
 

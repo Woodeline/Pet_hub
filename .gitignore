@@ -39,6 +39,9 @@ config.json
 app.log
 *.log
 
+# ---- 第三方下载数据（OpenJLPT 等，CC BY-SA 数据集不入库，转换产物才分发）----
+/third_party/
+
 # ---- 用户自装皮肤包（MOD，含第三方版权帧图素材）----
 # 仅个人本地使用，绝不入库：素材版权归画师 / IP 方所有，禁止随仓库分发。
 # 运行时从该目录加载皮肤包；规范见 docs/skin-pack.md。

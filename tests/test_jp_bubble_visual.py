@@ -101,7 +101,7 @@ def _luminance(color) -> float:
 
 
 def test_double_stroke_halo_and_border_pixels(qtbot) -> None:
-    """白晕与深棕描边真实落在像素上：内线深色、外环近白。"""
+    """白晕与淡灰细描边真实落在像素上：内线淡色、外环近白（细线贴纸风改版）。"""
 
     from PySide6.QtGui import QColor
 
@@ -112,16 +112,17 @@ def test_double_stroke_halo_and_border_pixels(qtbot) -> None:
     border = image.pixelColor(C.BUBBLE_STROKE_MARGIN, mid_y)      # 路径边缘 = 内线中心
     halo = image.pixelColor(C.BUBBLE_STROKE_MARGIN - 2, mid_y)    # 内线之外 = 白晕环
 
-    # 内层描边：深棕（亮度显著低于奶白填充）
+    # 内层描边：淡灰细线（亮度明显高于旧深棕契约，但仍与纯白填充有差）
     assert border.alpha() > 200
-    assert _luminance(border) < 110
+    assert 180 <= _luminance(border) <= 246
     # 外层白晕：近白、且确实有覆盖（半透明）
     assert halo.alpha() >= 120
     assert min(halo.red(), halo.green(), halo.blue()) >= 220
 
 
 def test_edge_contrast_on_dark_and_light_backdrops(qtbot) -> None:
-    """把气泡合成到深灰/浅米两种「壁纸」上：深底靠白晕分离，浅底靠深线醒目。"""
+    """把气泡合成到深灰/浅米两种「壁纸」上：深底靠白晕分离，浅底靠白晕微分离 +
+    淡灰细线轻勾边（改版后不再使用深描边，浅底契约从「对比 ≥60」放宽）。"""
 
     from PySide6.QtGui import QColor
 
@@ -132,7 +133,7 @@ def test_edge_contrast_on_dark_and_light_backdrops(qtbot) -> None:
 
     for backdrop, expect in (
         ("#20242C", "halo"),   # 深色壁纸 → 白晕提供边缘对比
-        ("#F5EFE2", "border"),  # 浅色壁纸 → 深棕描边提供边缘对比
+        ("#F5EFE2", "light"),  # 浅色壁纸 → 白晕微分离 + 淡描边轻勾边
     ):
         canvas = QImage(image.size(), QImage.Format.Format_ARGB32)
         canvas.fill(QColor(backdrop))
@@ -142,8 +143,16 @@ def test_edge_contrast_on_dark_and_light_backdrops(qtbot) -> None:
 
         bg_lum = _luminance(QColor(backdrop))
         halo_lum = _luminance(canvas.pixelColor(halo_x, mid_y))
-        border_lum = _luminance(canvas.pixelColor(border_x, mid_y))
         if expect == "halo":
             assert halo_lum - bg_lum >= 60, f"深色背景白晕对比不足：{halo_lum} vs {bg_lum}"
         else:
-            assert bg_lum - border_lum >= 60, f"浅色背景描边对比不足：{bg_lum} vs {border_lum}"
+            # 描边带（边缘 ±3px）内存在一条比白晕暗的细线（线存在），且整体仍是
+            # 淡色（不再回到深描边契约）。
+            band = [
+                _luminance(canvas.pixelColor(x, mid_y))
+                for x in range(int(border_x) - 3, int(border_x) + 4)
+            ]
+            edge = min(band)
+            assert halo_lum - bg_lum >= 8, f"浅色背景白晕分离不足：{halo_lum} vs {bg_lum}"
+            assert halo_lum - edge >= 8, f"细描边可见度不足：{edge} vs {halo_lum}"
+            assert edge >= 180, f"描边过深（失去「淡描边」契约）：{edge}"

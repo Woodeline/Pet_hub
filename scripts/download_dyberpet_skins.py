@@ -44,6 +44,10 @@ MIRROR = "https://ghfast.top/"
 CONCURRENCY = 10
 TIMEOUT = 30
 
+# 源仓库携带但本项目不加载的文件（skin_pack.py 只读 pet_conf.json / act_conf.json），
+# 下载时跳过，避免死数据进入 skins/ 与发布包。
+SKIP_FILES = {"msg_conf.json"}
+
 
 def raw_url(path):
     quoted = urllib.parse.quote(path)  # 中文路径转义
@@ -94,6 +98,9 @@ def download_role(tree, cn_name, en_name):
 
     dest = os.path.join(SKINS_DIR, en_name)
     os.makedirs(dest, exist_ok=True)
+
+    # 先过滤不需要的文件，保证进度统计与实际下载数一致。
+    blobs = [b for b in blobs if os.path.basename(b["path"][len(prefix):]) not in SKIP_FILES]
 
     total = len(blobs)
     print(f"[下载] {cn_name} -> {en_name} ({total} 个文件, {CONCURRENCY} 线程)",

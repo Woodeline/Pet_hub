@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -48,6 +49,19 @@ def word_bank_path() -> Path:
     return package_data_dir() / C.WORD_BANK_FILE_NAME
 
 
+def extra_word_bank_path() -> Path:
+    """返回用户导入的外置词库 JSON 意图路径（始终返回，不因文件缺失而抛）。
+
+    位置与用户数据一致：``%APPDATA%\\desktop-pet\\jlpt_words_extra.json``
+    （``APPDATA`` 不可用回落到用户主目录，与 ``VocabStore.default_path`` 同口径）。
+    启动时由 :meth:`WordBank` 合并进内置词库（按 id 去重、外置覆盖）。
+    """
+
+    appdata = os.environ.get("APPDATA")
+    base = Path(appdata) if appdata else Path.home()
+    return base / C.CONFIG_DIR_NAME / C.EXTRA_WORD_BANK_FILE_NAME
+
+
 def word_details_path() -> Path:
     """返回内置中文详情库 JSON 的意图路径（始终返回，不因文件缺失而抛）。
 
@@ -77,6 +91,7 @@ __all__ = [
     "is_frozen",
     "package_data_dir",
     "word_bank_path",
+    "extra_word_bank_path",
     "word_details_path",
     "skins_dir",
 ]

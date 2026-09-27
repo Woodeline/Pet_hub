@@ -1,6 +1,6 @@
-# desktop-pet · 大圣喵风格桌面宠物
+# desktop-pet · 小喵酱桌面宠物
 
-**当前版本：v0.6.0** ｜ Python 3.13 + PySide6 ｜ 1303 项自动化测试全绿
+**当前版本：v0.6.1** ｜ Python 3.13 + PySide6 ｜ 1324 项自动化测试全绿
 
 一只常驻 Windows 桌面、会"陪你敲键盘"的治愈系程序化猫咪。
 监听全局键盘敲击并同步做出"敲键盘"动画，在**空闲 / 专注 / 休息 / 睡觉**四态间
@@ -56,6 +56,19 @@ https://github.com/Woodeline/Pet_hub/releases/latest
 - 本程序**不包含、不分发任何皮肤素材**：仓库与 Release 资产中均无第三方版权的图片 / 音频文件，`skins/` 目录已被 `.gitignore` 排除。
 - 程序原生支持 **DyberPet 社区皮肤包格式（MOD）**：把获取到的皮肤包放入程序同目录的 `skins/` 文件夹，即可在托盘「外观 → 皮肤」中切换（规范见 `docs/skin-pack.md`）。
 - 本地开发调试时使用的示例皮肤素材来源于开源项目 [ChaozhongLiu/DyberPet_GenshinImpact](https://github.com/ChaozhongLiu/DyberPet_GenshinImpact)，感谢原作者的开源贡献；素材版权归原作者所有，请前往原项目按其开源许可获取使用。
+
+---
+
+## 词库与开源数据说明
+
+- 程序内置 500 词（N5~N1 各 100，随包只读）；支持经托盘「日语学习 → 导入词库…」导入**外置扩充词库**（`{"version":1,"words":[...]}` 结构，存于 `%APPDATA%\desktop-pet\jlpt_words_extra.json`，按词条 id 与内置库合并、外置覆盖内置）。
+- 扩充词库推荐数据源：[evanclan/OpenJLPT](https://github.com/evanclan/OpenJLPT)（N5~N1 共 8300+ 词，含假名读音与英文释义）。转换命令：
+
+  ```bash
+  python scripts/build_openjlpt_bank.py <OpenJLPT 的 data/json/vocab 目录> -o jlpt_words_extra.json
+  ```
+
+- **开放许可署名（CC BY-SA 4.0）**：使用 OpenJLPT 转换的外置词库时，词库数据源自 OpenJLPT（CC BY-SA 4.0，等级词表基于 Jonathan Waller 的 JLPT Resources / CC BY，例句来自 Tatoeba / CC BY 2.0 FR），转换产物内嵌 `_attribution` 元数据，**再分发时必须保留**；对英文释义的翻译属衍生数据，须以相同许可共享。
 
 ---
 

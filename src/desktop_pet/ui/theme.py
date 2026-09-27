@@ -42,23 +42,30 @@ def _repolish(widget: "QWidget") -> None:
     widget.update()
 
 
-def build_qss() -> str:
-    """由 design token 拼出全局 QSS 字符串（不含任何裸十六进制，除 token 值本身）。"""
+def build_qss(accent: str | None = None) -> str:
+    """由 design token 拼出全局 QSS 字符串（不含任何裸十六进制，除 token 值本身）。
+
+    Args:
+        accent: 主题点缀色（``#RRGGBB``）；``None`` 时全部用中性主色。点缀色只影响
+            **小面积元素**——Tab 选中文字/下划线与卡片选中描边，其余保持近黑。
+    """
 
     c = C.SEMANTIC_COLORS
     sp = C.SPACING
     fs = C.FONT_SIZE
     r = C.RADIUS
     radius_md = r["md"]
+    accent_color = accent if accent else c["primary"]
 
     blocks: list[str] = []
 
-    # —— 基础：窗口底色 / 正文色 / 基准字号 ——
+    # —— 基础：窗口底色 / 正文色 / 基准字号 / 统一字体 ——
     blocks.append(
         f"""
 QWidget {{
     background: {c['surface']};
     color: {c['text_primary']};
+    font-family: "Microsoft YaHei";
     font-size: {fs['body']}px;
 }}
 QToolTip {{
@@ -149,6 +156,53 @@ QLabel[role="caption"] {{
 }}"""
     )
 
+    # —— 卡片（词条列表 / 详情分组）：圆角面板 + 悬停微高亮 + 选中描边 ——
+    # 选中态经动态属性 ``selected``（QFrame 无 :selected 伪类），由
+    # :func:`set_card_selected` 触发重新抛光。
+    blocks.append(
+        f"""
+QFrame[role="card"] {{
+    background: {c['surface']};
+    border: 1px solid {c['border']};
+    border-radius: {r['lg']}px;
+}}
+QFrame[role="card"]:hover {{
+    background: {c['surface_alt']};
+}}
+QFrame[role="card"][selected="true"] {{
+    background: {c['surface_alt']};
+    border: 1px solid {accent_color};
+}}"""
+    )
+
+    # —— 文字 Tab（词条列表顶部筛选，参考移动端词典应用）——
+    # 选中态 = 点缀色文字 + 底部短横线；未选中为次级色无边框平铺。
+    blocks.append(
+        f"""
+QPushButton[variant="tab"] {{
+    background: transparent;
+    color: {c['text_secondary']};
+    border: none;
+    border-bottom: {FOCUS_RING_PX}px solid transparent;
+    border-radius: 0;
+    padding: {sp['xs']}px {sp['md']}px;
+    font-weight: bold;
+}}
+QPushButton[variant="tab"]:hover {{
+    color: {c['text_primary']};
+    background: transparent;
+}}
+QPushButton[variant="tab"]:checked {{
+    color: {accent_color};
+    border-bottom: {FOCUS_RING_PX}px solid {accent_color};
+    background: transparent;
+}}
+QPushButton[variant="tab"]:focus {{
+    border-bottom: {FOCUS_RING_PX}px solid {accent_color};
+    color: {accent_color};
+}}"""
+    )
+
     # —— 表格：斑马纹 / hover / 选中 / 表头 ——
     blocks.append(
         f"""
@@ -234,10 +288,15 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
     return "\n".join(blocks)
 
 
-def apply_theme(widget: "QWidget") -> None:
-    """把全局 QSS 应用到 ``widget``（通常是一个顶层窗口）。"""
+def apply_theme(widget: "QWidget", accent: str | None = None) -> None:
+    """把全局 QSS 应用到 ``widget``（通常是一个顶层窗口）。
 
-    widget.setStyleSheet(build_qss())
+    Args:
+        widget: 目标窗口。
+        accent: 主题点缀色；``None`` 用中性主色（见 :func:`build_qss`）。
+    """
+
+    widget.setStyleSheet(build_qss(accent))
 
 
 def set_variant(widget: "QWidget", variant: str) -> None:
@@ -254,6 +313,13 @@ def set_role(widget: "QWidget", role: str) -> None:
     _repolish(widget)
 
 
+def set_card_selected(widget: "QWidget", selected: bool) -> None:
+    """切换卡片（``QFrame[role="card"]``）的 ``selected`` 动态属性并重新抛光。"""
+
+    widget.setProperty("selected", bool(selected))
+    _repolish(widget)
+
+
 __all__ = [
     "BUTTON_VARIANTS",
     "FOCUS_RING_PX",
@@ -261,4 +327,5 @@ __all__ = [
     "apply_theme",
     "set_variant",
     "set_role",
+    "set_card_selected",
 ]

@@ -176,19 +176,17 @@ def test_vocab_window_refresh_orders_newest_first(qtbot) -> None:
     window = VocabWindow()
     qtbot.addWidget(window)
     window.refresh([_item(1), _item(2)])
-    assert window._table.rowCount() == 2
-    # 新在后 → 展示反转 → 首行是最后加入的
-    assert window._table.item(0, 0).text() == "語2"
+    # 新在后 → 展示反转 → 首张卡片是最后加入的（dict 保持插入序）
+    assert list(window._card_by_id.keys()) == ["n5-0002", "n5-0001"]
 
 
 def test_vocab_window_level_filter(qtbot) -> None:
     window = VocabWindow()
     qtbot.addWidget(window)
     window.refresh([_item(1, "N5"), _item(2, "N4")])
-    window._combo.setCurrentIndex(window._combo.findData("N4"))
+    window._tab_buttons["N4"].click()
     assert window.level_filter() == "N4"
-    assert window._table.rowCount() == 1
-    assert window._table.item(0, 3).text() == "N4"
+    assert list(window._card_by_id.keys()) == ["n4-0002"]
 
 
 def test_vocab_window_remove_emits_signal(qtbot) -> None:
@@ -197,7 +195,7 @@ def test_vocab_window_remove_emits_signal(qtbot) -> None:
     window.refresh([_item(1)])
     captured: list[str] = []
     window.remove_requested.connect(captured.append)
-    window._table.selectRow(0)
+    window._on_card_clicked("n5-0001")
     assert window._btn_remove.isEnabled()
     window._btn_remove.click()
     assert captured == ["n5-0001"]

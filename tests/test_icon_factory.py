@@ -46,10 +46,10 @@ def _signature(image) -> str:
 # 1. 图标名清单
 # --------------------------------------------------------------------------- #
 def test_icon_names_complete() -> None:
-    """四个图标名齐全且顺序与计划一致。"""
+    """图标名齐全（卡片化改版新增 speaker 发音占位）。"""
 
     assert icon_factory.ICON_NAMES == (
-        "close", "retry", "remove", "trash",
+        "close", "retry", "remove", "trash", "speaker",
     )
 
 
@@ -156,5 +156,6 @@ def test_icon_rendering_creates_no_image_assets(qapp, project_root) -> None:
         and ".venv" not in path.parts
         and "__pycache__" not in path.parts
         and "skins" not in path.parts  # 用户本地皮肤包投放区（gitignore，含第三方素材）
+        and "third_party" not in path.parts  # 用户本地克隆的第三方数据仓库（gitignore）
     ]
     assert not offenders, f"图标绘制落盘了图片素材：{offenders}"

@@ -15,20 +15,22 @@ from __future__ import annotations
 import logging
 import os
 import random
+import shutil
 import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 from PySide6.QtCore import QObject, QPoint, QTimer
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QFileDialog
 
 from desktop_pet.app.keyboard_listener import KeystrokeBridge, KeyboardListener
 from desktop_pet.core import constants as C
 from desktop_pet.core import motion, paths
 from desktop_pet.core.config import AppConfig, ConfigStore
 from desktop_pet.core.constants import Expression, Gesture, Mood
-from desktop_pet.core.theme import resolve_theme, theme_stops
+from desktop_pet.core.theme import resolve_theme, theme_stops, ui_accent_for_theme
 from desktop_pet.core.event_aggregator import KeystrokeAggregator
 from desktop_pet.core.mood_state_machine import (
     MoodStateMachine,
@@ -39,7 +41,12 @@ from desktop_pet.core.daily_log_store import DailyLogEntry, DailyLogStore
 from desktop_pet.core.mastered_store import MasteredStore
 from desktop_pet.core.pet_model import PetModel
 from desktop_pet.core.vocab_store import VocabStore
-from desktop_pet.core.vocabulary import VocabEntry, WordBank
+from desktop_pet.core.vocabulary import (
+    VocabEntry,
+    WordBank,
+    WordBankParseError,
+    parse_bank_file,
+)
 from desktop_pet.core.weighted_picker import WeightedWordPicker
 from desktop_pet.core.word_detail import WordDetail
 from desktop_pet.core.word_detail_bank import WordDetailBank
@@ -149,6 +156,9 @@ class PetAppController(QObject):
         self._today_str: str = ""
         self._today_done_notified: bool = False
         self._level_done_notified: bool = False
+        # 当前等级候选池已耗尽（已掌握 ∪ 当日已展示 覆盖全部词条）：
+        # 置 True 后排期置 inf 停止空转；等级切换 / 导入词库 / 跨日 时复位。
+        self._pool_exhausted: bool = False
 
         # —— 单词详情（中文五要素）：打包详情库（只读）+ 用户缓存 + 详情窗口单例 ——
         self._detail_bank: WordDetailBank = WordDetailBank.empty()
@@ -297,6 +307,7 @@ class PetAppController(QObject):
         self._tray.jp_show_now_requested.connect(self._on_jp_show_now)
         self._tray.jp_vocab_requested.connect(self._on_jp_vocab)
         self._tray.jp_log_requested.connect(self._on_jp_log)
+        self._tray.jp_import_bank_requested.connect(self._on_jp_import_bank)
 
         # 日语记忆：气泡按钮条（记住了 / 新单词）
         self._button_bar.mastered_clicked.connect(self._on_word_mastered)
@@ -360,6 +371,8 @@ class PetAppController(QObject):
                 self._today_done_notified = False
                 # 跨日：清空内存级「当日手动展示」去重集合（D2，不落盘）
                 self._manual_shown_ids_today.clear()
+                # 跨日：当日已展示排除集随新日期 key 自然清空，池耗尽可能解除
+                self._pool_exhausted = False
                 self._next_word_ts = now
                 # 跨日 → 顺带重估主题（保证跨月零点自动换肤，而非最多等一天）
                 self._recheck_theme()
@@ -651,6 +664,23 @@ class PetAppController(QObject):
         except Exception:  # noqa: BLE001
             logger.exception("加载词库失败（已忽略，使用空词库）")
             self._bank = WordBank.empty()
+
+        # 外置词库（用户导入，%APPDATA%\desktop-pet\jlpt_words_extra.json）：
+        # 存在则按 id 合并覆盖进内置词库；损坏 / 结构不符仅告警，不影响启动。
+        try:
+            extra_path = paths.extra_word_bank_path()
+            if extra_path.exists():
+                extra_entries, extra_skipped = parse_bank_file(extra_path)
+                self._bank.merge(extra_entries)
+                logger.info(
+                    "外置词库已合并：%s（有效 %d 条，跳过 %d 条）",
+                    extra_path, len(extra_entries), extra_skipped,
+                )
+        except WordBankParseError as exc:
+            logger.warning("外置词库不可用（%s）：%s", exc, paths.extra_word_bank_path())
+        except Exception:  # noqa: BLE001
+            logger.exception("合并外置词库失败（已忽略内置词库继续可用）")
+
         self._picker = WeightedWordPicker(self._bank, self._rng)
 
         try:
@@ -702,9 +732,13 @@ class PetAppController(QObject):
             self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_BANK_UNAVAILABLE)
 
     def _schedule_next_word(self, now: float) -> None:
-        """按 30~600s 随机间隔排期下一次单词展示（学习关闭时置 ``inf`` 不触发）。"""
+        """按 30~600s 随机间隔排期下一次单词展示（学习关闭时置 ``inf`` 不触发）。
 
-        if self._cfg.jp_enabled and not self._bank.is_empty():
+        候选池耗尽（:data:`_pool_exhausted`）时同样置 ``inf``：耗尽后每次到点
+        抽取必然落空，继续排期只是空转；恢复由等级切换 / 导入词库 / 跨日驱动。
+        """
+
+        if self._cfg.jp_enabled and not self._bank.is_empty() and not self._pool_exhausted:
             self._next_word_ts = now + motion.random_interval(
                 C.JP_WORD_MIN_INTERVAL_S, C.JP_WORD_MAX_INTERVAL_S, self._rng
             )
@@ -756,7 +790,10 @@ class PetAppController(QObject):
         vocab_ids = {item.id for item in self._vocab.items()}
         entry = self._picker.pick(self._cfg.jp_level, excluded, vocab_ids)
         if entry is None:
-            # 池耗尽：手动路径给专用反馈；自动路径保持既有「等级掌握」一次性通知
+            # 池耗尽：置排期停转标志（手动/自动路径状态一致，恢复由等级切换 /
+            # 导入词库 / 跨日驱动）；手动路径给专用反馈，自动路径保持既有
+            # 「等级掌握」一次性通知。
+            self._pool_exhausted = True
             if manual:
                 self._tray.notify(
                     C.APP_DISPLAY_NAME,
@@ -767,6 +804,7 @@ class PetAppController(QObject):
                 logger.warning("该等级单词已全部掌握（level=%s）", self._cfg.jp_level)
                 self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_LEVEL_DONE)
             return
+        self._pool_exhausted = False
 
         # 单飞状态机：置当前词 / deadline / 未处置标志 + 手动标记（供 _dispose_word 判定）
         self._current_word = entry
@@ -794,6 +832,7 @@ class PetAppController(QObject):
         now = time.monotonic()
         if checked:
             self._level_done_notified = False
+            self._pool_exhausted = False
             self._schedule_next_word(now)
             if not self._cfg.bubble_enabled:
                 self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_NEED_BUBBLE)
@@ -821,6 +860,12 @@ class PetAppController(QObject):
         self._cfg.jp_level = level
         self._tray.set_jp_level_checked(level)
         self._level_done_notified = False
+        # 换难度即换候选池：旧等级耗尽导致的停转在恢复排期后解除（仅耗尽态才
+        # 抢跑，避免改变正常态的既有节奏）。
+        if self._pool_exhausted:
+            self._pool_exhausted = False
+            if self._cfg.jp_enabled:
+                self._next_word_ts = time.monotonic()
         self._persist()
 
     def _on_jp_duration_selected(self, value: int) -> None:
@@ -902,6 +947,7 @@ class PetAppController(QObject):
         try:
             if self._log_window is None:
                 self._log_window = LogWindow()
+                self._log_window.set_accent(ui_accent_for_theme(self._current_theme))
                 self._log_window.word_double_clicked.connect(self._on_log_word_double_clicked)
             days = self._daily_log.days()
             self._log_window.set_dates(days)
@@ -918,12 +964,69 @@ class PetAppController(QObject):
         except Exception:  # noqa: BLE001
             logger.exception("打开学习记录窗口异常（已忽略）")
 
+    def _on_jp_import_bank(self) -> None:
+        """托盘「导入词库…」：校验 → 拷贝到 %APPDATA% → 合并进当前词库 → 通知。
+
+        导入词库同时是「等级学完」的官方解法：合并产生新增/更新后复位池耗尽与
+        一次性通知标志并恢复排期。每次点击都必须给出可见反馈，严禁静默返回。
+        """
+
+        try:
+            src_name, _filter = QFileDialog.getOpenFileName(
+                None,
+                C.JP_IMPORT_DIALOG_TITLE,
+                "",
+                C.JP_IMPORT_DIALOG_FILTER,
+            )
+            if not src_name:
+                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_BANK_IMPORT_CANCELLED)
+                return
+
+            entries, skipped = parse_bank_file(Path(src_name))
+
+            # 先落盘为外置词库（下次启动自动合并），再合并进运行中的词库。
+            dest = paths.extra_word_bank_path()
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src_name, dest)
+            added, updated = self._bank.merge(entries)
+            self._picker = WeightedWordPicker(self._bank, self._rng)
+
+            if added or updated:
+                self._pool_exhausted = False
+                self._level_done_notified = False
+                if self._cfg.jp_enabled:
+                    self._next_word_ts = time.monotonic()
+
+            logger.info(
+                "导入词库：%s（新增 %d，更新 %d，跳过 %d）→ %s",
+                src_name, added, updated, skipped, dest,
+            )
+            self._tray.notify(
+                C.APP_DISPLAY_NAME,
+                C.JP_NOTIFY_BANK_IMPORTED.format(
+                    added=added, updated=updated, skipped=skipped
+                ),
+            )
+        except WordBankParseError as exc:
+            logger.warning("导入词库被拒绝：%s", exc)
+            self._tray.notify(
+                C.APP_DISPLAY_NAME,
+                C.JP_NOTIFY_BANK_IMPORT_FAILED.format(reason=exc),
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("导入词库异常")
+            self._tray.notify(
+                C.APP_DISPLAY_NAME,
+                C.JP_NOTIFY_BANK_IMPORT_FAILED.format(reason="未知错误，请稍后重试"),
+            )
+
     def _on_jp_vocab(self) -> None:
         """打开生词本窗口（单例，重开则前置）。"""
 
         try:
             if self._vocab_window is None:
                 self._vocab_window = VocabWindow()
+                self._vocab_window.set_accent(ui_accent_for_theme(self._current_theme))
                 self._vocab_window.remove_requested.connect(self._on_vocab_remove)
                 self._vocab_window.clear_requested.connect(self._on_vocab_clear)
                 self._vocab_window.word_double_clicked.connect(self._on_vocab_word_double_clicked)
@@ -1100,6 +1203,7 @@ class PetAppController(QObject):
                 return
             if self._detail_window is None:
                 self._detail_window = WordDetailWindow()
+                self._detail_window.set_accent(ui_accent_for_theme(self._current_theme))
                 self._detail_window.detail_succeeded.connect(self._on_detail_succeeded)
                 self._detail_window.detail_failed.connect(self._on_detail_failed)
             detail, source = self._lookup_word_detail(entry.id)
@@ -1331,6 +1435,7 @@ class PetAppController(QObject):
             self._refresh_tray_icon(name)
             self._tray.set_theme_checked(self._cfg.theme)
             self._tray.set_skin_checked(self._cfg.skin_name)
+            self._apply_ui_accent()
             self._window.update()
         except Exception:  # noqa: BLE001
             logger.exception("应用主题失败（已忽略）")
@@ -1348,9 +1453,26 @@ class PetAppController(QObject):
             self._current_theme = name
             self._renderer.set_theme(name)
             self._refresh_tray_icon(name)
+            self._apply_ui_accent()
             self._window.update()
         except Exception:  # noqa: BLE001
             logger.exception("重估主题失败（已忽略）")
+
+    def _apply_ui_accent(self) -> None:
+        """把当前主题的点缀色应用到已创建的业务窗口（换肤即点即生效）。
+
+        点缀只落在 Tab 选中 / 卡片选中描边 / 词性下划线等小面积元素；窗口尚未
+        创建时跳过——懒加载创建点（_on_jp_vocab / _on_jp_log / _open_word_detail）
+        会补一次 :meth:`set_accent`。
+        """
+
+        try:
+            accent = ui_accent_for_theme(self._current_theme)
+            for window in (self._vocab_window, self._log_window, self._detail_window):
+                if window is not None:
+                    window.set_accent(accent)
+        except Exception:  # noqa: BLE001
+            logger.exception("应用界面点缀色失败（已忽略）")
 
     def _refresh_tray_icon(self, name: str) -> None:
         """按主题停靠点重建托盘图标并应用到托盘（P1：托盘跟随换肤）。"""

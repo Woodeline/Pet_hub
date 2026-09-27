@@ -15,7 +15,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from desktop_pet.core import constants as C
 
@@ -23,6 +23,15 @@ logger = logging.getLogger(__name__)
 
 #: 词条必填字段（均为非空 ``str``）
 _REQUIRED_FIELDS: tuple[str, ...] = ("id", "level", "word", "kana", "translation", "meaning")
+
+
+class WordBankParseError(Exception):
+    """词库文件结构性非法（读取失败 / JSON 损坏 / 根结构不符 / 无有效词条）。
+
+    与 :meth:`WordBank.load` 的「静默降级为空库」不同，导入路径需要向用户
+    反播**拒绝原因**，因此把结构错误显式抛出，由调用方转为通知文案。
+    """
+
 
 
 @dataclass(frozen=True)
@@ -207,5 +216,83 @@ class WordBank:
 
         return not self._entries
 
+    # ------------------------------------------------------------------ #
+    # 合并（外置词库 / 用户导入扩充包）
+    # ------------------------------------------------------------------ #
+    def merge(self, entries: Iterable[VocabEntry]) -> tuple[int, int]:
+        """合并一批词条进本词库：按 ``id`` 去重，同 id 用新词条**覆盖**。
 
-__all__ = ["VocabEntry", "WordBank"]
+        合并后等级索引缓存立即失效，下一次 :meth:`entries_for` 自动重建。
+
+        Args:
+            entries: 待合并词条（须已通过 :meth:`VocabEntry.from_dict` 校验）。
+
+        Returns:
+            ``(added, updated)``——新增条数与覆盖更新条数。
+        """
+
+        added = updated = 0
+        index = {entry.id: pos for pos, entry in enumerate(self._entries)}
+        merged = list(self._entries)
+        for entry in entries:
+            pos = index.get(entry.id)
+            if pos is None:
+                index[entry.id] = len(merged)
+                merged.append(entry)
+                added += 1
+            else:
+                merged[pos] = entry
+                updated += 1
+        if added or updated:
+            self._entries = tuple(merged)
+            self._by_level = None
+        logger.info("词库合并完成：新增 %d，更新 %d（现有 %d 条）", added, updated, len(merged))
+        return (added, updated)
+
+
+def parse_bank_file(path: Path) -> tuple[list[VocabEntry], int]:
+    """从 JSON 文件解析词库词条（供导入 / 外置合并路径使用）。
+
+    与 :meth:`WordBank.load` 的区别：结构性错误**显式抛出**
+    :class:`WordBankParseError`（调用方需要向用户反馈拒绝原因），而不是静默降级；
+    逐条非法记录不计入失败，仅计入跳过数。
+
+    Args:
+        path: 词库 JSON 文件路径（``{"version": 1, "words": [...]}`` 结构）。
+
+    Returns:
+        ``(entries, skipped)``——有效词条列表与被跳过的非法条数。
+
+    Raises:
+        WordBankParseError: 文件不可读 / JSON 损坏 / 根结构不符 / 无任何有效词条。
+    """
+
+    bank_path = Path(path)
+    try:
+        text = bank_path.read_text(encoding="utf-8")
+        data = json.loads(text)
+    except OSError as exc:
+        raise WordBankParseError(f"文件读取失败：{exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise WordBankParseError(f"JSON 解析失败：{exc}") from exc
+
+    if not isinstance(data, dict):
+        raise WordBankParseError("结构不符：根节点需为 JSON 对象")
+    raw_words = data.get("words")
+    if not isinstance(raw_words, list):
+        raise WordBankParseError("结构不符：缺少 words 数组")
+
+    entries: list[VocabEntry] = []
+    skipped = 0
+    for raw in raw_words:
+        entry = VocabEntry.from_dict(raw)
+        if entry is None:
+            skipped += 1
+        else:
+            entries.append(entry)
+    if not entries:
+        raise WordBankParseError(f"无有效词条（{skipped} 条全部非法或为空）")
+    return entries, skipped
+
+
+__all__ = ["VocabEntry", "WordBank", "WordBankParseError", "parse_bank_file"]

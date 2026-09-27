@@ -28,6 +28,7 @@ ICON_NAMES: Final[tuple[str, ...]] = (
     "retry",
     "remove",
     "trash",
+    "speaker",
 )
 
 #: 设计栅格边长（所有路径都在 0.._GRID 的坐标系里定义，绘制时按 size 缩放）。
@@ -96,12 +97,33 @@ def _path_trash() -> QPainterPath:
     return path
 
 
+def _path_speaker() -> QPainterPath:
+    """``speaker``：喇叭箱体 + 锥面 + 两道声波弧（发音占位，功能未启用）。"""
+
+    path = QPainterPath()
+    # 箱体（左半矩形）+ 锥面（上下顶点收拢成梯形喇叭口）
+    path.moveTo(5.0, 9.5)
+    path.lineTo(9.0, 9.5)
+    path.lineTo(13.5, 5.0)
+    path.lineTo(13.5, 19.0)
+    path.lineTo(9.0, 14.5)
+    path.lineTo(5.0, 14.5)
+    path.closeSubpath()
+    # 两道声波弧（只画右侧，圆心 (16,12)，r=4 / r=6，右缘不越出 22 安全线）
+    for radius in (4.0, 6.0):
+        rect = QRectF(16.0 - radius, 12.0 - radius, radius * 2.0, radius * 2.0)
+        path.arcMoveTo(rect, -50.0)
+        path.arcTo(rect, -50.0, 100.0)
+    return path
+
+
 #: 图标名 → 路径构造函数（模块级只登记函数，不创建任何 Qt 绘图对象）。
 _PATH_BUILDERS: Final[dict[str, Callable[[], QPainterPath]]] = {
     "close": _path_close,
     "retry": _path_retry,
     "remove": _path_remove,
     "trash": _path_trash,
+    "speaker": _path_speaker,
 }
 
 

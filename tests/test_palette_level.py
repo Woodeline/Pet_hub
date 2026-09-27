@@ -95,7 +95,11 @@ def test_glow_for_theme_unknown_falls_back_to_default() -> None:
 # 3. 回归：既有配色未被动过
 # --------------------------------------------------------------------------- #
 def test_colors_dict_unchanged_literal() -> None:
-    """``COLORS`` 键集与值**全等未变**（字面量期望，防降饱和误伤既有语义色）。"""
+    """``COLORS`` 键集与值**全等**（中性化改版锚值，防静默漂移）。
+
+    宠物本体色（ink/blush/mouse_*/glow_*）与毛色渐变保持原值；仅气泡 chrome、
+    按钮条、状态标签、生词本配色改为中性扁平（白底/近黑/浅灰/绿点缀）。
+    """
 
     assert C.COLORS == {
         "ink": "#141414",
@@ -103,35 +107,35 @@ def test_colors_dict_unchanged_literal() -> None:
         "white": "#FFFFFF",
         "mouse_body": "#3A3A3A",
         "mouse_hi": "#8A8A8A",
-        "bubble_bg": "#FFFDF8",
-        "bubble_text": "#7A5A42",
+        "bubble_bg": "#FFFFFF",
+        "bubble_text": "#1F2328",
         "glow_yellow": "#FFD08A",
         "glow_blue": "#B9D4E8",
-        "warm_brown": "#8B6B4F",
-        "bubble_sub_text": "#9C8570",
-        "bubble_faint_text": "#B7A99A",
-        "vocab_bg": "#FFFDF8",
-        "vocab_text": "#5A4636",
-        "vocab_level_tag": "#7A9E7E",
+        "warm_brown": "#3D444D",
+        "bubble_sub_text": "#5A626C",
+        "bubble_faint_text": "#98A2AD",
+        "vocab_bg": "#FFFFFF",
+        "vocab_text": "#1F2328",
+        "vocab_level_tag": "#5A626C",
         "bubble_gradient_hi": "#FFFFFF",
-        "jp_button_primary_bg": "#7A9E7E",
+        "jp_button_primary_bg": "#3FB950",
         "jp_button_primary_text": "#FFFFFF",
-        "jp_button_primary_hover": "#8FB090",
-        "jp_button_primary_pressed": "#6B8E6F",
-        "jp_button_secondary_border": "#9C8570",
-        "jp_button_secondary_text": "#7A5A42",
-        "jp_button_secondary_hover": "#F3EAE0",
-        "jp_button_bar_bg": "#FFFDF8",
-        "log_status_mastered": "#7A9E7E",
-        "log_status_vocab": "#5B8DB8",
-        "log_status_unprocessed": "#B7A99A",
-        "bubble_shadow": "#C9B8A6",
-        "bubble_divider": "#EFE3D4",
-        "bubble_gradient_bottom": "#F7EEDF",
-        "jp_level_chip_bg": "#7A9E7E",
+        "jp_button_primary_hover": "#53C463",
+        "jp_button_primary_pressed": "#349A44",
+        "jp_button_secondary_border": "#C9CDD3",
+        "jp_button_secondary_text": "#1F2328",
+        "jp_button_secondary_hover": "#EEF0F3",
+        "jp_button_bar_bg": "#FFFFFF",
+        "log_status_mastered": "#3FB950",
+        "log_status_vocab": "#4C8DDA",
+        "log_status_unprocessed": "#98A2AD",
+        "bubble_shadow": "#C9CDD3",
+        "bubble_divider": "#E3E6EA",
+        "bubble_gradient_bottom": "#F5F6F8",
+        "jp_level_chip_bg": "#5A626C",
         "jp_level_chip_text": "#FFFFFF",
         # 气泡双层描边（贴纸风）
-        "bubble_border": "#5C4330",
+        "bubble_border": "#D8DDE3",
         "bubble_halo": "#FFFFFF",
     }
 
@@ -175,3 +179,45 @@ def test_body_gradient_stops_literal_values() -> None:
         (0.75, "#F9ABD3"),
         (1.00, "#ACD6EC"),
     )
+
+
+# --------------------------------------------------------------------------- #
+# 5. ui_accent_for_theme（UI 中性化改版：主题点缀色派生）
+# --------------------------------------------------------------------------- #
+def test_ui_accent_default_and_unknown_fall_back_to_neutral() -> None:
+    """default 主题与未知名称回落中性主色（默认界面保持黑白灰）。"""
+
+    from desktop_pet.core.theme import ui_accent_for_theme
+
+    assert ui_accent_for_theme("default") == C.SEMANTIC_COLORS["primary"]
+    assert ui_accent_for_theme("不存在的皮肤") == C.SEMANTIC_COLORS["primary"]
+    assert ui_accent_for_theme("") == C.SEMANTIC_COLORS["primary"]
+
+
+def test_ui_accent_seasons_are_distinct_and_readable() -> None:
+    """四季 + 春节点缀色：合法 hex、互不相同、与中性主色不同。"""
+
+    from desktop_pet.core.theme import ui_accent_for_theme
+
+    accents = {
+        theme: ui_accent_for_theme(theme)
+        for theme in ("spring", "summer", "autumn", "winter", "spring_festival")
+    }
+    for theme, accent in accents.items():
+        assert _HEX_RE.match(accent), f"{theme} 点缀色非法：{accent}"
+        assert accent != C.SEMANTIC_COLORS["primary"], f"{theme} 点缀色不应回落中性"
+    assert len(set(accents.values())) == len(accents), f"点缀色存在重复：{accents}"
+
+
+def test_ui_accent_lightness_capped_for_white_background() -> None:
+    """点缀色明度被钳制（白底可读）：取最深停靠点压暗后 R/G/B 不会过亮。"""
+
+    import colorsys
+
+    from desktop_pet.core.theme import ui_accent_for_theme
+
+    for theme in ("spring", "summer", "autumn", "winter", "spring_festival"):
+        hexv = ui_accent_for_theme(theme)
+        r, g, b = (int(hexv[i:i + 2], 16) / 255.0 for i in (1, 3, 5))
+        _h, l, _s = colorsys.rgb_to_hls(r, g, b)
+        assert l <= 0.45, f"{theme} 点缀色过亮（l={l:.2f}），白底可读性不足"

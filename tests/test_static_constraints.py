@@ -197,6 +197,9 @@ def test_no_image_assets(project_root: Path) -> None:
         and "__pycache__" not in p.parts
         # skins/ 为用户本地皮肤包（gitignore，含第三方版权素材），不属于仓库素材
         and "skins" not in p.parts
+        # third_party/ 为用户本地克隆的第三方数据仓库（gitignore，如 OpenJLPT
+        # 自带的 logo / social-preview），属于外部仓库内容而非本项目素材
+        and "third_party" not in p.parts
     ]
     assert not offenders, f"发现图片素材（违背零外部素材承诺）：{offenders}"
 
@@ -272,9 +275,10 @@ def test_expression_count_matches_prd() -> None:
 
 
 def test_color_palette_matches_prd() -> None:
-    """重构后配色（视觉基准：参考图「柔和全息彩虹 + 粗黑描边」）。
+    """重构后配色（UI 中性化改版：白底 / 近黑 / 浅灰 / 绿点缀）。
 
-    旧版奶油/焦糖暖调配色已被参考图风格取代；保留气泡相关键不变。
+    旧版奶油/焦糖暖调配色已被中性扁平风格取代；宠物本体色（ink/blush/mouse_*/glow_*）
+    与毛色渐变保持不变。
     """
 
     expected = {
@@ -283,38 +287,38 @@ def test_color_palette_matches_prd() -> None:
         "white": "#FFFFFF",       # 纯白 高光 / 前爪
         "mouse_body": "#3A3A3A",  # 深灰 鼠标 / 键盘底座
         "mouse_hi": "#8A8A8A",    # 中灰 鼠标分割线 / 滚轮
-        "bubble_bg": "#FFFDF8",
-        "bubble_text": "#7A5A42",
+        "bubble_bg": "#FFFFFF",
+        "bubble_text": "#1F2328",
         "glow_yellow": "#FFD08A",
         "glow_blue": "#B9D4E8",
-        "warm_brown": "#8B6B4F",  # 兼容保留：ui.bubble 描边仍引用
+        "warm_brown": "#3D444D",  # 兼容保留：ui.bubble 描边仍引用
         # —— 日语学习新增（设计 §7.4）——
-        "bubble_sub_text": "#9C8570",    # 假名次级文字
-        "bubble_faint_text": "#B7A99A",  # 释义最淡文字
-        "vocab_bg": "#FFFDF8",           # 生词本底色
-        "vocab_text": "#5A4636",         # 生词本正文
-        "vocab_level_tag": "#7A9E7E",    # 等级标签色
+        "bubble_sub_text": "#5A626C",    # 假名次级文字
+        "bubble_faint_text": "#98A2AD",  # 释义最淡文字
+        "vocab_bg": "#FFFFFF",           # 生词本底色
+        "vocab_text": "#1F2328",         # 生词本正文
+        "vocab_level_tag": "#5A626C",    # 等级标签色
         # —— 日语记忆新增（设计 §7.3）——
         "bubble_gradient_hi": "#FFFFFF",          # 学习泡泡浅高光
-        "jp_button_primary_bg": "#7A9E7E",        # 「记住了」主色
+        "jp_button_primary_bg": "#3FB950",        # 「记住了」主色
         "jp_button_primary_text": "#FFFFFF",
-        "jp_button_primary_hover": "#8FB090",
-        "jp_button_primary_pressed": "#6B8E6F",
-        "jp_button_secondary_border": "#9C8570",
-        "jp_button_secondary_text": "#7A5A42",
-        "jp_button_secondary_hover": "#F3EAE0",
-        "jp_button_bar_bg": "#FFFDF8",
-        "log_status_mastered": "#7A9E7E",
-        "log_status_vocab": "#5B8DB8",
-        "log_status_unprocessed": "#B7A99A",
+        "jp_button_primary_hover": "#53C463",
+        "jp_button_primary_pressed": "#349A44",
+        "jp_button_secondary_border": "#C9CDD3",
+        "jp_button_secondary_text": "#1F2328",
+        "jp_button_secondary_hover": "#EEF0F3",
+        "jp_button_bar_bg": "#FFFFFF",
+        "log_status_mastered": "#3FB950",
+        "log_status_vocab": "#4C8DDA",
+        "log_status_unprocessed": "#98A2AD",
         # —— B 版气泡质感 / 等级角标（设计 §A1.1）——
-        "bubble_shadow": "#C9B8A6",
-        "bubble_divider": "#EFE3D4",
-        "bubble_gradient_bottom": "#F7EEDF",
-        "jp_level_chip_bg": "#7A9E7E",
+        "bubble_shadow": "#C9CDD3",
+        "bubble_divider": "#E3E6EA",
+        "bubble_gradient_bottom": "#F5F6F8",
+        "jp_level_chip_bg": "#5A626C",
         "jp_level_chip_text": "#FFFFFF",
         # 气泡双层描边（贴纸风）
-        "bubble_border": "#5C4330",
+        "bubble_border": "#D8DDE3",
         "bubble_halo": "#FFFFFF",
     }
     assert C.COLORS == expected

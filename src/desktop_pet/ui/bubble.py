@@ -241,9 +241,9 @@ class BubbleWindow(QWidget):
             body_fill.setColorAt(0.5, QColor(C.COLORS["bubble_bg"]))
             body_fill.setColorAt(1.0, QColor(C.COLORS["bubble_gradient_bottom"]))
 
-            # 双层描边（贴纸风，设计：任意明暗壁纸均清晰可辨）：
-            # 先画宽白晕（外露约 1.2px 白环，深色壁纸靠它分离），再画深棕内线
-            # （对奶白底对比强）。同一 united path，body+尾巴一次成形。
+            # 双层描边（细线贴纸风）：先画宽白晕（外露约 1.2px 白环，深色壁纸靠它
+            # 分离、托出「浮起」的气泡感），再画 1px 淡灰细线轻勾轮廓。同一
+            # united path，body+尾巴一次成形。
             halo = QColor(C.COLORS["bubble_halo"])
             halo.setAlpha(C.BUBBLE_HALO_ALPHA)
             painter.setBrush(body_fill)

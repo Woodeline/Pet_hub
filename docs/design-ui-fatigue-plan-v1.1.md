@@ -1,4 +1,4 @@
-# 大圣喵酱「视觉疲劳改善」实施计划 v1.1
+# 小喵酱「视觉疲劳改善」实施计划 v1.1
 
 > 版本：v1.1 · 日期：2026-09-18 · **取代** v1.0（`design-ui-fatigue-plan.md`）
 > 修订依据：`docs/design-ui-fatigue-plan-review.md`（复审报告）

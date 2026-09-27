@@ -114,8 +114,7 @@ def test_log_window_dates_and_current(qtbot) -> None:
 
     assert window.current_day() == "2025-01-01"
     assert window.current_status() == C.JP_LOG_FILTER_ALL
-    assert window._table.rowCount() == 1
-    assert window._table.item(0, 0).text() == "語1"
+    assert list(window._card_by_id.keys()) == ["n5-0001"]
 
 
 def test_log_window_status_filter(qtbot) -> None:
@@ -128,18 +127,12 @@ def test_log_window_status_filter(qtbot) -> None:
     ]
     window.refresh("2025-01-01", entries, 15)
 
-    window._combo_status.setCurrentIndex(
-        window._combo_status.findData(C.DAILY_LOG_STATUS_MASTERED)
-    )
+    window._tab_buttons[C.DAILY_LOG_STATUS_MASTERED].click()
     assert window.current_status() == C.DAILY_LOG_STATUS_MASTERED
-    assert window._table.rowCount() == 1
-    assert window._table.item(0, 0).text() == "語1"
+    assert list(window._card_by_id.keys()) == ["n5-0001"]
 
-    window._combo_status.setCurrentIndex(
-        window._combo_status.findData(C.DAILY_LOG_STATUS_UNPROCESSED)
-    )
-    assert window._table.rowCount() == 1
-    assert window._table.item(0, 0).text() == "語3"
+    window._tab_buttons[C.DAILY_LOG_STATUS_UNPROCESSED].click()
+    assert list(window._card_by_id.keys()) == ["n5-0003"]
 
 
 def test_log_window_statistics_are_unfiltered(qtbot) -> None:
@@ -167,8 +160,7 @@ def test_log_window_switch_day_locally(qtbot) -> None:
 
     window._combo_date.setCurrentIndex(window._combo_date.findData("2025-01-01"))
     assert window.current_day() == "2025-01-01"
-    assert window._table.rowCount() == 1
-    assert window._table.item(0, 0).text() == "語1"
+    assert list(window._card_by_id.keys()) == ["n5-0001"]
 
 
 def test_log_window_title_and_size(qtbot) -> None:
@@ -425,3 +417,61 @@ def test_controller_open_word_detail_singleton(controller: PetAppController) -> 
 
     controller._open_word_detail(_entry(2))
     assert controller._detail_window is first  # 复用单例
+
+
+# --------------------------------------------------------------------------- #
+# 6. 外置词库:启动合并(controller 级端到端)
+# --------------------------------------------------------------------------- #
+def test_controller_merges_extra_bank_on_start(
+    qapp: QApplication, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """启动时 %APPDATA% 外置词库自动按 id 合并进内置词库。"""
+
+    import json
+
+    appdata = tmp_path / "appdata"
+    cfg_dir = appdata / C.CONFIG_DIR_NAME
+    cfg_dir.mkdir(parents=True)
+    extra = {
+        "version": 1,
+        "words": [
+            {
+                "id": "ojl-e2e-0001",
+                "level": "N5",
+                "word": "外置語",
+                "kana": "がいちご",
+                "translation": "ext",
+                "meaning": "external entry",
+            }
+        ],
+    }
+    (cfg_dir / "jlpt_words_extra.json").write_text(
+        json.dumps(extra, ensure_ascii=False), encoding="utf-8"
+    )
+    monkeypatch.setenv("APPDATA", str(appdata))
+
+    store = ConfigStore(tmp_path / "cfg" / "config.json")
+    ctrl = PetAppController(qapp, store)
+    ctrl._load_japanese()  # 与 start() 一致:词库加载在 start 里,此处单测直接驱动
+    entry = ctrl._bank.entry_by_id("ojl-e2e-0001")
+    assert entry is not None
+    assert (entry.word, entry.level) == ("外置語", "N5")
+
+
+def test_controller_extra_bank_corrupt_is_tolerated(
+    qapp: QApplication, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """外置词库损坏时仅忽略,不影响内置词库加载与启动。"""
+
+    import json
+
+    appdata = tmp_path / "appdata2"
+    cfg_dir = appdata / C.CONFIG_DIR_NAME
+    cfg_dir.mkdir(parents=True)
+    (cfg_dir / "jlpt_words_extra.json").write_text("{ corrupt", encoding="utf-8")
+    monkeypatch.setenv("APPDATA", str(appdata))
+
+    store = ConfigStore(tmp_path / "cfg2" / "config.json")
+    ctrl = PetAppController(qapp, store)
+    ctrl._load_japanese()
+    assert not ctrl._bank.is_empty()  # 内置 500 词仍可用

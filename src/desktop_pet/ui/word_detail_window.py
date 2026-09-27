@@ -15,7 +15,9 @@ import logging
 from html import escape
 
 from PySide6.QtCore import QSize, QThreadPool, Qt, Signal
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
+    QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -101,11 +103,11 @@ class WordDetailWindow(QWidget):
         if detail is not None and not detail.is_empty():
             # 本地/缓存命中：丢弃在途任务，杜绝旧 worker 迟到回填当前词条。
             self._pool.clear()
-            self._render_detail(detail, source or C.WORD_DETAIL_SOURCE_CACHE)
             self._status_label.setText("")
             self._status_label.setVisible(False)
             self._retry_btn.setVisible(False)
             self._hide_spinner()
+            self._render_detail(detail, source or C.WORD_DETAIL_SOURCE_CACHE)
             return
 
         # 本地词库 / 用户缓存均未命中
@@ -139,12 +141,12 @@ class WordDetailWindow(QWidget):
         if detail is None or detail.is_empty():
             self.set_detail_error(item_id, C.WORD_DETAIL_NOT_FOUND)
             return
-        self._render_detail(detail, C.WORD_DETAIL_SOURCE_NET)
         self._status_label.setText("")
         self._status_label.setVisible(False)
         self._retry_btn.setVisible(False)
         self._retry_btn.setEnabled(True)
         self._hide_spinner()
+        self._render_detail(detail, C.WORD_DETAIL_SOURCE_NET)
 
     def set_detail_error(self, item_id: str, msg: str) -> None:
         """进入失败态：显示中文提示并给出重试（离线降级文案原样展示）。
@@ -163,12 +165,49 @@ class WordDetailWindow(QWidget):
         self._retry_btn.setVisible(True)
         self._retry_btn.setEnabled(True)
         self._hide_spinner()
+        self._fit_height_to_content()
 
     def set_reduce_motion(self, flag: bool) -> None:
         """注入「减少动效」开关（由 controller 在窗口显示前调用）。"""
 
         self._reduce_motion = bool(flag)
         self._spinner.set_reduce_motion(self._reduce_motion)
+
+    def set_accent(self, accent: str | None) -> None:
+        """应用主题点缀色：重刷全局 QSS + 词性下划线（controller 在换肤时调用）。
+
+        Args:
+            accent: 点缀色（``#RRGGBB``）；``None`` 回落中性主色。
+        """
+
+        theme.apply_theme(self, accent)
+        color = accent if accent else C.SEMANTIC_COLORS["primary"]
+        self._pos_label.setStyleSheet(
+            f"color: {color}; font-weight: bold;"
+            f" font-size: {C.FONT_SIZE['body']}px;"
+            f" border-bottom: 2px solid {C.SEMANTIC_COLORS['muted']};"
+            " background: transparent;"
+        )
+
+    def _fit_height_to_content(self) -> None:
+        """窗口高度随内容自适应（钳制屏幕可用高度 85%），消除底部固定留白。
+
+        测量走布局的 ``heightForWidth``（含换行文本的真实高度）；布局不支持 hfw
+        时退回 ``sizeHint``（防御分支，正常路径不会走到）。
+        """
+
+        layout = self.layout()
+        if layout is None:
+            return
+        if layout.hasHeightForWidth():
+            needed = layout.heightForWidth(self.width())
+        else:
+            needed = self.sizeHint().height()
+        screen = self.screen() or QGuiApplication.primaryScreen()
+        max_h = int(screen.availableGeometry().height() * 0.85)
+        height = max(180, min(int(needed), max_h))
+        if height != self.height():
+            self.resize(self.width(), height)
 
     # ------------------------------------------------------------------ #
     # Qt 事件
@@ -198,14 +237,14 @@ class WordDetailWindow(QWidget):
     # UI 构建
     # ------------------------------------------------------------------ #
     def _build_ui(self) -> None:
-        """构建界面元素与布局。"""
+        """构建界面元素与布局（卡片化改版：五要素分组改为圆角卡片）。"""
 
         # 统一接入语义 token（QSS 由 theme 生成，组件内只引用 token 色值）。
         theme.apply_theme(self)
 
         root = QVBoxLayout(self)
 
-        # 头部：大号单词 + 等级 chip
+        # 头部：大号单词 + 等级胶囊 chip（右上）
         header = QHBoxLayout()
         self._word_label = QLabel("", self)
         self._word_label.setStyleSheet(
@@ -213,33 +252,59 @@ class WordDetailWindow(QWidget):
             f" color: {C.SEMANTIC_COLORS['text_primary']};"
         )
         header.addWidget(self._word_label)
-        # 等级 chip：从中性绿填充改为「描边 chip」，消除与「记住了」按钮的绿色撞车。
+        header.addStretch(1)
+        # 等级 chip：描边胶囊样式（与「记住了」按钮的绿色不撞车）。
         self._level_chip = QLabel("", self)
         self._level_chip.setStyleSheet(
             "background: transparent;"
             f" color: {C.SEMANTIC_COLORS['text_secondary']};"
             f" border: 1px solid {C.SEMANTIC_COLORS['border']};"
-            f" border-radius: {C.RADIUS['sm']}px; padding: 2px 8px; font-weight: bold;"
+            f" border-radius: {C.RADIUS['pill']}px; padding: 2px 10px; font-weight: bold;"
         )
         theme.set_role(self._level_chip, "chip")
         header.addWidget(self._level_chip)
-        header.addStretch(1)
         root.addLayout(header)
 
-        # 基础信息：假名 + 来源标注
-        self._kana_label = self._add_field(root, C.WORD_DETAIL_LABEL_KANA)
+        # 假名行：假名 + 喇叭占位（置灰，发音功能预留，点击无响应）
+        kana_row = QHBoxLayout()
+        self._kana_label = self._add_field(root, kana_row, C.WORD_DETAIL_LABEL_KANA)
+        kana_row.addStretch(1)
+        speaker = QLabel(self)
+        speaker.setPixmap(
+            icon_factory.make_icon(
+                "speaker", color=C.SEMANTIC_COLORS["text_faint"]
+            ).pixmap(QSize(C.SPACING["xl"], C.SPACING["xl"]))
+        )
+        speaker.setToolTip(C.JP_SPEAKER_TIP)
+        kana_row.addWidget(speaker)
+        root.addLayout(kana_row)
+
         self._source_label = QLabel("", self)
         self._source_label.setStyleSheet(
             f"color: {C.SEMANTIC_COLORS['text_secondary']}; margin-top: 2px;"
         )
         root.addWidget(self._source_label)
 
-        # 五要素分组
+        # 词性：强调行（参考词典应用：词性带下划线突出，下划线仅贴文字宽度）
+        pos_row = QHBoxLayout()
+        self._pos_label = QLabel("", self)
+        self._pos_label.setWordWrap(True)
+        self._pos_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self._pos_label.setStyleSheet(
+            f"color: {C.SEMANTIC_COLORS['primary']}; font-weight: bold;"
+            f" font-size: {C.FONT_SIZE['body']}px;"
+            f" border-bottom: 2px solid {C.SEMANTIC_COLORS['muted']};"
+            " background: transparent;"
+        )
+        pos_row.addWidget(self._pos_label)
+        pos_row.addStretch(1)
+        root.addLayout(pos_row)
+
+        # 五要素分组（词性已上提，其余四组用圆角卡片承载）
         self._meaning_label = self._add_group(root, C.WORD_DETAIL_LABEL_MEANING_ZH)
-        self._pos_label = self._add_group(root, C.WORD_DETAIL_LABEL_POS_ZH)
-        self._collocations_label = self._add_group(root, C.WORD_DETAIL_LABEL_COLLOCATIONS)
         self._examples_label = self._add_group(root, C.WORD_DETAIL_LABEL_EXAMPLES)
         self._examples_label.setTextFormat(Qt.TextFormat.RichText)
+        self._collocations_label = self._add_group(root, C.WORD_DETAIL_LABEL_COLLOCATIONS)
         self._usage_label = self._add_group(root, C.WORD_DETAIL_LABEL_USAGE)
 
         # 状态 / 重试（spinner 与状态标签同行；状态标签文本/可见性逻辑保持不变）
@@ -276,10 +341,9 @@ class WordDetailWindow(QWidget):
 
         root.addStretch(1)
 
-    def _add_field(self, root: QVBoxLayout, caption: str) -> QLabel:
-        """添加「caption + value」字段行，返回 value label。"""
+    def _add_field(self, root: QVBoxLayout, row: QHBoxLayout, caption: str) -> QLabel:
+        """添加「caption + value」字段行（行布局由调用方持有），返回 value label。"""
 
-        row = QHBoxLayout()
         caption_label = QLabel(caption, self)
         caption_label.setStyleSheet(
             f"color: {C.SEMANTIC_COLORS['text_secondary']};"
@@ -291,23 +355,31 @@ class WordDetailWindow(QWidget):
         value_label.setWordWrap(True)
         value_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         row.addWidget(value_label, 1)
-        root.addLayout(row)
         return value_label
 
     def _add_group(self, root: QVBoxLayout, caption: str) -> QLabel:
-        """添加一个五要素分组（分组标题 + 可选值），返回 value label。"""
+        """添加一个圆角卡片分组（卡内：分组标题 + 值），返回 value label。"""
 
+        card = QFrame(self)
+        theme.set_role(card, "card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(
+            C.SPACING["md"], C.SPACING["sm"], C.SPACING["md"], C.SPACING["sm"]
+        )
+        card_layout.setSpacing(C.SPACING["xs"])
         caption_label = QLabel(caption, self)
         caption_label.setStyleSheet(
             f"color: {C.SEMANTIC_COLORS['text_secondary']};"
-            f" font-size: {C.FONT_SIZE['body']}px;"
-            f" font-weight: bold; margin-top: {C.SPACING['sm']}px;"
+            f" font-size: {C.FONT_SIZE['caption']}px; font-weight: bold;"
+            " background: transparent;"
         )
-        root.addWidget(caption_label)
+        card_layout.addWidget(caption_label)
         value_label = QLabel("", self)
         value_label.setWordWrap(True)
         value_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        root.addWidget(value_label)
+        value_label.setStyleSheet("background: transparent;")
+        card_layout.addWidget(value_label)
+        root.addWidget(card)
         return value_label
 
     # ------------------------------------------------------------------ #
@@ -353,6 +425,7 @@ class WordDetailWindow(QWidget):
         self._collocations_label.setText(self._format_collocations(cut))
         self._examples_label.setText(self._format_examples(cut))
         self._usage_label.setText(cut.usage_note_zh or C.WORD_DETAIL_EMPTY_GROUP)
+        self._fit_height_to_content()
 
     @staticmethod
     def _format_collocations(detail: WordDetail) -> str:

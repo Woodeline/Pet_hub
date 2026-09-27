@@ -174,4 +174,49 @@ def decor_for_theme(name: str) -> C.ThemeDecor:
     return C.THEME_DECOR.get(name, C.THEME_DECOR[C.DEFAULT_THEME])
 
 
-__all__ = ["resolve_theme", "theme_stops", "glow_for_theme", "decor_for_theme"]
+# --------------------------------------------------------------------------- #
+# 界面点缀色（UI 中性化改版）—— 纯函数，零 Qt / 零 time
+# --------------------------------------------------------------------------- #
+#: 点缀色可读性上限：白底 UI 上作文字/下划线用的颜色明度不超过该值。
+_ACCENT_MAX_LIGHTNESS: float = 0.42
+#: 点缀色饱和度保留比例（略降，避免高饱和刺眼、与中性界面打架）。
+_ACCENT_SAT_SCALE: float = 0.85
+
+
+def ui_accent_for_theme(name: str) -> str:
+    """按主题派生**界面点缀色**（大写 ``#RRGGBB``，纯函数 / 零 Qt / 零 time）。
+
+    取该主题渐变**最深停靠点**（末位，各季节的深色端），压暗 + 略降饱和成白底
+    可读的点缀色，供 QSS 中 Tab 选中 / 卡片选中描边等小面积元素使用：
+
+    * ``spring`` 嫩绿系 → 叶绿点缀；``summer`` 蓝系 → 海蓝；``autumn`` → 锈橙；
+      ``winter`` → 靛蓝；``spring_festival`` → 节庆红。
+    * ``default``（品牌彩虹渐变各停靠点都很浅、无单一主色）与**任何未知名称**
+      回落中性主色 :data:`SEMANTIC_COLORS["primary"]`——默认界面保持黑白灰。
+
+    Args:
+        name: 主题名（可为任意值）。
+
+    Returns:
+        大写 ``#RRGGBB``。
+    """
+
+    if name not in C.THEMES or name == C.DEFAULT_THEME:
+        return C.SEMANTIC_COLORS["primary"]
+    stops = theme_stops(name)
+    deepest = stops[-1][1]  # 约定：停靠点按由浅到深排列，末位最深
+    r, g, b = (c / 255.0 for c in _parse_hex(deepest))
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    l = min(l, _ACCENT_MAX_LIGHTNESS)
+    s = s * _ACCENT_SAT_SCALE
+    rr, gg, bb = colorsys.hls_to_rgb(h, l, s)
+    return _to_hex((rr * 255.0, gg * 255.0, bb * 255.0))
+
+
+__all__ = [
+    "resolve_theme",
+    "theme_stops",
+    "glow_for_theme",
+    "decor_for_theme",
+    "ui_accent_for_theme",
+]

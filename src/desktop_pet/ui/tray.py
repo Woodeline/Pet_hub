@@ -51,6 +51,7 @@ class TrayController(QObject):
     jp_show_now_requested = Signal()
     jp_vocab_requested = Signal()
     jp_log_requested = Signal()
+    jp_import_bank_requested = Signal()
 
     def __init__(self, icon: QIcon, cfg: AppConfig) -> None:
         """构造托盘控制器。
@@ -101,6 +102,7 @@ class TrayController(QObject):
         self._action_jp_show_now: QAction | None = None
         self._action_jp_vocab: QAction | None = None
         self._action_jp_log: QAction | None = None
+        self._action_jp_import: QAction | None = None
 
         self._build_menu()
 
@@ -374,6 +376,11 @@ class TrayController(QObject):
             lambda _checked=False: self.jp_log_requested.emit()
         )
 
+        self._action_jp_import = QAction(C.JP_MENU_IMPORT_BANK, self._menu)
+        self._action_jp_import.triggered.connect(
+            lambda _checked=False: self.jp_import_bank_requested.emit()
+        )
+
         scale_menu = QMenu("大小", self._menu)
         self._scale_group = QActionGroup(self._menu)
         self._scale_group.setExclusive(True)
@@ -445,6 +452,7 @@ class TrayController(QObject):
         jp.addSeparator()
         jp.addAction(self._action_jp_vocab)
         jp.addAction(self._action_jp_log)
+        jp.addAction(self._action_jp_import)
         menu.addMenu(jp)
         menu.addSeparator()
         # 「外观」三兄弟：大小 + 主题（配色）+ 皮肤（MOD 包）

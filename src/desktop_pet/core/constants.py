@@ -134,40 +134,40 @@ COLORS: Final[dict[str, str]] = {
     "white": "#FFFFFF",       # 纯白 眼睛高光 / 前爪
     "mouse_body": "#3A3A3A",  # 深灰 鼠标仓体 / 键盘底座
     "mouse_hi": "#8A8A8A",    # 中灰 鼠标分割线 / 滚轮
-    # —— 气泡相关（沿用，未改）——
-    "bubble_bg": "#FFFDF8",   # 奶白 气泡底
-    "bubble_text": "#7A5A42",  # 暖棕 气泡字
+    # —— 气泡相关（中性化改版：与窗口 UI 同一套白底近黑观感）——
+    "bubble_bg": "#FFFFFF",   # 纯白 气泡底
+    "bubble_text": "#1F2328",  # 近黑 气泡字
     "glow_yellow": "#FFD08A",  # 暖黄 专注/兴奋光晕
     "glow_blue": "#B9D4E8",   # 淡蓝 睡觉柔光
     # —— 兼容保留：ui.bubble 仍引用此描边色（色值集中定义在 core）——
-    "warm_brown": "#8B6B4F",
+    "warm_brown": "#3D444D",
     # —— 日语学习：学习泡泡次级文字色 + 生词本窗口配色（设计 §7.4）——
-    "bubble_sub_text": "#9C8570",   # 暖灰 假名（次级文字）
-    "bubble_faint_text": "#B7A99A",  # 淡褐 中文释义（最淡文字）
-    "vocab_bg": "#FFFDF8",          # 奶白 生词本窗口底色
-    "vocab_text": "#5A4636",        # 深棕 生词本正文文字
-    "vocab_level_tag": "#7A9E7E",   # 灰绿 生词本等级标签色
+    "bubble_sub_text": "#5A626C",   # 灰 假名（次级文字）
+    "bubble_faint_text": "#98A2AD",  # 淡灰 中文释义（最淡文字）
+    "vocab_bg": "#FFFFFF",          # 白 生词本窗口底色
+    "vocab_text": "#1F2328",        # 近黑 生词本正文文字
+    "vocab_level_tag": "#5A626C",   # 灰 生词本等级标签色
     # —— 日语记忆（JP-17+）：学习泡泡高光 / 按钮条 / 记录窗口状态标签（设计 §7.3）——
     "bubble_gradient_hi": "#FFFFFF",       # 学习泡泡 body 顶部浅高光（质感）
-    "jp_button_primary_bg": "#7A9E7E",     # 「记住了」主色填充（正向绿）
+    "jp_button_primary_bg": "#3FB950",     # 「记住了」主色填充（正向绿）
     "jp_button_primary_text": "#FFFFFF",   # 「记住了」文字
-    "jp_button_primary_hover": "#8FB090",  # 主按钮悬停
-    "jp_button_primary_pressed": "#6B8E6F",  # 主按钮按下
-    "jp_button_secondary_border": "#9C8570",  # 「新单词」描边
-    "jp_button_secondary_text": "#7A5A42",    # 「新单词」文字
-    "jp_button_secondary_hover": "#F3EAE0",   # 次按钮悬停填充
-    "jp_button_bar_bg": "#FFFDF8",             # 按钮条底色
-    "log_status_mastered": "#7A9E7E",     # 状态标签·已掌握（绿）
-    "log_status_vocab": "#5B8DB8",        # 状态标签·生词（蓝）
-    "log_status_unprocessed": "#B7A99A",  # 状态标签·未处理（灰）
-    # —— B 版气泡质感 / 等级角标（设计 §A1.1）——
-    "bubble_shadow": "#C9B8A6",           # 气泡底部柔和阴影（绘制时用低 alpha）
-    "bubble_divider": "#EFE3D4",          # 气泡「单词/假名」与「翻译/释义」分割线
-    "bubble_gradient_bottom": "#F7EEDF",  # 气泡 body 底部渐变略深
-    "jp_level_chip_bg": "#7A9E7E",        # 右上角等级 chip 背景
+    "jp_button_primary_hover": "#53C463",  # 主按钮悬停
+    "jp_button_primary_pressed": "#349A44",  # 主按钮按下
+    "jp_button_secondary_border": "#C9CDD3",  # 「新单词」描边
+    "jp_button_secondary_text": "#1F2328",    # 「新单词」文字
+    "jp_button_secondary_hover": "#EEF0F3",   # 次按钮悬停填充
+    "jp_button_bar_bg": "#FFFFFF",             # 按钮条底色
+    "log_status_mastered": "#3FB950",     # 状态标签·已掌握（绿）
+    "log_status_vocab": "#4C8DDA",        # 状态标签·生词（蓝）
+    "log_status_unprocessed": "#98A2AD",  # 状态标签·未处理（灰）
+    # —— B 版气泡质感 / 等级角标（设计 §A1.1，中性化改版）——
+    "bubble_shadow": "#C9CDD3",           # 气泡底部柔和阴影（绘制时用低 alpha）
+    "bubble_divider": "#E3E6EA",          # 气泡「单词/假名」与「翻译/释义」分割线
+    "bubble_gradient_bottom": "#F5F6F8",  # 气泡 body 底部渐变略深
+    "jp_level_chip_bg": "#5A626C",        # 右上角等级 chip 背景
     "jp_level_chip_text": "#FFFFFF",      # 右上角等级 chip 文字
-    # —— 气泡双层描边（贴纸风：外层白晕 + 内层深线，任意明暗壁纸均清晰）——
-    "bubble_border": "#5C4330",  # 内层描边：比 warm_brown 更深的棕（对奶白底对比更强）
+    # —— 气泡双层描边（细线贴纸风：外层白晕托底 + 内层细淡灰线，任意明暗壁纸均清晰）——
+    "bubble_border": "#D8DDE3",  # 内层描边：淡灰细线（柔和勾勒，不压气泡的轻盈感）
     "bubble_halo": "#FFFFFF",    # 外层白晕：深色壁纸上把气泡从背景里托出来
 }
 
@@ -402,23 +402,24 @@ THEME_DECOR: Final[dict[str, ThemeDecor]] = {
 #
 # P0 只沉淀 token；把它翻译成 QSS / QIcon 由 P1 的 ``ui.theme`` / ``ui.icon_factory`` 负责。
 SEMANTIC_COLORS: Final[dict[str, str]] = {
-    "primary": "#7A5A42",        # 品牌主色（暖棕，= 气泡正文色）
-    "primary_hover": "#8B6B4F",  # 悬停 +8%
-    "primary_pressed": "#6B4E3A",# 按下 -8%
-    "success": "#7A9E7E",        # 正向操作（「记住了」）
-    "success_hover": "#8FB090",
-    "success_pressed": "#6B8E6F",
-    "info": "#5B8DB8",           # 信息/已掌握状态
-    "warning": "#C99A5B",        # 生词状态（从「蓝」改为琥珀，与 info 解耦）
-    "muted": "#B7A99A",          # 未处理/辅助
-    "destructive": "#C05B5B",    # 危险操作（清空）
-    "destructive_hover": "#CE6B6B",
-    "surface": "#FFFDF8",        # 卡片/窗口底
-    "surface_alt": "#F7EEDF",    # 斑马纹/次级底
-    "border": "#EFE3D4",         # 边框
-    "text_primary": "#5A4636",   # 正文
-    "text_secondary": "#9C8570", # 次级
-    "text_faint": "#B7A99A",     # 最淡
+    # —— 中性扁平配色（参考 ZCode 风格：白底 / 近黑文字 / 浅灰分隔 / 绿色点缀）——
+    "primary": "#1F2328",        # 品牌主色（近黑，= 气泡正文色；主按钮/Tab 选中/焦点环）
+    "primary_hover": "#3D444D",  # 悬停
+    "primary_pressed": "#14171C",# 按下
+    "success": "#3FB950",        # 正向操作（「记住了」/完成态点缀绿）
+    "success_hover": "#53C463",
+    "success_pressed": "#349A44",
+    "info": "#4C8DDA",           # 信息/已掌握状态
+    "warning": "#C28A2B",        # 生词状态（琥珀，与 info 解耦）
+    "muted": "#98A2AD",          # 未处理/辅助
+    "destructive": "#D64545",    # 危险操作（清空）
+    "destructive_hover": "#E05656",
+    "surface": "#FFFFFF",        # 卡片/窗口底
+    "surface_alt": "#F5F6F8",    # 次级底（卡片 hover/斑马纹）
+    "border": "#E3E6EA",         # 边框/分隔线
+    "text_primary": "#1F2328",   # 正文
+    "text_secondary": "#5A626C", # 次级
+    "text_faint": "#98A2AD",     # 最淡
 }
 
 # 间距刻度（4px 基线：``xs``/``md`` 为 4 的倍数，``sm``/``lg``/``xl`` 命中 8 的倍数）。
@@ -453,7 +454,7 @@ DEFAULT_MARGIN_PX: Final[int] = 40  # 默认位置距主屏右下角内缩（A-0
 
 AUTOSTART_REG_PATH: Final[str] = r"Software\Microsoft\Windows\CurrentVersion\Run"
 AUTOSTART_REG_KEY: Final[str] = "DesktopPet"
-APP_DISPLAY_NAME: Final[str] = "大圣喵酱"
+APP_DISPLAY_NAME: Final[str] = "小喵酱"
 
 #: 单实例守卫的命名管道名（QLocalServer key）。全局唯一，避免与其他程序冲突。
 SINGLE_INSTANCE_KEY: Final[str] = "desktop-pet-single-instance-v1"
@@ -562,7 +563,7 @@ BUBBLE_GAP_TO_PET: Final[float] = 6.0  # 气泡与头顶间距
 # 双层描边（贴纸风）：描边画在窗口边缘会被裁掉一半（旧版可见宽度不足 1px 的根因），
 # 故窗口四周预留 STROKE_MARGIN，body 内缩后再画「白晕 + 深线」两遍（同一 united path，
 # 白晕笔更宽、深线居中覆盖，露出的外环即白晕）。白晕外缘 = margin + HALO_WIDTH/2 ≤ margin。
-BUBBLE_BORDER_WIDTH: Final[float] = 2.2    # 内层深棕描边线宽
+BUBBLE_BORDER_WIDTH: Final[float] = 1.0    # 内层细描边线宽（细淡灰，柔和勾勒轮廓）
 BUBBLE_HALO_WIDTH: Final[float] = 4.6      # 外层白晕线宽（绘制时叠 alpha；露出约 1.2px 白环）
 BUBBLE_HALO_ALPHA: Final[int] = 190        # 白晕不透明度（0-255）
 BUBBLE_STROKE_MARGIN: Final[float] = 4.0   # 窗口四周为描边/白晕预留的边距（≥ HALO_WIDTH/2）
@@ -864,6 +865,8 @@ BUBBLE_LINE_SPACING: Final[float] = 3.0            # 多行泡泡行距（PRD �
 WORD_BANK_DIR_NAME: Final[str] = "data"
 WORD_BANK_FILE_NAME: Final[str] = "jlpt_words.json"
 WORD_BANK_VERSION: Final[int] = 1
+#: 外置词库（用户经托盘导入的扩充包，存于 %APPDATA%\desktop-pet，启动时按 id 合并覆盖）
+EXTRA_WORD_BANK_FILE_NAME: Final[str] = "jlpt_words_extra.json"
 VOCAB_FILE_NAME: Final[str] = "vocabulary.json"
 VOCAB_VERSION: Final[int] = 1
 
@@ -888,6 +891,8 @@ JP_NOTIFY_BANK_UNAVAILABLE: Final[str] = "日语词库不可用，已跳过日�
 JP_VOCAB_WINDOW_TITLE: Final[str] = "生词本"
 JP_VOCAB_FILTER_ALL: Final[str] = "全部"
 JP_VOCAB_LEVEL_FILTER_LABEL: Final[str] = "等级："
+#: 发音按钮占位提示（TTS 未实现，仅置灰图标）
+JP_SPEAKER_TIP: Final[str] = "发音功能即将上线"
 JP_VOCAB_COL_WORD: Final[str] = "单词"
 JP_VOCAB_COL_KANA: Final[str] = "假名"
 JP_VOCAB_COL_TRANSLATION: Final[str] = "翻译"
@@ -949,6 +954,18 @@ JP_MENU_LOG: Final[str] = "学习记录…"
 JP_MENU_DURATION: Final[str] = "显示时长"
 JP_MENU_DAILY_LIMIT: Final[str] = "每日数量"
 JP_MENU_SHOW_NOW: Final[str] = "立即显示一个新单词"
+JP_MENU_IMPORT_BANK: Final[str] = "导入词库…"
+
+# —— 外置词库导入（托盘「导入词库…」：校验 → 拷贝到 %APPDATA% → 合并重载 → 通知）——
+JP_IMPORT_DIALOG_TITLE: Final[str] = "选择词库 JSON 文件"
+JP_IMPORT_DIALOG_FILTER: Final[str] = "词库 JSON (*.json);;所有文件 (*)"
+#: 导入成功通知（str.format(added=..., updated=..., skipped=...)）
+JP_NOTIFY_BANK_IMPORTED: Final[str] = (
+    "词库导入完成：新增 {added} 个词，更新 {updated} 个词，无效 {skipped} 条"
+)
+#: 导入失败通知（str.format(reason=...)）
+JP_NOTIFY_BANK_IMPORT_FAILED: Final[str] = "词库导入失败：{reason}"
+JP_NOTIFY_BANK_IMPORT_CANCELLED: Final[str] = "已取消导入词库"
 
 # —— 记忆闭环通知文案（str.format(word=..., kana=...)）——
 JP_NOTIFY_MASTERED_ADDED: Final[str] = "已标记为掌握：{word}（{kana}）"

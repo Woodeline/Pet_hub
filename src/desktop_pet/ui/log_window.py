@@ -1,9 +1,10 @@
-"""ui.log_window —— 只读「学习记录」回查窗口（JP-17+）。
+"""ui.log_window —— 只读「学习记录」回查窗口（JP-17+，卡片化改版）。
 
 仅负责展示与**本地筛选**，**不直接读写存储**（数据一律经 ``app/controller`` → ``core.daily_log_store`` 喂入）。
 
-- 顶部：日期下拉 + 状态筛选（全部 / 已掌握 / 生词 / 未处理）。
-- 中部：表格（单词 / 假名 / 翻译 / 展示时间 / 状态，状态用颜色标签）。
+- 顶部：日期下拉 + 状态文字 Tab（全部 / 已掌握 / 生词 / 未处理）。
+- 中部：卡片式列表（无表格线）——每张卡片「单词 | 假名」+ 状态彩色标签 +
+  展示时间，次行中文翻译；双击卡片打开词条详情。
 - 底部：统计栏（当日 shown/limit · 已掌握 · 生词 · 未处理）。
 """
 
@@ -11,15 +12,16 @@ from __future__ import annotations
 
 import logging
 
-from PySide6.QtCore import Signal
-from PySide6.QtGui import QColor
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
+    QFrame,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
-    QTableWidget,
-    QTableWidgetItem,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -46,6 +48,75 @@ _STATUS_COLOR_KEYS: dict[str, str] = {
 }
 
 
+class _LogCard(QFrame):
+    """一条学习记录卡片：双击发出详情信号（仅转发 id，无业务逻辑）。"""
+
+    double_clicked = Signal(str)  # 携带 entry id
+
+    def __init__(self, entry: DailyLogEntry, parent: QWidget | None = None) -> None:
+        """按一条记录构建卡片 UI（状态标签用对应语义色）。"""
+
+        super().__init__(parent)
+        theme.set_role(self, "card")
+        self._id = str(entry.id)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+
+        row = QVBoxLayout(self)
+        row.setContentsMargins(
+            C.SPACING["md"], C.SPACING["sm"], C.SPACING["md"], C.SPACING["sm"]
+        )
+        row.setSpacing(C.SPACING["xs"])
+
+        # 行 1：单词 | 假名 + 状态标签 + 展示时间
+        top = QHBoxLayout()
+        top.setSpacing(C.SPACING["sm"])
+        word_label = QLabel(entry.word, self)
+        word_label.setStyleSheet(
+            f"font-size: {C.FONT_SIZE['title']}px; font-weight: bold;"
+            f" color: {C.SEMANTIC_COLORS['text_primary']}; background: transparent;"
+        )
+        top.addWidget(word_label)
+        kana_label = QLabel(f"｜{entry.kana}", self)
+        kana_label.setStyleSheet(
+            f"font-size: {C.FONT_SIZE['body']}px;"
+            f" color: {C.SEMANTIC_COLORS['text_secondary']}; background: transparent;"
+        )
+        top.addWidget(kana_label)
+        top.addStretch(1)
+        if entry.status != C.DAILY_LOG_STATUS_UNPROCESSED:
+            color_key = _STATUS_COLOR_KEYS.get(entry.status)
+            status_text = _STATUS_LABELS.get(entry.status, entry.status)
+            if color_key:
+                status_label = QLabel(status_text, self)
+                status_label.setStyleSheet(
+                    f"color: {C.SEMANTIC_COLORS[color_key]};"
+                    f" font-size: {C.FONT_SIZE['caption']}px; font-weight: bold;"
+                    " background: transparent;"
+                )
+                top.addWidget(status_label)
+        shown_at = QLabel(str(entry.shown_at), self)
+        shown_at.setStyleSheet(
+            f"color: {C.SEMANTIC_COLORS['text_faint']};"
+            f" font-size: {C.FONT_SIZE['caption']}px; background: transparent;"
+        )
+        top.addWidget(shown_at)
+        row.addLayout(top)
+
+        # 行 2：中文翻译
+        translation_label = QLabel(entry.translation, self)
+        translation_label.setWordWrap(True)
+        translation_label.setStyleSheet("background: transparent;")
+        row.addWidget(translation_label)
+
+    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802 —— Qt 命名约定
+        """双击 → 发详情信号（controller 打开词条详情窗口）。"""
+
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.double_clicked.emit(self._id)
+        super().mouseDoubleClickEvent(event)
+
+
 class LogWindow(QWidget):
     """学习记录回查窗口（普通顶层窗口，纯展示）。"""
 
@@ -61,6 +132,7 @@ class LogWindow(QWidget):
         #: day → 该日记录缓存（controller 逐日喂入，本地切换日期即可回查）
         self._entries_by_day: dict[str, list[DailyLogEntry]] = {}
         self._shown_entries: list[DailyLogEntry] = []
+        self._card_by_id: dict[str, _LogCard] = {}
         self._limit: int = C.JP_DAILY_LIMIT
         #: 「减少动效」开关（由 controller 在窗口显示前经 :meth:`set_reduce_motion` 注入）。
         self._reduce_motion: bool = False
@@ -100,13 +172,20 @@ class LogWindow(QWidget):
     def current_status(self) -> str:
         """返回当前状态筛选：``"全部"`` / ``mastered`` / ``vocab`` / ``unprocessed``。"""
 
-        data = self._combo_status.currentData()
-        return str(data) if data else C.JP_LOG_FILTER_ALL
+        for value, button in self._tab_buttons.items():
+            if button.isChecked():
+                return value
+        return C.JP_LOG_FILTER_ALL
 
     def set_reduce_motion(self, flag: bool) -> None:
         """注入「减少动效」开关（由 controller 在窗口显示前调用）。"""
 
         self._reduce_motion = bool(flag)
+
+    def set_accent(self, accent: str | None) -> None:
+        """应用主题点缀色（controller 在窗口创建与换肤时调用；``None`` 回落中性）。"""
+
+        theme.apply_theme(self, accent)
 
     def closeEvent(self, event) -> None:  # noqa: N802 —— Qt 命名约定
         """关闭：开启动效且窗口可见时先淡出再隐藏，否则沿用默认关闭。"""
@@ -129,47 +208,50 @@ class LogWindow(QWidget):
 
         root = QVBoxLayout(self)
 
-        # 顶部：日期 + 状态筛选
+        # 顶部：日期 + 状态 Tab
         top = QHBoxLayout()
         top.addWidget(QLabel(C.JP_LOG_DATE_LABEL))
         self._combo_date = QComboBox(self)
         self._combo_date.currentIndexChanged.connect(lambda _idx: self._apply_filter())
         top.addWidget(self._combo_date)
-        top.addSpacing(12)
-        top.addWidget(QLabel(C.JP_LOG_STATUS_LABEL))
-        self._combo_status = QComboBox(self)
-        self._combo_status.addItem(C.JP_LOG_FILTER_ALL, C.JP_LOG_FILTER_ALL)
-        for status in C.DAILY_LOG_STATUSES:
-            self._combo_status.addItem(_STATUS_LABELS[status], status)
-        self._combo_status.currentIndexChanged.connect(lambda _idx: self._apply_filter())
-        top.addWidget(self._combo_status)
+        top.addSpacing(C.SPACING["xl"])
+        self._tab_buttons: dict[str, QPushButton] = {}
+        tab_defs = [(C.JP_LOG_FILTER_ALL, C.JP_LOG_FILTER_ALL)] + [
+            (status, _STATUS_LABELS[status]) for status in C.DAILY_LOG_STATUSES
+        ]
+        for value, label in tab_defs:
+            button = QPushButton(label, self)
+            button.setCheckable(True)
+            button.setAutoExclusive(True)
+            # Tab 为纯点击目标：禁用焦点，避免初始焦点画出不属于选中的下划线。
+            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            button.setChecked(value == C.JP_LOG_FILTER_ALL)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            theme.set_variant(button, "tab")
+            button.clicked.connect(lambda _checked=False: self._apply_filter())
+            self._tab_buttons[value] = button
+            top.addWidget(button)
         top.addStretch(1)
         root.addLayout(top)
 
-        # 中部：表格
-        self._table = QTableWidget(0, 5, self)
-        self._table.setAlternatingRowColors(True)
-        self._table.setHorizontalHeaderLabels(
-            [
-                C.JP_LOG_COL_WORD,
-                C.JP_LOG_COL_KANA,
-                C.JP_LOG_COL_TRANSLATION,
-                C.JP_LOG_COL_SHOWN_AT,
-                C.JP_LOG_COL_STATUS,
-            ]
-        )
-        self._table.verticalHeader().setVisible(False)
-        self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self._table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        self._table.cellDoubleClicked.connect(self._on_cell_double_clicked)
-        header = self._table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        root.addWidget(self._table, 1)
+        # 中部：卡片滚动区 / 空态
+        self._stack = QStackedWidget(self)
+        self._scroll = QScrollArea(self)
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._cards_host = QWidget(self._scroll)
+        self._cards_layout = QVBoxLayout(self._cards_host)
+        self._cards_layout.setContentsMargins(C.SPACING["xs"], 0, C.SPACING["xs"], 0)
+        self._cards_layout.setSpacing(C.SPACING["sm"])
+        self._cards_layout.addStretch(1)
+        self._scroll.setWidget(self._cards_host)
+        self._stack.addWidget(self._scroll)
+
+        self._empty_label = QLabel(C.JP_LOG_EMPTY_TEXT, self)
+        self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_label.setWordWrap(True)
+        self._stack.addWidget(self._empty_label)
+        root.addWidget(self._stack, 1)
 
         # 底部：统计栏
         bottom = QHBoxLayout()
@@ -183,12 +265,6 @@ class LogWindow(QWidget):
     # ------------------------------------------------------------------ #
     # 内部
     # ------------------------------------------------------------------ #
-    def _on_cell_double_clicked(self, row: int, _column: int) -> None:
-        """双击表格行 → 发出该行词条 id（供 controller 打开详情窗口）。"""
-
-        if 0 <= row < len(self._shown_entries):
-            self.word_double_clicked.emit(self._shown_entries[row].id)
-
     def _ensure_date(self, day: str) -> None:
         """确保日期下拉中存在 ``day``（不在 ``set_dates`` 列表里时补入）。"""
 
@@ -199,7 +275,7 @@ class LogWindow(QWidget):
         self._combo_date.blockSignals(False)
 
     def _apply_filter(self) -> None:
-        """按当前日期 + 状态刷新表格与统计栏（纯展示过滤）。"""
+        """按当前日期 + 状态刷新卡片列表与统计栏（纯展示过滤）。"""
 
         day = self.current_day()
         day_entries = self._entries_by_day.get(day, [])
@@ -211,17 +287,23 @@ class LogWindow(QWidget):
             shown = [entry for entry in day_entries if entry.status == status]
         self._shown_entries = shown
 
-        self._table.setRowCount(len(shown))
-        for row, entry in enumerate(shown):
-            label = _STATUS_LABELS.get(entry.status, entry.status)
-            cells = (entry.word, entry.kana, entry.translation, entry.shown_at, label)
-            for col, text in enumerate(cells):
-                cell = QTableWidgetItem(str(text))
-                if col == 4:
-                    color_key = _STATUS_COLOR_KEYS.get(entry.status)
-                    if color_key:
-                        cell.setForeground(QColor(C.SEMANTIC_COLORS[color_key]))
-                self._table.setItem(row, col, cell)
+        # 重建卡片列表（每日上限最高 30 + 手动展示，量级小，整表重建足够快）
+        self._card_by_id.clear()
+        while self._cards_layout.count() > 1:  # 末尾 stretch 保留
+            item = self._cards_layout.takeAt(0)
+            widget = item.widget() if item is not None else None
+            if widget is not None:
+                widget.deleteLater()
+        for entry in shown:
+            card = _LogCard(entry, self._cards_host)
+            card.double_clicked.connect(self.word_double_clicked)
+            self._cards_layout.insertWidget(self._cards_layout.count() - 1, card)
+            self._card_by_id[str(entry.id)] = card
+
+        if shown:
+            self._stack.setCurrentWidget(self._scroll)
+        else:
+            self._stack.setCurrentWidget(self._empty_label)
 
         # 统计栏以「当日全量」计（不受状态筛选影响）
         mastered = sum(

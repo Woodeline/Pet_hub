@@ -13,7 +13,12 @@ import pytest
 
 from desktop_pet.core import constants as C
 from desktop_pet.core import paths
-from desktop_pet.core.vocabulary import VocabEntry, WordBank
+from desktop_pet.core.vocabulary import (
+    VocabEntry,
+    WordBank,
+    WordBankParseError,
+    parse_bank_file,
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -167,3 +172,83 @@ def test_word_bank_path_frozen_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
     assert paths.is_frozen()
     assert paths.word_bank_path() == tmp_path / "desktop_pet" / C.WORD_BANK_DIR_NAME / C.WORD_BANK_FILE_NAME
+
+
+# --------------------------------------------------------------------------- #
+# 5. WordBank.merge（外置词库合并）与 parse_bank_file（导入解析）
+# --------------------------------------------------------------------------- #
+def test_merge_adds_new_entries() -> None:
+    bank = _bank([_entry(1)])
+    added, updated = bank.merge([_entry(2), _entry(3)])
+    assert (added, updated) == (2, 0)
+    assert bank.size() == 3
+
+
+def test_merge_overrides_same_id() -> None:
+    bank = _bank([_entry(1)])
+    replacement = VocabEntry(
+        id="n5-0001", level="N5", word="替換", kana="かな",
+        translation="新译", meaning="新义",
+    )
+    added, updated = bank.merge([replacement])
+    assert (added, updated) == (0, 1)
+    assert bank.size() == 1
+    assert bank.entry_by_id("n5-0001").translation == "新译"
+
+
+def test_merge_invalidates_level_index() -> None:
+    bank = _bank([_entry(1)])
+    assert len(bank.entries_for("N5")) == 1  # 触发索引缓存
+    bank.merge([_entry(2, level="N2")])
+    assert len(bank.entries_for("N2")) == 1
+    assert len(bank.entries_for("N5")) == 1
+
+
+def test_merge_empty_iterable_is_noop() -> None:
+    bank = _bank([_entry(1)])
+    assert bank.merge([]) == (0, 0)
+    assert bank.size() == 1
+
+
+def test_parse_bank_file_ok(tmp_path: Path) -> None:
+    p = tmp_path / "extra.json"
+    _write(p, {"version": 1, "words": [_raw(1), {**_raw(2), "level": "N4"}, {"id": "bad"}]})
+    entries, skipped = parse_bank_file(p)
+    assert [e.id for e in entries] == ["n5-0001", "n5-0002"]
+    assert skipped == 1
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "{ not json ]",
+        "[1, 2, 3]",
+        '{"version": 1, "words": "oops"}',
+        '{"version": 1, "words": []}',
+        '{"version": 1, "words": [{"id": "x"}]}',
+    ],
+)
+def test_parse_bank_file_structural_rejects(tmp_path: Path, payload: str) -> None:
+    p = tmp_path / "x.json"
+    p.write_text(payload, encoding="utf-8")
+    with pytest.raises(WordBankParseError):
+        parse_bank_file(p)
+
+
+def test_parse_bank_file_missing_file_raises(tmp_path: Path) -> None:
+    with pytest.raises(WordBankParseError):
+        parse_bank_file(tmp_path / "nope.json")
+
+
+def test_extra_word_bank_path_uses_appdata(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APPDATA", r"D:\MockAppData")
+    path = paths.extra_word_bank_path()
+    assert path == Path(r"D:\MockAppData") / C.CONFIG_DIR_NAME / C.EXTRA_WORD_BANK_FILE_NAME
+
+
+def test_extra_word_bank_path_falls_back_to_home(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("APPDATA", raising=False)
+    path = paths.extra_word_bank_path()
+    assert path == Path.home() / C.CONFIG_DIR_NAME / C.EXTRA_WORD_BANK_FILE_NAME

@@ -162,9 +162,9 @@ def test_qss_radius_hits_radius_md() -> None:
 
 
 def test_qss_focus_ring_uses_focus_px_and_primary() -> None:
-    """焦点环为 ``2px solid #7A5A42``（期望值用**字面量**，避免自引用假绿）。"""
+    """焦点环为 ``2px solid #1F2328``（期望值用**字面量**，避免自引用假绿）。"""
 
-    assert "border: 2px solid #7A5A42" in theme.build_qss(), "焦点环未按契约（2px + primary）拼装"
+    assert "border: 2px solid #1F2328" in theme.build_qss(), "焦点环未按契约（2px + primary）拼装"
 
 
 # --------------------------------------------------------------------------- #
@@ -205,7 +205,7 @@ def test_apply_theme_sets_stylesheet(qtbot) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# 6. 三个业务窗口确已接入 theme + 表格斑马纹开启
+# 6. 三个业务窗口确已接入 theme + 卡片列表使用统一卡片样式
 # --------------------------------------------------------------------------- #
 def test_business_windows_apply_theme(qtbot) -> None:
     """``VocabWindow`` / ``LogWindow`` / ``WordDetailWindow`` 的 stylesheet 均等于生成器输出。
@@ -224,16 +224,38 @@ def test_business_windows_apply_theme(qtbot) -> None:
         assert window.styleSheet() == expected, f"{window_cls.__name__} 未接入 theme"
 
 
-def test_vocab_and_log_tables_have_zebra(qtbot) -> None:
-    """生词本 / 学习记录两张表都开启了斑马纹（alternatingRowColors）。"""
+def test_build_qss_contains_card_and_tab_styles() -> None:
+    """卡片化改版：QSS 必须包含卡片 / 文字 Tab / 状态角色的样式块。"""
 
-    from desktop_pet.ui.log_window import LogWindow
+    qss = theme.build_qss()
+    assert 'QFrame[role="card"]' in qss
+    assert 'QFrame[role="card"][selected="true"]' in qss
+    assert 'QPushButton[variant="tab"]' in qss
+    assert 'QPushButton[variant="tab"]:checked' in qss
+
+
+# --------------------------------------------------------------------------- #
+# 7. 主题点缀色（accent）：仅 Tab 选中 / 卡片选中描边响应
+# --------------------------------------------------------------------------- #
+def test_build_qss_accent_colors_tab_and_card_selection() -> None:
+    """accent 非空时 Tab 选中与卡片选中描边使用点缀色，其余规则不变。"""
+
+    neutral = theme.build_qss()
+    accent_qss = theme.build_qss("#B85C1E")
+
+    assert "color: #B85C1E" in accent_qss
+    assert "border: 1px solid #B85C1E" in accent_qss
+    # 中性版不含该点缀色
+    assert "#B85C1E" not in neutral
+
+
+def test_apply_theme_with_accent_updates_window_stylesheet(qtbot) -> None:
+    """窗口 set_accent 后 stylesheet 等于带点缀色的生成器输出。"""
+
     from desktop_pet.ui.vocab_window import VocabWindow
 
-    vocab = VocabWindow()
-    qtbot.addWidget(vocab)
-    assert vocab._table.alternatingRowColors() is True
-
-    log = LogWindow()
-    qtbot.addWidget(log)
-    assert log._table.alternatingRowColors() is True
+    window = VocabWindow()
+    qtbot.addWidget(window)
+    assert window.styleSheet() == theme.build_qss()  # 初始中性
+    window.set_accent("#4A9DC6")
+    assert window.styleSheet() == theme.build_qss("#4A9DC6")
