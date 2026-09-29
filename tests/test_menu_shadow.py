@@ -92,11 +92,20 @@ def test_shadow_menu_popup_aligns_panel_repeatedly(qtbot) -> None:
 # 3. 阴影位图与缓存
 # --------------------------------------------------------------------------- #
 def test_blurred_shadow_pixmap_has_content_and_alpha() -> None:
-    """阴影位图非空、含 alpha 通道（分层窗口合成前提）。"""
+    """阴影位图非空、含 alpha 通道，且四周带模糊外溢余量（margin）。
 
-    pm = _blurred_shadow_pixmap(QSize(120, 90), C.RADIUS["md"], C.MENU_SHADOW_BLUR_PX, C.MENU_SHADOW_ALPHA)
+    margin 是圆角阴影的关键：位图若与面板同尺寸，高斯模糊在边界被硬裁，
+    四角渐隐被切成直角（2026-09-29 修复）。
+    """
+
+    panel = QSize(120, 90)
+    pm, margin = _blurred_shadow_pixmap(
+        panel, C.RADIUS["md"], C.MENU_SHADOW_BLUR_PX, C.MENU_SHADOW_ALPHA
+    )
     assert not pm.isNull()
     assert pm.hasAlphaChannel()
+    expected = panel.width() + 2 * margin, panel.height() + 2 * margin
+    assert (pm.width(), pm.height()) == expected, "位图应比面板四周各大 margin"
     # 中心必然有阴影像素（alpha > 0），全图不可能是纯透明
     image = pm.toImage()
     center_pixel = image.pixelColor(image.width() // 2, image.height() // 2)
@@ -115,7 +124,14 @@ def test_shadow_cache_rebuilt_only_on_resize(qtbot) -> None:
     menu.grab()
     first = menu._shadow
     assert first is not None, "首绘未生成阴影缓存"
-    assert menu._shadow_size == first.size()
+    # 缓存键 = 面板尺寸；位图本身比面板四周各大 margin（模糊外溢余量）
+    panel_w = 160 - 2 * C.MENU_SHADOW_BAND_PX
+    panel_h = 100 - 2 * C.MENU_SHADOW_BAND_PX
+    assert menu._shadow_size == QSize(panel_w, panel_h)
+    assert (first.width(), first.height()) == (
+        panel_w + 2 * menu._shadow_margin,
+        panel_h + 2 * menu._shadow_margin,
+    )
 
     menu.grab()
     assert menu._shadow is first, "同尺寸重绘不应重建缓存"

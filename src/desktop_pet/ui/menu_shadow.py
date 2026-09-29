@@ -36,43 +36,54 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 def _blurred_shadow_pixmap(size: QSize, radius: int, blur_px: int, alpha: int) -> QPixmap:
-    """生成 ``size`` 大小的柔和阴影位图：黑色圆角矩形 → 高斯模糊。
+    """生成柔和阴影位图：黑色圆角矩形 → 高斯模糊。
+
+    位图比 ``size`` 四周各大一圈 ``margin``：圆角矩形画在 margin 内缩区域，
+    模糊向外溢出的部分仍落在位图内 —— 否则模糊在位图边界被硬裁，四角
+    看起来是直角（面板圆角、阴影切角的「边角打架」观感）。
 
     Args:
-        size: 阴影位图尺寸（= 面板尺寸）。
+        size: 面板尺寸（阴影形状与之贴合）。
         radius: 面板圆角半径（阴影形状与之贴合）。
         blur_px: 高斯模糊半径（``MENU_SHADOW_BLUR_PX``）。
         alpha: 阴影不透明度 0-255（``MENU_SHADOW_ALPHA``）。
+
+    Returns:
+        ``(阴影位图, margin)`` —— 绘制时把位图原点对齐 ``面板左上 - margin``。
     """
 
-    src = QImage(size, QImage.Format.Format_ARGB32_Premultiplied)
+    margin = blur_px // 2 + 2
+    padded = QSize(size.width() + 2 * margin, size.height() + 2 * margin)
+    src = QImage(padded, QImage.Format.Format_ARGB32_Premultiplied)
     src.fill(Qt.GlobalColor.transparent)
     painter = QPainter(src)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(QColor(0, 0, 0, alpha))
-    painter.drawRoundedRect(QRectF(0, 0, size.width(), size.height()), radius, radius)
+    painter.drawRoundedRect(
+        QRectF(margin, margin, size.width(), size.height()), radius, radius
+    )
     painter.end()
 
     # 高斯模糊没有裸 QPainter API，借 QGraphicsScene 把模糊结果渲染回位图。
     scene = QGraphicsScene()
-    scene.setSceneRect(QRectF(0, 0, size.width(), size.height()))
+    scene.setSceneRect(QRectF(0, 0, padded.width(), padded.height()))
     item = QGraphicsPixmapItem(QPixmap.fromImage(src))
     effect = QGraphicsBlurEffect()
     effect.setBlurRadius(blur_px)
     item.setGraphicsEffect(effect)
     scene.addItem(item)
 
-    out = QImage(size, QImage.Format.Format_ARGB32_Premultiplied)
+    out = QImage(padded, QImage.Format.Format_ARGB32_Premultiplied)
     out.fill(Qt.GlobalColor.transparent)
     painter2 = QPainter(out)
     scene.render(
         painter2,
-        QRectF(0, 0, size.width(), size.height()),
-        QRectF(0, 0, size.width(), size.height()),
+        QRectF(0, 0, padded.width(), padded.height()),
+        QRectF(0, 0, padded.width(), padded.height()),
     )
     painter2.end()
-    return QPixmap.fromImage(out)
+    return QPixmap.fromImage(out), margin
 
 
 class ShadowMenu(QMenu):
@@ -93,6 +104,7 @@ class ShadowMenu(QMenu):
         self.setStyleSheet(build_menu_qss())
         self._shadow: QPixmap | None = None
         self._shadow_size = QSize()
+        self._shadow_margin = 0
 
     # ------------------------------------------------------------------ #
     # 内部实现
@@ -126,14 +138,20 @@ class ShadowMenu(QMenu):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         if self._shadow is None or self._shadow_size != panel.size():
-            self._shadow = _blurred_shadow_pixmap(
+            self._shadow, self._shadow_margin = _blurred_shadow_pixmap(
                 panel.size(),
                 C.RADIUS["md"],
                 C.MENU_SHADOW_BLUR_PX,
                 C.MENU_SHADOW_ALPHA,
             )
             self._shadow_size = panel.size()
-        painter.drawPixmap(panel.topLeft() + QPoint(0, C.MENU_SHADOW_OFFSET_Y), self._shadow)
+        # 阴影位图比面板四周各大一圈 margin（模糊外溢余量），绘制时回退对齐
+        painter.drawPixmap(
+            panel.topLeft()
+            - QPoint(self._shadow_margin, self._shadow_margin)
+            + QPoint(0, C.MENU_SHADOW_OFFSET_Y),
+            self._shadow,
+        )
 
         painter.setPen(QColor(C.SEMANTIC_COLORS["border"]))
         painter.setBrush(QColor(C.SEMANTIC_COLORS["surface"]))
