@@ -184,8 +184,9 @@ BODY_GRADIENT_STOPS: Final[tuple[tuple[float, str], ...]] = (
     (1.00, "#ACD6EC"),  # 天空蓝（右下 / 身体前沿）
 )
 
-# 主体粗黑描边宽度（scale=1.0 的逻辑像素；参考图为厚重卡通描边）。
-OUTLINE_W: Final[float] = 3.2
+# 主体粗黑描边宽度（scale=1.0 的逻辑像素；厚重卡通风，2026-09-29 由 3.2 调至
+# 2.6——保持贴纸感的同时更轻盈，用户对四档对比图定版）。
+OUTLINE_W: Final[float] = 2.6
 
 # 道具（键盘 / 鼠标）描边色（阶段 B1-3 / G1）——比主体 ink（#141414）略浅，
 # 使「道具」与「猫主体」形成一层**描边层级差**（前景猫更重、道具略退）。
@@ -196,6 +197,7 @@ PROP_OUTLINE: Final[str] = "#4A4A4A"
 # ui 层禁裸 hex（AST 扫描红线），故沙滩 / 遮阳棚 / 太阳 / 枫叶叶脉等新布景色集中于此。
 DECOR_BEACH_AWNING: Final[str] = "#E4574F"  # 遮阳棚棚顶红（与灯笼主红同族）
 DECOR_BEACH_POLE: Final[str] = "#8A6B4F"    # 遮阳棚立柱（暖棕）
+DECOR_WAVE_BLUE: Final[str] = "#9CC8E8"     # 夏·沙滩上缘海浪波纹线（浅海蓝）
 DECOR_SUN_GOLD: Final[str] = "#FFD166"      # 太阳 / 灯笼灯盖金（与烟花同色族）
 DECOR_MAPLE_VEIN: Final[str] = "#F6C453"    # 秋·枫叶黄色叶脉 / 金色叶片（红黄相间）
 DECOR_MAPLE_ORANGE: Final[str] = "#E8973A"  # 秋·枫叶橙色叶片（红/橙/金三色逐叶散列）
@@ -306,6 +308,13 @@ THEME_ALLOWED: Final[frozenset[str]] = frozenset(THEMES) | {AUTO_THEME}
 #: 托盘「主题」子菜单标题。
 TRAY_MENU_THEME: Final[str] = "主题"
 
+# —— 右键菜单 Win11 风格（ShadowMenu：窗口预留留白，自绘柔和阴影 + 圆角面板，
+#    替代 Windows 上过时的原生方块粗阴影）——
+MENU_SHADOW_BAND_PX: Final[int] = 14   # 窗口边缘 → 面板之间的阴影留白（容纳模糊尾部）
+MENU_SHADOW_BLUR_PX: Final[int] = 16   # 阴影高斯模糊半径：小而收拢
+MENU_SHADOW_ALPHA: Final[int] = 50     # 阴影不透明度（0-255，一圈淡晕）
+MENU_SHADOW_OFFSET_Y: Final[int] = 0   # 垂直下沉（0 = 四周均匀淡晕，Win11 系统菜单观感）
+
 #: 主题重估间隔（毫秒）：每日一次（配合 app 层跨日检测，跨月零点自动换肤）。
 THEME_RECHECK_MS: Final[int] = 24 * 60 * 60 * 1000
 
@@ -356,36 +365,37 @@ THEME_DECOR_ACCESSORIES: Final[frozenset[str]] = frozenset(
 )
 
 #: 皮肤 → 造型装饰表（键集合与 :data:`THEMES` 一致；``default`` 全空）。
+#: 2026-09-29 张力强化：粒子数量/尺寸加大、布景色加深 —— 主题氛围更浓郁。
 THEME_DECOR: Final[dict[str, ThemeDecor]] = {
     # 品牌基准形态：不画任何装饰
     "default": ThemeDecor(),
     # 春：垂柳布景（柳叶放大 + 风吹摆动）+ 飘落花瓣 + 头顶小花
     "spring": ThemeDecor(
-        particle="petal", particle_color="#FFC9DA", particle_count=6,
-        backdrop="willow", backdrop_color="#8FCB79",
+        particle="petal", particle_color="#FFB1C9", particle_count=10,
+        backdrop="willow", backdrop_color="#82C46C",
         accessory="flower", accessory_color="#FF9EC4", accessory_accent="#FFF3B0",
     ),
     # 夏：远景沙滩（沙滩 / 遮阳棚 / 太阳光效）
     "summer": ThemeDecor(
         particle="none", particle_color="#FFFFFF", particle_count=0,
-        backdrop="beach", backdrop_color="#F3C98B",
+        backdrop="beach", backdrop_color="#F0BC6E",
         accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
     ),
     # 秋：飘落红黄相间的醒目大枫叶
     "autumn": ThemeDecor(
-        particle="leaf", particle_color="#E8593A", particle_count=9,
+        particle="leaf", particle_color="#E8593A", particle_count=12,
         backdrop="none", backdrop_color="#FFFFFF",
         accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
     ),
     # 冬：远景雪山（双峰 + 远脊 + 山脚雪原）+ 飘落雪花（移除围巾）
     "winter": ThemeDecor(
-        particle="snow", particle_color="#F2F8FF", particle_count=10,
-        backdrop="snow_mountain", backdrop_color="#B9CFE8",
+        particle="snow", particle_color="#E4EEFB", particle_count=14,
+        backdrop="snow_mountain", backdrop_color="#A8C2E0",
         accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
     ),
     # 春节：远景挂灯笼 + 烟花绽放
     "spring_festival": ThemeDecor(
-        particle="firework", particle_color="#FFD166", particle_count=5,
+        particle="firework", particle_color="#FFD166", particle_count=6,
         backdrop="lantern_sky", backdrop_color="#E4574F",
         accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
     ),
@@ -533,6 +543,8 @@ POSTURE_DURATION_S: Final[float] = 6.0
 #: 属「换姿态」的 ``SurpriseKind`` 成员名：用 ``POSTURE_DURATION_S``，其余小动作沿用
 #: ``SURPRISE_DURATION_S``。以 ``.name`` 为键（constants 不能 import pet_model，同 ``SURPRISE_POSES`` 先例）。
 SURPRISE_POSTURE_KINDS: Final[frozenset[str]] = frozenset({"LOAF", "LIE_SIDE"})
+
+     # 两次敲键间隔超过该值 → 视为中断，重置累计
 
 # 气泡时序（PRD §4.3）
 BUBBLE_FADE_IN_S: Final[float] = 0.2
@@ -1089,6 +1101,7 @@ __all__ = [
     # 布景绘制色（阶段 F）
     "DECOR_BEACH_AWNING",
     "DECOR_BEACH_POLE",
+    "DECOR_WAVE_BLUE",
     "DECOR_SUN_GOLD",
     "DECOR_MAPLE_VEIN",
     "DECOR_MAPLE_ORANGE",
@@ -1103,6 +1116,10 @@ __all__ = [
     "THEME_SEASON_MAP",
     "THEME_ALLOWED",
     "TRAY_MENU_THEME",
+    "MENU_SHADOW_BAND_PX",
+    "MENU_SHADOW_BLUR_PX",
+    "MENU_SHADOW_ALPHA",
+    "MENU_SHADOW_OFFSET_Y",
     "THEME_RECHECK_MS",
     # 皮肤包（MOD）选择
     "SKIN_NAME_AUTO",

@@ -102,8 +102,8 @@ def test_theme_decor_winter_literal_values() -> None:
     """冬 = 远景雪山 + 雪花（移除围巾）（字面量全等，防静默漂移）。"""
 
     expected = C.ThemeDecor(
-        particle="snow", particle_color="#F2F8FF", particle_count=10,
-        backdrop="snow_mountain", backdrop_color="#B9CFE8",
+        particle="snow", particle_color="#E4EEFB", particle_count=14,
+        backdrop="snow_mountain", backdrop_color="#A8C2E0",
         accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
     )
     assert C.THEME_DECOR["winter"] == expected
@@ -114,7 +114,7 @@ def test_theme_decor_summer_literal_values() -> None:
 
     expected = C.ThemeDecor(
         particle="none", particle_color="#FFFFFF", particle_count=0,
-        backdrop="beach", backdrop_color="#F3C98B",
+        backdrop="beach", backdrop_color="#F0BC6E",
         accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
     )
     assert C.THEME_DECOR["summer"] == expected
@@ -124,7 +124,7 @@ def test_theme_decor_autumn_literal_values() -> None:
     """秋 = 红黄相间大枫叶（字面量全等）。"""
 
     expected = C.ThemeDecor(
-        particle="leaf", particle_color="#E8593A", particle_count=9,
+        particle="leaf", particle_color="#E8593A", particle_count=12,
         backdrop="none", backdrop_color="#FFFFFF",
         accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
     )
@@ -135,7 +135,7 @@ def test_theme_decor_spring_festival_literal_values() -> None:
     """春节 = 远景灯笼 + 烟花（字面量全等）。"""
 
     expected = C.ThemeDecor(
-        particle="firework", particle_color="#FFD166", particle_count=5,
+        particle="firework", particle_color="#FFD166", particle_count=6,
         backdrop="lantern_sky", backdrop_color="#E4574F",
         accessory="none", accessory_color="#FFFFFF", accessory_accent="#FFFFFF",
     )
@@ -146,8 +146,8 @@ def test_theme_decor_spring_literal_values() -> None:
     """春 = 垂柳布景 + 花瓣 + 小花（字面量全等）。"""
 
     expected = C.ThemeDecor(
-        particle="petal", particle_color="#FFC9DA", particle_count=6,
-        backdrop="willow", backdrop_color="#8FCB79",
+        particle="petal", particle_color="#FFB1C9", particle_count=10,
+        backdrop="willow", backdrop_color="#82C46C",
         accessory="flower", accessory_color="#FF9EC4", accessory_accent="#FFF3B0",
     )
     assert C.THEME_DECOR["spring"] == expected
@@ -252,7 +252,7 @@ def test_decor_particles_are_deterministic() -> None:
     b = renderer.decor_particle_positions(phase=12.5)
     assert a == b
     assert a != ()
-    assert len(a) == 9, "autumn 粒子数字面量为 9"
+    assert len(a) == 12, "autumn 粒子数字面量为 12（2026-09-29 强化）"
 
     c = renderer.decor_particle_positions(phase=13.5)
     assert a != c, "相位推进后粒子应当移动（否则动画失效）"
@@ -275,7 +275,8 @@ def test_decor_particles_stay_near_canvas(name: str) -> None:
             assert -10.0 <= x <= 170.0, f"{name} phase={phase} x={x}"
             # y 落域 = [-回绕缓冲, 画布高 + 回绕缓冲) = [-12, 192)
             assert -12.0 <= y < 192.0, f"{name} phase={phase} y={y}"
-            assert 0.5 <= size <= 1.6
+            # 尺寸范围与 _DECOR_SIZE_BASE/_DECOR_SIZE_SPREAD 联动（2026-09-29 强化后 [1.1, 1.9]）
+            assert 0.5 <= size <= 1.9
 
 
 # --------------------------------------------------------------------------- #

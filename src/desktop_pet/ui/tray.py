@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
 from desktop_pet.core import constants as C
 from desktop_pet.core.config import AppConfig
+from desktop_pet.ui.menu_shadow import ShadowMenu
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,7 @@ class TrayController(QObject):
         self._tray = QSystemTrayIcon(icon, self)
         self._tray.setToolTip(C.TRAY_TOOLTIP)
 
-        self._menu = QMenu()
+        self._menu = ShadowMenu()
         self._action_restore: QAction | None = None
         self._action_listen: QAction | None = None
         self._action_bubble: QAction | None = None
@@ -311,13 +312,13 @@ class TrayController(QObject):
         self._action_bubble_text.triggered.connect(self.bubble_text_requested.emit)
 
         # —— 日语学习菜单组（开关 + 难度/显示时长/每日数量子菜单 + 立即显示 + 生词本/记录）——
-        self._jp_menu = QMenu(C.JP_MENU_TITLE, self._menu)
+        self._jp_menu = ShadowMenu(C.JP_MENU_TITLE, self._menu)
         self._action_jp = QAction(C.JP_MENU_ENABLE, self._jp_menu)
         self._action_jp.setCheckable(True)
         self._action_jp.setChecked(bool(self._cfg.jp_enabled))
         self._action_jp.toggled.connect(self.jp_enabled_toggled.emit)
 
-        self._jp_level_menu = QMenu(C.JP_MENU_LEVEL, self._menu)
+        self._jp_level_menu = ShadowMenu(C.JP_MENU_LEVEL, self._menu)
         self._jp_level_group = QActionGroup(self._menu)
         self._jp_level_group.setExclusive(True)
         for level in C.JP_LEVELS:
@@ -331,7 +332,7 @@ class TrayController(QObject):
             self._jp_level_menu.addAction(action)
             self._jp_level_actions[level] = action
 
-        self._jp_duration_menu = QMenu(C.JP_MENU_DURATION, self._menu)
+        self._jp_duration_menu = ShadowMenu(C.JP_MENU_DURATION, self._menu)
         self._jp_duration_group = QActionGroup(self._menu)
         self._jp_duration_group.setExclusive(True)
         for option in C.JP_BUBBLE_DURATION_OPTIONS:
@@ -346,7 +347,7 @@ class TrayController(QObject):
             self._jp_duration_menu.addAction(action)
             self._jp_duration_actions[option] = action
 
-        self._jp_daily_limit_menu = QMenu(C.JP_MENU_DAILY_LIMIT, self._menu)
+        self._jp_daily_limit_menu = ShadowMenu(C.JP_MENU_DAILY_LIMIT, self._menu)
         self._jp_daily_limit_group = QActionGroup(self._menu)
         self._jp_daily_limit_group.setExclusive(True)
         for option in C.JP_DAILY_LIMIT_OPTIONS:
@@ -381,7 +382,7 @@ class TrayController(QObject):
             lambda _checked=False: self.jp_import_bank_requested.emit()
         )
 
-        scale_menu = QMenu("大小", self._menu)
+        scale_menu = ShadowMenu("大小", self._menu)
         self._scale_group = QActionGroup(self._menu)
         self._scale_group.setExclusive(True)
         for value in C.SCALES:
@@ -394,7 +395,7 @@ class TrayController(QObject):
             self._scale_actions[value] = action
 
         # —— 主题子菜单（「自动」+ 6 套皮肤，单选；照 scale_menu 先例）——
-        self._theme_menu = QMenu(C.TRAY_MENU_THEME, self._menu)
+        self._theme_menu = ShadowMenu(C.TRAY_MENU_THEME, self._menu)
         self._theme_group = QActionGroup(self._menu)
         self._theme_group.setExclusive(True)
         for value in (C.AUTO_THEME, *C.THEMES):
@@ -410,7 +411,7 @@ class TrayController(QObject):
             self._theme_actions[value] = action
 
         # —— 皮肤包子菜单（「矢量」+「自动」+ 各已装包）；弹出前经 aboutToShow 重建 ——
-        self._skin_menu = QMenu(C.TRAY_MENU_SKIN, self._menu)
+        self._skin_menu = ShadowMenu(C.TRAY_MENU_SKIN, self._menu)
         self._skin_menu.aboutToShow.connect(self.refresh_skin_menu)
         self.refresh_skin_menu()
 

@@ -259,3 +259,44 @@ def test_apply_theme_with_accent_updates_window_stylesheet(qtbot) -> None:
     assert window.styleSheet() == theme.build_qss()  # 初始中性
     window.set_accent("#4A9DC6")
     assert window.styleSheet() == theme.build_qss("#4A9DC6")
+
+
+# --------------------------------------------------------------------------- #
+# 8. build_menu_qss：右键菜单 Win11 风格（配合 ui.menu_shadow.ShadowMenu）
+# --------------------------------------------------------------------------- #
+def test_build_menu_qss_transparent_window_with_band_padding() -> None:
+    """窗口块必须透明、无边框，padding = 阴影留白 + 面板内边距（留出自绘阴影区）。"""
+
+    blocks = _qss_blocks(theme.build_menu_qss())
+    assert "QMenu" in blocks, "缺少 QMenu 窗口块"
+    body = blocks["QMenu"]
+    assert "transparent" in body, "窗口背景必须透明（面板由 ShadowMenu 自绘）"
+    expected_padding = C.MENU_SHADOW_BAND_PX + C.SPACING["xs"]
+    assert f"padding: {expected_padding}px" in body, "padding 应等于 MENU_SHADOW_BAND_PX + 面板内边距"
+
+
+def test_build_menu_qss_item_and_separator_styles() -> None:
+    """条目（常态/悬停/禁用）与分隔线选择器齐备。"""
+
+    blocks = _qss_blocks(theme.build_menu_qss())
+    for selector in ("QMenu::item", "QMenu::item:selected", "QMenu::item:disabled", "QMenu::separator"):
+        assert selector in blocks, f"缺少选择器：{selector}"
+    assert C.SEMANTIC_COLORS["surface_alt"] in blocks["QMenu::item:selected"]
+    assert C.SEMANTIC_COLORS["text_faint"] in blocks["QMenu::item:disabled"]
+
+
+def test_build_menu_qss_does_not_override_indicator() -> None:
+    """不声明 indicator / right-arrow：勾选标记与子菜单箭头交由原生样式绘制。"""
+
+    qss = theme.build_menu_qss()
+    assert "indicator" not in qss, "接管 indicator 会导致托盘勾选标记消失"
+    assert "right-arrow" not in qss, "接管 right-arrow 会导致子菜单箭头消失"
+
+
+def test_build_menu_qss_hex_values_all_from_semantic_colors() -> None:
+    """菜单 QSS 中所有 ``#RRGGBB`` 均来自 ``SEMANTIC_COLORS``。"""
+
+    found = {m.group(0).upper() for m in _HEX_RE.finditer(theme.build_menu_qss())}
+    allowed = _semantic_hex_set()
+    assert found, "菜单 QSS 中未发现任何色值（样式缺失？）"
+    assert found <= allowed, f"出现非法色值：{found - allowed}"

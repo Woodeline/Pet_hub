@@ -288,6 +288,48 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
     return "\n".join(blocks)
 
 
+def build_menu_qss() -> str:
+    """右键菜单（托盘菜单 + 子菜单）的 Win11 风格 QSS（token 拼装，可无头单测）。
+
+    配合 :class:`ui.menu_shadow.ShadowMenu` 使用：面板（白色圆角矩形 + 1px 描边）
+    由 ShadowMenu 自绘，本 QSS 只负责把**窗口**设为透明并留出阴影留白
+    （``padding = MENU_SHADOW_BAND_PX + 面板内边距``），再定义条目/分隔线样式。
+
+    刻意**不**声明 ``QMenu::indicator`` / ``::right-arrow``：勾选标记与子菜单箭头
+    交由底层原生样式绘制，避免样式表接管后勾选消失（托盘的开关/单选项依赖它）。
+    """
+
+    c = C.SEMANTIC_COLORS
+    sp = C.SPACING
+    r = C.RADIUS
+    inset = C.MENU_SHADOW_BAND_PX + sp["xs"]
+
+    return f"""
+QMenu {{
+    background: transparent;
+    border: none;
+    padding: {inset}px;
+}}
+QMenu::item {{
+    padding: {sp['sm']}px {sp['xl']}px {sp['sm']}px {sp['md']}px;
+    border-radius: {r['sm']}px;
+}}
+QMenu::item:selected {{
+    background: {c['surface_alt']};
+}}
+QMenu::item:disabled {{
+    color: {c['text_faint']};
+}}
+QMenu::separator {{
+    height: 1px;
+    background: {c['border']};
+    margin-left: {sp['md']}px;
+    margin-right: {sp['md']}px;
+    margin-top: {sp['xs']}px;
+    margin-bottom: {sp['xs']}px;
+}}"""
+
+
 def apply_theme(widget: "QWidget", accent: str | None = None) -> None:
     """把全局 QSS 应用到 ``widget``（通常是一个顶层窗口）。
 
@@ -324,6 +366,7 @@ __all__ = [
     "BUTTON_VARIANTS",
     "FOCUS_RING_PX",
     "build_qss",
+    "build_menu_qss",
     "apply_theme",
     "set_variant",
     "set_role",

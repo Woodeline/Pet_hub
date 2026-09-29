@@ -334,8 +334,8 @@ def test_body_gradient_and_outline_defined() -> None:
     assert positions[0] == 0.0 and positions[-1] == 1.0, "渐变须覆盖 0→1"
     for _pos, hexv in stops:
         assert hexv.startswith("#") and len(hexv) == 7, f"非法色值：{hexv}"
-    # 粗黑描边：明显厚于细线，体现参考图的厚重卡通风
-    assert C.OUTLINE_W >= 3.0, f"主体描边过细（{C.OUTLINE_W}）"
+    # 粗黑描边：明显厚于细线，保持贴纸感（2026-09-29 定版 2.6，此前为 3.2）
+    assert C.OUTLINE_W >= 2.4, f"主体描边过细（{C.OUTLINE_W}）"
 
 
 def test_no_pure_black_outline_in_palette() -> None:

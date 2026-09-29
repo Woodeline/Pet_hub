@@ -54,11 +54,17 @@ _GEO_BODY_CY: Final[float] = 77.0
 _GEO_BODY_RX: Final[float] = 48.0
 _GEO_BODY_RY: Final[float] = 45.0
 
-# 耳朵（相对体心的三角耳）
+# 耳朵（相对体心的曲线耳）
 _GEO_EAR_X: Final[float] = 27.0          # 耳根距体心横向偏移
-_GEO_EAR_BASE_INSET: Final[float] = 9.0  # 耳根相对身体顶部的下沉（融入轮廓）
-_GEO_EAR_LEN: Final[float] = 25.0        # 耳高
-_GEO_EAR_HALF_W: Final[float] = 12.5     # 耳根半宽
+_GEO_EAR_BASE_INSET: Final[float] = 18.0  # 耳根相对身体顶部的下沉（深埋入圆球轮廓，底边不外露）
+_GEO_EAR_LEN: Final[float] = 33.0        # 耳高（补偿埋深，外露耳高与参考图相当）
+_GEO_EAR_HALF_W: Final[float] = 10.0     # 耳根半宽（收窄使耳根两端都落进椭圆内）
+_EAR_BOW_OUT: Final[float] = 1.2         # 耳外缘外鼓量（接近直线：与椭圆弧交角即自然三角角）
+_EAR_BOW_IN: Final[float] = 3.0          # 耳内缘内凹量（猫耳内缘的经典弧）
+_EAR_INNER_SCALE: Final[float] = 0.42    # 内耳半宽相对耳廓半宽的比例（留出耳廓描边呼吸感）
+_EAR_INNER_LEN_FRAC: Final[float] = 0.52  # 内耳耳尖高度相对耳廓耳高的比例
+_EAR_INNER_RISE: Final[float] = 4.5      # 内耳底边相对耳根线的抬高
+_EAR_INNER_ALPHA: Final[int] = 200       # 内耳粉色不透明度（0-255，柔和不抢主体）
 
 # 脸（相对体心）
 _GEO_EYE_DX: Final[float] = 16.0
@@ -142,7 +148,6 @@ _GEO_TAIL_SWEEP1: Final[float] = 70.0     # tail_curve=1 时的全程转向量�
 _GEO_TAIL_W0: Final[float] = 17.5         # 根部宽度（饱满）
 _GEO_TAIL_W1: Final[float] = 6.2          # 尾尖宽度（仍有厚度，收在圆帽里）
 _GEO_TAIL_TAPER_P: Final[float] = 2.2     # 宽度剖面指数（越大 → 越晚收细）
-_GEO_TAIL_GRAD_BIAS: Final[float] = 0.17  # 尾尖相对根部在渐变场上的暖向偏移
 _GEO_TAIL_SPINE_N: Final[int] = 20        # 脊线采样段数（决定外缘平滑度）
 _GEO_TAIL_CAP_SEGMENTS: Final[int] = 8    # 尾尖圆帽分段数
 
@@ -319,8 +324,10 @@ class PetRenderer:
     _DECOR_BASE_SPEED: Final[float] = 8.0
     #: 粒子横向摆动基础幅度（px；实际幅度 = 基础 + 确定性散列 * 3.0）。
     _DECOR_SWAY_BASE: Final[float] = 3.0
-    #: 粒子尺寸基准（逻辑画布单位；实际尺寸 = 基准 + 确定性散列 * 0.6 → [0.9, 1.5]）。
-    _DECOR_SIZE_BASE: Final[float] = 0.9
+    #: 粒子尺寸基准（逻辑画布单位；实际尺寸 = 基准 + 确定性散列 * 0.8 → [1.1, 1.9]）。
+    #: 2026-09-29 张力强化：0.9/0.6 → 1.1/0.8（花瓣 / 雪花 / 枫叶整体大一号）。
+    _DECOR_SIZE_BASE: Final[float] = 1.1
+    _DECOR_SIZE_SPREAD: Final[float] = 0.8
     #: 粒子纵向回绕缓冲：y 落域 = [-缓冲, 画布高 + 缓冲)，出画后从另一侧回绕。
     _DECOR_WRAP_PAD: Final[float] = 12.0
 
@@ -388,7 +395,7 @@ class PetRenderer:
             speed = self._DECOR_BASE_SPEED + self._decor_rand(i, 3) * 6.0
             sway = self._DECOR_SWAY_BASE + self._decor_rand(i, 4) * 3.0
             wfreq = 0.5 + self._decor_rand(i, 5) * 0.8
-            size = self._DECOR_SIZE_BASE + self._decor_rand(i, 6) * 0.6
+            size = self._DECOR_SIZE_BASE + self._decor_rand(i, 6) * self._DECOR_SIZE_SPREAD
             # 下落 = y 随时间**增大**（屏幕坐标向下为正）：自顶端飘入、底端回绕。
             # 阶段 F 曾把符号写反导致所有粒子「向上飘」，阶段 G 修正。
             drift = -speed * t if rising else speed * t
@@ -494,24 +501,28 @@ class PetRenderer:
             self._draw_snow_mountain(painter, d)
 
     def _draw_willow(self, painter: QPainter, d: C.ThemeDecor) -> None:
-        """春·垂柳：柳叶放大 + 风吹摆动（阶段 F）。"""
+        """春·垂柳：柳枝加长加密 + 柳叶放大 + 风吹摆动（2026-09-29 张力强化）。
+
+        四条自顶端垂下的长弧枝（垂到猫身后、越过画布中线），柳叶更密更大，
+        枝与叶的不透明度同步提高 —— 远景也能一眼读出「春天」。
+        """
 
         painter.save()
         try:
             color = QColor(d.backdrop_color)
             branch_color = QColor(color)
-            branch_color.setAlphaF(0.78)
+            branch_color.setAlphaF(0.9)
             branch_pen = QPen(branch_color)
-            branch_pen.setWidthF(2.2)
+            branch_pen.setWidthF(2.8)
             branch_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             painter.setPen(branch_pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             leaf_color = QColor(color)
-            leaf_color.setAlphaF(0.92)
+            leaf_color.setAlphaF(0.96)
             phase = self._decor_phase
-            # 三条自顶端垂下的弧线柳枝（横向错开，长短不一、弯向各异）
+            # 四条自顶端垂下的弧线柳枝（横向错开，长短不一、弯向各异）
             for i, (bx, drop, bend) in enumerate(
-                ((34.0, 52.0, 10.0), (80.0, 64.0, -8.0), (126.0, 48.0, 9.0))
+                ((22.0, 78.0, 12.0), (58.0, 92.0, -10.0), (104.0, 84.0, 10.0), (140.0, 70.0, -9.0))
             ):
                 path_len = drop + self._decor_rand(i, 11) * 10.0
                 mid_x = bx + bend * 1.5
@@ -542,8 +553,8 @@ class PetRenderer:
                 # 柳叶：沿枝小椭圆（按枝的局部走向旋转），错落分布，放大更醒目
                 painter.setBrush(QBrush(leaf_color))
                 painter.setPen(Qt.PenStyle.NoPen)
-                for k in range(5):
-                    t = (k + self._decor_rand(i * 4 + k, 12)) / 5.0
+                for k in range(7):
+                    t = (k + self._decor_rand(i * 4 + k, 12)) / 7.0
                     u = 1.0 - t
                     ly = u * u * 0.0 + 2.0 * u * t * mid_y + t * t * path_len
                     lx = u * u * bx + 2.0 * u * t * mid_x + t * t * end_x
@@ -562,7 +573,7 @@ class PetRenderer:
                         math.degrees(tangent) + 90.0
                         + (18.0 if k % 2 == 0 else -18.0) + leaf_twist
                     )
-                    painter.drawEllipse(QPointF(0.0, 3.6), 1.9, 4.2)
+                    painter.drawEllipse(QPointF(0.0, 4.6), 2.4, 5.4)
                     painter.restore()
                 painter.setPen(branch_pen)
                 painter.setBrush(Qt.BrushStyle.NoBrush)
@@ -570,63 +581,89 @@ class PetRenderer:
             painter.restore()
 
     def _draw_beach(self, painter: QPainter, d: C.ThemeDecor) -> None:
-        """夏·沙滩远景：沙滩条带 + 遮阳棚 + 太阳光效（阶段 F）。
+        """夏·沙滩远景：沙滩 + 海浪线 + 遮阳棚 + 太阳光效（2026-09-29 张力强化）。
 
-        布景画在**最底层**（宠物背后），整体清淡，避免喧宾夺主：
-        - 底部一道暖沙色条带（沙滩）；
-        - 中景一顶红白条纹遮阳棚（三角形棚顶 + 立柱）；
-        - 右上角一枚带光晕的太阳。
+        布景画在**最底层**（宠物背后）。遮阳棚原先放在左中景，被猫身挡住大半
+        形同虚设 —— 移到**右下角**（猫与键盘的右前侧空档），完整可见；沙滩条带
+        加浓，上缘补两道海浪波纹线，夏日海滨的氛围立刻成立。
+
+        - 底部一道暖沙色条带（沙滩）+ 上缘双海浪线；
+        - 右下角一顶红白条纹遮阳棚（三角形棚顶 + 立柱）；
+        - 右上角一枚带光晕的太阳（加大）。
         """
 
         painter.save()
         try:
             sand = QColor(d.backdrop_color)
-            # —— 沙滩条带（底部）——
+            # —— 沙滩条带（底部，加浓）——
             sand_fill = QColor(sand)
-            sand_fill.setAlphaF(0.55)
+            sand_fill.setAlphaF(0.8)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QBrush(sand_fill))
             painter.drawRect(QRectF(0.0, 158.0, _GEO_CANVAS_W, 22.0))
 
-            # —— 遮阳棚（左中景，红白条纹三角棚顶 + 立柱）——
+            # —— 海浪线（沙滩上缘的两道静态波纹，浅蓝）——
+            wave = QColor(C.DECOR_WAVE_BLUE)
+            wave_pen = QPen(wave)
+            wave_pen.setWidthF(1.6)
+            wave_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(wave_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            for wave_i, (wave_y, wave_span) in enumerate(((157.5, 62.0), (161.0, 46.0))):
+                wave_path = QPainterPath()
+                wave_start = 8.0 + wave_i * 26.0
+                wave_path.moveTo(wave_start, wave_y)
+                wave_seg = 4
+                for wave_k in range(1, wave_seg + 1):
+                    wt = wave_k / wave_seg
+                    wx = wave_start + wave_span * wt
+                    wy = wave_y + (3.0 if wave_k % 2 == 0 else -3.0)
+                    wave_path.quadTo(
+                        wave_start + wave_span * (wt - 0.5 / wave_seg), wave_y + (6.0 if wave_k % 2 == 0 else -6.0),
+                        wx, wy,
+                    )
+                painter.drawPath(wave_path)
+
+            # —— 遮阳棚（右下角，红白条纹三角棚顶 + 立柱，避开猫与键盘）——
             awning = QColor(C.DECOR_BEACH_AWNING)
-            awning.setAlphaF(0.85)
+            awning.setAlphaF(0.95)
             white = QColor(C.COLORS["white"])
-            white.setAlphaF(0.85)
+            white.setAlphaF(0.95)
             pole = QColor(C.DECOR_BEACH_POLE)
-            pole.setAlphaF(0.7)
+            pole.setAlphaF(0.85)
             # 棚顶（扇形三角）
             painter.setBrush(QBrush(awning))
+            painter.setPen(Qt.PenStyle.NoPen)
             painter.drawPolygon(QPolygonF([
-                QPointF(14.0, 128.0),
-                QPointF(46.0, 128.0),
-                QPointF(30.0, 110.0),
+                QPointF(112.0, 132.0),
+                QPointF(150.0, 132.0),
+                QPointF(131.0, 112.0),
             ]))
             # 白色条纹
             painter.setBrush(QBrush(white))
             painter.drawPolygon(QPolygonF([
-                QPointF(22.0, 128.0),
-                QPointF(30.0, 128.0),
-                QPointF(30.0, 111.0),
+                QPointF(122.0, 132.0),
+                QPointF(131.0, 132.0),
+                QPointF(131.0, 113.5),
             ]))
             # 立柱
             painter.setBrush(QBrush(pole))
-            painter.drawRect(QRectF(28.5, 128.0, 3.0, 32.0))
+            painter.drawRect(QRectF(129.5, 132.0, 3.0, 30.0))
 
             # —— 太阳（右上角，带光晕）——
-            sun_cx, sun_cy, sun_r = 138.0, 30.0, 8.0
+            sun_cx, sun_cy, sun_r = 138.0, 30.0, 10.0
             sun = QColor(C.DECOR_SUN_GOLD)
             # 外光晕
-            halo = QRadialGradient(QPointF(sun_cx, sun_cy), sun_r * 3.2)
+            halo = QRadialGradient(QPointF(sun_cx, sun_cy), sun_r * 3.6)
             halo_core = QColor(sun)
-            halo_core.setAlphaF(0.45)
+            halo_core.setAlphaF(0.6)
             halo_edge = QColor(sun)
             halo_edge.setAlpha(0)
             halo.setColorAt(0.0, halo_core)
             halo.setColorAt(1.0, halo_edge)
             painter.setBrush(QBrush(halo))
             painter.drawEllipse(
-                QPointF(sun_cx, sun_cy), sun_r * 3.2, sun_r * 3.2
+                QPointF(sun_cx, sun_cy), sun_r * 3.6, sun_r * 3.6
             )
             # 太阳本体
             painter.setBrush(QBrush(sun))
@@ -635,10 +672,10 @@ class PetRenderer:
             painter.restore()
 
     def _draw_lantern_sky(self, painter: QPainter, d: C.ThemeDecor) -> None:
-        """春·远景挂灯笼（阶段 F）：画布顶部左右两侧各垂下一串红灯笼。
+        """春节·远景挂灯笼（2026-09-29 张力强化）：顶部左右各垂下一串大红灯笼。
 
-        灯笼挂在**远景**（顶部角落、小尺寸、半透明），与烟花粒子形成「夜空」
-        层次，不再贴身佩戴（原「头侧小灯笼」配件已移除）。
+        灯笼加大加多（左 4 盏 / 右 3 盏）、不透明度拉满、金盖金穗同步放大，
+        与烟花粒子构成浓烈的「节日夜空」层次。
         """
 
         painter.save()
@@ -646,45 +683,56 @@ class PetRenderer:
             main = QColor(d.backdrop_color)
             accent = QColor(C.DECOR_SUN_GOLD)
             ink = QColor(C.COLORS["ink"])
-            # 顶部左右各一列（x 约 20 / 140），每列 2~3 盏小灯笼
-            for col_x in (20.0, 140.0):
-                lantern_count = 3 if col_x < 100.0 else 2
+            # 顶部左右各一列（x 约 20 / 140），每列 4 / 3 盏灯笼
+            for col_x, lantern_count in ((20.0, 4), (140.0, 3)):
                 for j in range(lantern_count):
-                    ly = 14.0 + j * 22.0
+                    ly = 16.0 + j * 26.0
                     # 细绳
                     rope = QPen(ink)
                     rope.setWidthF(0.8)
                     painter.setPen(rope)
                     painter.drawLine(
-                        QPointF(col_x, ly - 10.0), QPointF(col_x, ly - 2.0)
+                        QPointF(col_x, ly - 12.0), QPointF(col_x, ly - 3.0)
                     )
-                    # 灯体（远景缩小 + 半透明）
+                    # 灯体（远景尺寸 + 近实心）
                     body = QColor(main)
-                    body.setAlphaF(0.88)
+                    body.setAlphaF(0.95)
                     painter.setPen(Qt.PenStyle.NoPen)
                     painter.setBrush(QBrush(body))
-                    painter.drawEllipse(QPointF(col_x, ly + 4.0), 4.5, 6.0)
+                    painter.drawEllipse(QPointF(col_x, ly + 5.0), 6.0, 8.0)
+                    # 灯体上的金色竖纹（灯笼骨架，两道弧）
+                    rib = QColor(accent)
+                    rib.setAlphaF(0.55)
+                    rib_pen = QPen(rib)
+                    rib_pen.setWidthF(0.9)
+                    painter.setPen(rib_pen)
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
+                    painter.drawLine(QPointF(col_x - 2.6, ly - 1.0), QPointF(col_x - 2.6, ly + 11.0))
+                    painter.drawLine(QPointF(col_x + 2.6, ly - 1.0), QPointF(col_x + 2.6, ly + 11.0))
                     # 灯盖 / 灯穗
+                    painter.setPen(Qt.PenStyle.NoPen)
                     painter.setBrush(QBrush(accent))
                     painter.drawRoundedRect(
-                        QRectF(col_x - 2.5, ly - 3.0, 5.0, 2.2), 1.0, 1.0
+                        QRectF(col_x - 3.4, ly - 4.0, 6.8, 2.8), 1.2, 1.2
                     )
                     painter.drawRoundedRect(
-                        QRectF(col_x - 2.5, ly + 9.0, 5.0, 2.2), 1.0, 1.0
+                        QRectF(col_x - 3.4, ly + 12.2, 6.8, 2.8), 1.2, 1.2
                     )
         finally:
             painter.restore()
 
     def _draw_snow_mountain(self, painter: QPainter, d: C.ThemeDecor) -> None:
-        """冬·远景雪山（阶段 G 增量）：最远山脊 + 左主峰 + 右次峰 + 山脚雪原。
+        """冬·远景雪山（2026-09-29 张力强化）：最远山脊 + 双峰 + 山脚雪原。
+
+        双峰**向两侧推开**（左峰顶 x 30→14、右峰顶 x 128→142）并加高——原先
+        峰体大半被猫挡住，如今两侧山体完整可见；雪原加浓；远脊空气透视加浓。
 
         全部为**确定性静态几何**（无随机、无相位）——远景山脉不应运动，
-        动感由其上的雪花粒子层承担。三层纵深：
-        远脊（空气透视：更浅、更淡、无积雪）→ 双峰（山体 + 右侧暗面 + 锯齿雪线积雪盖）
-        → 雪原（压平的近白雪带，与猫的接地软影衔接成「坐在雪地上」）。
+        动感由其上的雪花粒子层承担。
 
         配色红线：判定带（x 50-74 × y 100-152）内所有落点颜色的 R 通道 < 232，
-        不得污染 ``test_hand_visibility`` 的前爪近白扫描。
+        不得污染 ``test_hand_visibility`` 的前爪近白扫描（积雪/雪原均近白，
+        靠 ``DECOR_MOUNTAIN_SNOW`` 的 R=220 与预乘 alpha 保证）。
         """
 
         painter.save()
@@ -696,51 +744,51 @@ class PetRenderer:
             painter.setPen(Qt.PenStyle.NoPen)
 
             # ① 最远山脊（空气透视：更浅、更淡、无积雪细节），主峰后方探出
-            haze.setAlphaF(0.5)
+            haze.setAlphaF(0.65)
             painter.setBrush(QBrush(haze))
             painter.drawPolygon(QPolygonF([
-                QPointF(56.0, horizon), QPointF(96.0, 96.0), QPointF(136.0, horizon),
+                QPointF(48.0, horizon), QPointF(92.0, 90.0), QPointF(140.0, horizon),
             ]))
 
-            # ② 左主峰：山体 + 右侧暗面（双面体积）+ 锯齿雪线积雪盖
+            # ② 左主峰（推开到左侧）：山体 + 右侧暗面（双面体积）+ 锯齿雪线积雪盖
             body_alpha = QColor(body)
-            body_alpha.setAlphaF(0.85)
+            body_alpha.setAlphaF(0.92)
             painter.setBrush(QBrush(body_alpha))
             painter.drawPolygon(QPolygonF([
-                QPointF(-8.0, horizon), QPointF(30.0, 84.0), QPointF(68.0, horizon),
+                QPointF(-14.0, horizon), QPointF(14.0, 74.0), QPointF(56.0, horizon),
             ]))
             shade = QColor(body)
-            shade.setAlphaF(0.85)
+            shade.setAlphaF(0.92)
             painter.setBrush(QBrush(shade.darker(112)))
             painter.drawPolygon(QPolygonF([
-                QPointF(30.0, 84.0), QPointF(68.0, horizon), QPointF(34.0, horizon),
+                QPointF(14.0, 74.0), QPointF(56.0, horizon), QPointF(20.0, horizon),
             ]))
             snow_cap = QColor(snow)
             snow_cap.setAlphaF(0.95)
             painter.setBrush(QBrush(snow_cap))
             painter.drawPolygon(QPolygonF([
-                QPointF(30.0, 84.0), QPointF(46.0, 110.0), QPointF(38.0, 104.0),
-                QPointF(30.0, 112.0), QPointF(22.0, 105.0), QPointF(14.0, 108.0),
+                QPointF(14.0, 74.0), QPointF(31.0, 100.0), QPointF(22.0, 94.0),
+                QPointF(14.0, 102.0), QPointF(5.0, 94.0), QPointF(-3.0, 98.0),
             ]))
 
-            # ③ 右次峰（更矮更远，积雪盖相应缩小）
+            # ③ 右次峰（推开到右侧，更矮更远，积雪盖相应缩小）
             painter.setBrush(QBrush(body_alpha))
             painter.drawPolygon(QPolygonF([
-                QPointF(100.0, horizon), QPointF(128.0, 102.0), QPointF(156.0, horizon),
+                QPointF(112.0, horizon), QPointF(142.0, 92.0), QPointF(172.0, horizon),
             ]))
             painter.setBrush(QBrush(QColor(shade.darker(112))))
             painter.drawPolygon(QPolygonF([
-                QPointF(128.0, 102.0), QPointF(156.0, horizon), QPointF(131.0, horizon),
+                QPointF(142.0, 92.0), QPointF(172.0, horizon), QPointF(146.0, horizon),
             ]))
             painter.setBrush(QBrush(snow_cap))
             painter.drawPolygon(QPolygonF([
-                QPointF(128.0, 102.0), QPointF(138.0, 118.0), QPointF(132.0, 114.0),
-                QPointF(126.0, 119.0), QPointF(120.0, 115.0),
+                QPointF(142.0, 92.0), QPointF(153.0, 108.0), QPointF(146.0, 104.0),
+                QPointF(139.0, 110.0), QPointF(132.0, 105.0),
             ]))
 
             # ④ 山脚雪原：压平的近白雪带——与宠物接地软影衔接成「坐在雪地上」
             field = QColor(C.DECOR_MOUNTAIN_SNOW)
-            field.setAlphaF(0.55)
+            field.setAlphaF(0.75)
             painter.setBrush(QBrush(field))
             painter.drawRoundedRect(QRectF(-4.0, horizon, 168.0, 40.0), 6.0, 6.0)
         finally:
@@ -772,16 +820,16 @@ class PetRenderer:
                         halo = QColor(color)
                         halo.setAlphaF(alpha * 0.35)
                         painter.setBrush(QBrush(halo))
-                        painter.drawEllipse(QPointF(0, 0), 2.6 * size, 2.6 * size)
+                        painter.drawEllipse(QPointF(0, 0), 3.2 * size, 3.2 * size)
                         core = QColor(color)
                         core.setAlphaF(alpha)
                         painter.setBrush(QBrush(core))
-                        painter.drawEllipse(QPointF(0, 0), 1.6 * size, 1.6 * size)
+                        painter.drawEllipse(QPointF(0, 0), 2.0 * size, 2.0 * size)
                     elif d.particle == "petal":
                         painter.rotate(38.0 * math.sin(self._decor_phase * 0.9 + x))
                         color.setAlphaF(alpha)
                         painter.setBrush(QBrush(color))
-                        painter.drawEllipse(QPointF(0, 0), 2.4 * size, 1.3 * size)
+                        painter.drawEllipse(QPointF(0, 0), 3.0 * size, 1.7 * size)
                     elif d.particle == "leaf":
                         # 五裂掌形真枫叶（阶段 G 重画）：单一多边形勾出**尖裂片 +
                         # 深缺刻**轮廓（对照真实红枫叶），红/橙/金三色逐叶散列
@@ -855,7 +903,7 @@ class PetRenderer:
         """
 
         phase = self._decor_phase
-        # 每个爆点独立错开的周期（5 个爆点错开 1/5 周期 → 交替绽放）
+        # 每个爆点独立错开的周期（错开相位 → 交替绽放）
         period = 4.0 + self._decor_rand(idx, 20) * 2.0
         local_t = (phase / period + self._decor_rand(idx, 21)) % 1.0
         # 绽放包络：0→1 扩张、1→0 淡出（正弦半周期近似）
@@ -863,16 +911,16 @@ class PetRenderer:
         if bloom < 0.05:
             return
         # 射线长度随绽放扩张，透明度随绽放衰减
-        ray_len = (3.0 + 5.5 * bloom) * size
+        ray_len = (4.0 + 8.0 * bloom) * size
         spark_alpha = alpha * bloom
         spark = QColor(color)
         spark.setAlphaF(max(0.0, min(1.0, spark_alpha)))
         # 中心亮点
         painter.setBrush(QBrush(spark))
-        painter.drawEllipse(QPointF(0.0, 0.0), 1.6 * size * bloom, 1.6 * size * bloom)
+        painter.drawEllipse(QPointF(0.0, 0.0), 2.2 * size * bloom, 2.2 * size * bloom)
         # 8 条放射射线（固定角度，长度随绽放外伸）
         pen = QPen(spark)
-        pen.setWidthF(1.0)
+        pen.setWidthF(1.4)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
@@ -882,13 +930,13 @@ class PetRenderer:
             tip_y = math.sin(ang) * ray_len
             # 射线尾端渐隐：从中心向外的线，起点在亮点边缘
             painter.drawLine(
-                QPointF(math.cos(ang) * 1.2 * size, math.sin(ang) * 1.2 * size),
+                QPointF(math.cos(ang) * 1.4 * size, math.sin(ang) * 1.4 * size),
                 QPointF(tip_x, tip_y),
             )
         # 外圈渐隐尾迹（低透明的小圆环残影）
         painter.setPen(Qt.PenStyle.NoPen)
         tail = QColor(color)
-        tail.setAlphaF(max(0.0, min(1.0, alpha * 0.3 * bloom)))
+        tail.setAlphaF(max(0.0, min(1.0, alpha * 0.45 * bloom)))
         painter.setBrush(QBrush(tail))
         painter.drawEllipse(QPointF(0.0, 0.0), ray_len * 0.5, ray_len * 0.5)
 
@@ -1361,19 +1409,21 @@ class PetRenderer:
     def _draw_tail(self, painter: QPainter, pose: PetPose) -> None:
         """尾巴：从团子左中部伸出、向左上扫出的**饱满渐细弧**。
 
-        颜色按身体渐变场取色 —— 根部与身体在该点的颜色**完全相同**（交界无色差），
-        沿脊线向暖端偏移 ``_GEO_TAIL_GRAD_BIAS``，形成「越往尾尖越亮暖」的过渡。
+        颜色按身体渐变场在**根部与尾尖各自位置**取色 —— 尾巴是「全息彩虹体」
+        渐变场的自然延伸：交界处与身体同色（无缝），伸向左上（场的薄荷绿端）
+        时渐变到黄绿，与耳朵（同为场 0 端）形成色彩呼应。
+        （此前方案：根部固定 -0.17 亮偏 → 交界处与身体出现肉眼可见的色差，
+        尾巴像贴上去的黄色贴片，2026-09-29 改为场连续取色。）
         """
 
         spine = self.tail_spine(pose)
         path = self._tail_outline(spine)
 
-        frac = self._tail_gradient_field(pose, spine[0][0], spine[0][1])
+        frac0 = self._tail_gradient_field(pose, spine[0][0], spine[0][1])
+        frac1 = self._tail_gradient_field(pose, spine[-1][0], spine[-1][1])
         gradient = QLinearGradient(QPointF(*spine[0]), QPointF(*spine[-1]))
-        gradient.setColorAt(
-            0.0, QColor(self._sample_gradient(frac - _GEO_TAIL_GRAD_BIAS))
-        )
-        gradient.setColorAt(1.0, QColor(self._sample_gradient(frac)))
+        gradient.setColorAt(0.0, QColor(self._sample_gradient(frac0)))
+        gradient.setColorAt(1.0, QColor(self._sample_gradient(frac1)))
 
         painter.setPen(self._outline)
         painter.setBrush(QBrush(gradient))
@@ -1439,6 +1489,17 @@ class PetRenderer:
             shade.setColorAt(1.0, shade_end)
             painter.setBrush(QBrush(shade))
             painter.drawRect(QRectF(cx - rx, cy, rx * 2.0, ry))
+
+            # 粉色内耳（在明暗叠加之后画：颜色不受柔光/暗面干扰，稳定柔粉）
+            inner_ear = QColor(C.COLORS["blush"])
+            inner_ear.setAlpha(_EAR_INNER_ALPHA)
+            painter.setBrush(QBrush(inner_ear))
+            for side in (-1.0, 1.0):
+                angle = pose.ear_l_angle if side < 0 else pose.ear_r_angle
+                tilt = pose.ear_l_tilt if side < 0 else pose.ear_r_tilt
+                painter.drawPath(
+                    self._inner_ear_path(side, angle, tilt, cx, cy, rx, ry)
+                )
         finally:
             painter.restore()
 
@@ -1452,7 +1513,12 @@ class PetRenderer:
         rx: float,
         ry: float,
     ) -> QPainterPath:
-        """单只三角耳（并入主体轮廓），绕耳根按 ``angle``/``tilt`` 摆动。"""
+        """单只**曲线**耳（外缘微凸、内缘微凹的猫耳），绕耳根按 ``angle``/``tilt`` 摆动。
+
+        相比直线三角：耳尖由两段反向弯曲的二次贝塞尔收出（不再几何锐利），
+        外缘顺着圆球轮廓微微外鼓、内缘向耳廓中轴微微内凹 —— 与圆润的团子
+        身体放在同一套曲率语言里，消除并集交界处的「折角」粗糙感。
+        """
 
         base_x = cx + side * _GEO_EAR_X
         base_y = cy - ry + _GEO_EAR_BASE_INSET
@@ -1466,14 +1532,99 @@ class PetRenderer:
                 base_y + lx * sin_a + ly * cos_a,
             )
 
-        p_left = tf(-_GEO_EAR_HALF_W, 0.0)
-        p_tip = tf(0.0, -_GEO_EAR_LEN)
-        p_right = tf(_GEO_EAR_HALF_W, 0.0)
+        p_inner = tf(-_GEO_EAR_HALF_W, 0.0)   # 靠脸中线的耳根
+        p_outer = tf(_GEO_EAR_HALF_W, 0.0)    # 远离体心的耳根
+        tip = tf(0.0, -_GEO_EAR_LEN)
+        # 左耳（side=-1）的 p_outer 是 p_right、右耳相反 —— 按谁更远离体心判定
+        if (p_outer[0] - p_inner[0]) * side < 0.0:
+            p_inner, p_outer = p_outer, p_inner
+
+        # 外缘：耳根外 → 耳尖，控制点沿外法线外鼓 ``_EAR_BOW_OUT``
+        ex, ey = tip[0] - p_outer[0], tip[1] - p_outer[1]
+        seg = math.hypot(ex, ey) or 1.0
+        nx, ny = ey / seg, -ex / seg          # 法线二选一，取指向体心外的那支
+        if nx * side < 0.0:
+            nx, ny = -nx, -ny
+        ctrl_out = (
+            (p_outer[0] + tip[0]) / 2.0 + nx * _EAR_BOW_OUT,
+            (p_outer[1] + tip[1]) / 2.0 + ny * _EAR_BOW_OUT,
+        )
+        # 内缘：耳尖 → 耳根内，控制点朝耳廓中轴内凹 ``_EAR_BOW_IN``
+        fx, fy = p_inner[0] - tip[0], p_inner[1] - tip[1]
+        seg = math.hypot(fx, fy) or 1.0
+        mx, my = -fy / seg, fx / seg          # 取指向体心的那支
+        if mx * side > 0.0:
+            mx, my = -mx, -my
+        ctrl_in = (
+            (tip[0] + p_inner[0]) / 2.0 + mx * _EAR_BOW_IN,
+            (tip[1] + p_inner[1]) / 2.0 + my * _EAR_BOW_IN,
+        )
 
         path = QPainterPath()
-        path.moveTo(p_left[0], p_left[1])
-        path.lineTo(p_tip[0], p_tip[1])
-        path.lineTo(p_right[0], p_right[1])
+        path.moveTo(p_outer[0], p_outer[1])
+        path.quadTo(ctrl_out[0], ctrl_out[1], tip[0], tip[1])
+        path.quadTo(ctrl_in[0], ctrl_in[1], p_inner[0], p_inner[1])
+        path.closeSubpath()
+        return path
+
+    def _inner_ear_path(
+        self,
+        side: float,
+        angle: float,
+        tilt: float,
+        cx: float,
+        cy: float,
+        rx: float,
+        ry: float,
+    ) -> QPainterPath:
+        """耳廓内的**粉色内耳**（同一摆动变换，形状为缩小的曲线耳）。
+
+        底边抬高、整体缩小，稳定落在耳廓内部；填充柔粉无描边，
+        给「贴纸剪影」加上一层生物感细节。
+        """
+
+        base_x = cx + side * _GEO_EAR_X
+        base_y = cy - ry + _GEO_EAR_BASE_INSET
+        ang = math.radians(side * angle + side * tilt)
+        cos_a, sin_a = math.cos(ang), math.sin(ang)
+
+        def tf(lx: float, ly: float) -> tuple[float, float]:
+            return (
+                base_x + lx * cos_a - ly * sin_a,
+                base_y + lx * sin_a + ly * cos_a,
+            )
+
+        half_w = _GEO_EAR_HALF_W * _EAR_INNER_SCALE
+        len_in = _GEO_EAR_LEN * _EAR_INNER_LEN_FRAC
+        p_inner = tf(-half_w, -_EAR_INNER_RISE)
+        p_outer = tf(half_w, -_EAR_INNER_RISE)
+        tip = tf(0.0, -len_in)
+        if (p_outer[0] - p_inner[0]) * side < 0.0:
+            p_inner, p_outer = p_outer, p_inner
+
+        ex, ey = tip[0] - p_outer[0], tip[1] - p_outer[1]
+        seg = math.hypot(ex, ey) or 1.0
+        nx, ny = ey / seg, -ex / seg
+        if nx * side < 0.0:
+            nx, ny = -nx, -ny
+        ctrl_out = (
+            (p_outer[0] + tip[0]) / 2.0 + nx * _EAR_BOW_OUT * _EAR_INNER_SCALE,
+            (p_outer[1] + tip[1]) / 2.0 + ny * _EAR_BOW_OUT * _EAR_INNER_SCALE,
+        )
+        fx, fy = p_inner[0] - tip[0], p_inner[1] - tip[1]
+        seg = math.hypot(fx, fy) or 1.0
+        mx, my = -fy / seg, fx / seg
+        if mx * side > 0.0:
+            mx, my = -mx, -my
+        ctrl_in = (
+            (tip[0] + p_inner[0]) / 2.0 + mx * _EAR_BOW_IN * _EAR_INNER_SCALE,
+            (tip[1] + p_inner[1]) / 2.0 + my * _EAR_BOW_IN * _EAR_INNER_SCALE,
+        )
+
+        path = QPainterPath()
+        path.moveTo(p_outer[0], p_outer[1])
+        path.quadTo(ctrl_out[0], ctrl_out[1], tip[0], tip[1])
+        path.quadTo(ctrl_in[0], ctrl_in[1], p_inner[0], p_inner[1])
         path.closeSubpath()
         return path
 
@@ -1697,17 +1848,24 @@ class PetRenderer:
                 paw_radius,
             )
 
-            # 两个小趾凸（表现圆润的脚趾；屈指时上收，像抓住键盘）
-            # 阶段 E：改用细一档的描边 —— 小圆上 3.2px 粗线会糊成黑点，2.0px 才留得住形状
-            toe_y = paw_bottom - _GEO_TOE_R - 1.0 - c * 4.0
+            # 两条趾缝短弧线（圆帽细描边；屈指时上收，像抓住键盘）
+            # 阶段 E 曾用空心小圆 —— 白爪上两枚「OO」像玩具；改竖向微弧的趾缝，
+            # 上端向爪中轴收拢，读作「肉垫分缝」而非「圆环贴纸」。
+            seam_bottom = paw_bottom - 1.2
+            seam_top = seam_bottom - 5.6 - c * 4.0
             painter.setPen(self._outline_toe)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
             for slot in (-1.0, 1.0):
-                painter.drawEllipse(QRectF(
-                    slot * _GEO_TOE_DX - _GEO_TOE_R,
-                    toe_y,
-                    _GEO_TOE_R * 2.0,
-                    _GEO_TOE_R * 2.0,
-                ))
+                base_x = slot * _GEO_TOE_DX
+                seam = QPainterPath()
+                seam.moveTo(base_x, seam_bottom)
+                seam.quadTo(
+                    base_x,
+                    (seam_bottom + seam_top) / 2.0,
+                    base_x - slot * 1.1,
+                    seam_top,
+                )
+                painter.drawPath(seam)
         finally:
             painter.restore()
 
