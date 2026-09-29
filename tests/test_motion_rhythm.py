@@ -252,11 +252,12 @@ def test_surprise_kind_is_independent_from_expression() -> None:
     """
 
     assert not issubclass(SurpriseKind, Expression)
+    # 2026-09-29 增补分段小表演成员（FAKE_SLEEP / HICCUP，见 SURPRISE_SEQUENCES）
     assert {k.name for k in SurpriseKind} == {
         "STRETCH", "TAIL_FLICK", "EAR_FLICK", "GLANCE_CORNER",
-        "LOAF", "LIE_SIDE",
+        "LOAF", "LIE_SIDE", "FAKE_SLEEP", "HICCUP",
     }
-    assert len(list(Expression)) == 8
+    assert len(list(Expression)) == 9  # 2026-09-29 增补 TIRED
     expression_names = {e.name for e in Expression}
     assert not ({k.name for k in SurpriseKind} & expression_names)
 
@@ -267,11 +268,26 @@ def test_surprise_poses_only_use_existing_channels() -> None:
     valid_channels = {f.name for f in fields(PetPose)}
     kind_names = {k.name for k in SurpriseKind}
 
-    assert set(C.SURPRISE_POSES) == kind_names
+    # 分段小表演（SURPRISE_SEQUENCES）与静态增量（SURPRISE_POSES）两表并起来
+    # 必须恰好覆盖全部成员（2026-09-29 起 FAKE_SLEEP / HICCUP 只在 SEQUENCES）
+    assert set(C.SURPRISE_POSES) | set(C.SURPRISE_SEQUENCES) == kind_names
+    assert not (set(C.SURPRISE_POSES) & set(C.SURPRISE_SEQUENCES)), (
+        "同一成员不得同时出现在静态增量表与分段表演表"
+    )
     for kind_name, deltas in C.SURPRISE_POSES.items():
         assert deltas, f"{kind_name} 增量为空"
         extra = set(deltas) - valid_channels
         assert not extra, f"{kind_name} 使用了不存在的通道：{extra}"
+    for kind_name, segments in C.SURPRISE_SEQUENCES.items():
+        assert segments, f"{kind_name} 分段为空"
+        assert segments[0][0] == 0.0, f"{kind_name} 首段必须从进度 0 开始"
+        for seg_start, seg_deltas in segments:
+            assert 0.0 <= seg_start <= 1.0, f"{kind_name} 段起点越界：{seg_start}"
+            extra = set(seg_deltas) - valid_channels
+            assert not extra, f"{kind_name} 使用了不存在的通道：{extra}"
+        assert C.SURPRISE_SEQUENCE_DURATIONS.get(kind_name), (
+            f"{kind_name} 缺少 SURPRISE_SEQUENCE_DURATIONS 时长"
+        )
 
 
 # --------------------------------------------------------------------------- #

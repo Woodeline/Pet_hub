@@ -24,11 +24,11 @@ def test_expression_enum_has_eight_members() -> None:
     names = {e.name for e in Expression}
     assert names == {
         "HAPPY", "FOCUS", "SLEEPY", "SURPRISED",
-        "SULKY", "YAWN", "SLEEPING", "EXCITED",
+        "SULKY", "YAWN", "SLEEPING", "EXCITED", "TIRED",
     }
 
 
-def test_all_eight_expressions_have_distinct_poses() -> None:
+def test_all_nine_expressions_have_distinct_poses() -> None:
     """任意两种表情的姿态不能完全相同（否则视觉无差异）。"""
 
     poses = {e: _pose_dict(PetModel.pose_for_expression(e)) for e in _ALL_EXPRESSIONS}

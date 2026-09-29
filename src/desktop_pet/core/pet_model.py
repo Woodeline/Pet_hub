@@ -40,6 +40,10 @@ class SurpriseKind(Enum):
     # —— 换姿态（阶段 C1-2）：时长更长（``POSTURE_DURATION_S``），观感是「摆个姿势」——
     LOAF = auto()           # 趴着
     LIE_SIDE = auto()       # 侧卧
+    # —— 分段小表演（2026-09-29）：``constants.SURPRISE_SEQUENCES`` 按进度切换多段
+    # 姿态增量，观感是「有情节的小演出」——
+    FAKE_SLEEP = auto()     # 假睡偷看：眯眼装睡冒 ZZZ → 偷偷睁一条眼缝瞄一眼 → 装回去
+    HICCUP = auto()         # 打嗝：平静 → 「嗝」地弹一下 → 平静 → 再一下 → 平静
 
 
 @dataclass
@@ -154,6 +158,14 @@ class PetModel:
         self._calm_seconds: float = 0.0
         # 「减少动效」开关（由 UI/app 层写入；开启时不调度、不叠加小动作）
         self._reduce_motion: bool = False
+
+        # 敲击疲劳（2026-09-29）：press_arm() 置敲击旗标，update(now) 按钟表时间
+        # 维护「本次连续敲击起点」；连续敲满 ``TIRED_AFTER_TYPING_S`` → 自动插播
+        # ``Expression.TIRED`` 临时表情（敲累了），冷却期内不再触发。
+        self._press_flag: bool = False
+        self._typing_start_ts: Optional[float] = None
+        self._last_press_ts: Optional[float] = None
+        self._tired_cooldown_until: float = 0.0
 
     # ------------------------------------------------------------------ #
     # 外部设置接口
@@ -285,10 +297,15 @@ class PetModel:
         return self._dragging
 
     def press_arm(self) -> None:
-        """触发一次敲键盘按压：左右爪交替（FR-02）。"""
+        """触发一次敲键盘按压：左右爪交替（FR-02）。
+
+        同时置敲击旗标，供 :meth:`_advance_typing_fatigue` 维护「连续敲击」计时
+        （连续敲太久 → 自动插播 :attr:`Expression.TIRED`）。
+        """
 
         self._press_arm = 1 - self._press_arm
         self._press_timer = C.PRESS_ANIM_S
+        self._press_flag = True
 
     # ------------------------------------------------------------------ #
     # 帧推进
@@ -305,6 +322,8 @@ class PetModel:
         now = float(now)
 
         self._tick_timers(dt)
+        # 敲击疲劳：连续敲太久 → 插播「敲累了」表情（需要钟表时间 now，放 tick 之外）
+        self._advance_typing_fatigue(now)
 
         expr = self._effective_expression()
         target = self.pose_for_expression(expr)
@@ -436,12 +455,14 @@ class PetModel:
     def _surprise_duration(kind: SurpriseKind) -> float:
         """返回该小动作的持续时长（秒）。
 
-        「换姿态」成员（``constants.SURPRISE_POSTURE_KINDS`` 所列：趴着 / 侧卧）用更长的
-        ``POSTURE_DURATION_S``——需要维持一会儿才像「摆个姿势」；其余小动作沿用短促的
-        ``SURPRISE_DURATION_S``。以 ``.name`` 查表（constants 不能 import pet_model，同
-        ``SURPRISE_POSES`` 先例）。
+        优先级：分段小表演（``constants.SURPRISE_SEQUENCE_DURATIONS``，各自独立时长）
+        →「换姿态」成员（``constants.SURPRISE_POSTURE_KINDS``，``POSTURE_DURATION_S``）
+        → 其余短促小动作（``SURPRISE_DURATION_S``）。以 ``.name`` 查表（constants 不能
+        import pet_model，同 ``SURPRISE_POSES`` 先例）。
         """
 
+        if kind.name in C.SURPRISE_SEQUENCE_DURATIONS:
+            return C.SURPRISE_SEQUENCE_DURATIONS[kind.name]
         if kind.name in C.SURPRISE_POSTURE_KINDS:
             return C.POSTURE_DURATION_S
         return C.SURPRISE_DURATION_S
@@ -476,6 +497,45 @@ class PetModel:
             self._surprise_timer = motion.random_interval(
                 C.SURPRISE_MIN_S, C.SURPRISE_MAX_S, self._rng
             )
+
+    def _advance_typing_fatigue(self, now: float) -> None:
+        """维护连续敲击计时，敲满 ``TIRED_AFTER_TYPING_S`` 自动插播「敲累了」。
+
+        连续性以敲击间隔判定：两次敲键间隔超过 ``TYPING_BURST_GAP_S`` 视为中断，
+        计时起点重置。触发条件（全部满足）：连续敲击时长达标、不在冷却期、
+        非减少动效 / 拖拽 / 悬停 / 无进行中的临时表情、基础表情为 ``FOCUS``
+        （真的在敲键盘的工作态）。触发后冷却 ``TIRED_COOLDOWN_S``（不含表情本身时长）。
+        """
+
+        if self._press_flag:
+            self._press_flag = False
+            if (
+                self._last_press_ts is None
+                or now - self._last_press_ts > C.TYPING_BURST_GAP_S
+            ):
+                self._typing_start_ts = now
+            self._last_press_ts = now
+
+        if (
+            self._typing_start_ts is None
+            or self._last_press_ts is None
+            or now - self._last_press_ts > C.TYPING_BURST_GAP_S
+        ):
+            return  # 没在敲（或刚停手）—— 不累计、不触发
+        if now - self._typing_start_ts < C.TIRED_AFTER_TYPING_S:
+            return
+        if now < self._tired_cooldown_until:
+            return
+        if (
+            self._reduce_motion
+            or self._dragging
+            or self._hovering
+            or self._temp_expression is not None
+            or self._base_expression != Expression.FOCUS
+        ):
+            return
+        self.set_expression(Expression.TIRED, C.TIRED_EXPRESSION_S)
+        self._tired_cooldown_until = now + C.TIRED_EXPRESSION_S + C.TIRED_COOLDOWN_S
 
     def _breath_phase_for(self, now: float) -> float:
         """按 **epoch 锚定** 求当前呼吸相位 ``[0, 1)``（阶段 A5-1，v1.1 R2）。
@@ -631,13 +691,25 @@ class PetModel:
         # 偶发小动作（阶段 A5-2）：按包络把姿态增量叠加到目标姿态
         # 「换姿态」（LOAF / LIE_SIDE）用更长的 POSTURE_DURATION_S（阶段 C1-2），
         # 包络时长必须与 _advance_surprise 的收尾阈值一致，否则姿态会被提前抹掉。
+        # 分段小表演（FAKE_SLEEP / HICCUP，2026-09-29）：按动作进度取当前段增量，
+        # 段间跳变由全局姿态平滑（POSE_SMOOTH_K）消化，不乘 surprise_envelope。
         if self._surprise_kind is not None:
-            envelope = motion.surprise_envelope(
-                self._surprise_elapsed, self._surprise_duration(self._surprise_kind)
-            )
-            for channel, delta in C.SURPRISE_POSES.get(self._surprise_kind.name, {}).items():
-                if hasattr(target, channel):
-                    setattr(target, channel, getattr(target, channel) + delta * envelope)
+            duration = self._surprise_duration(self._surprise_kind)
+            sequence = C.SURPRISE_SEQUENCES.get(self._surprise_kind.name)
+            if sequence:
+                progress = motion.clamp(self._surprise_elapsed / duration, 0.0, 1.0)
+                deltas = sequence[0][1]
+                for seg_start, seg_deltas in sequence:
+                    if progress >= seg_start:
+                        deltas = seg_deltas
+                for channel, delta in deltas.items():
+                    if hasattr(target, channel):
+                        setattr(target, channel, getattr(target, channel) + delta)
+            else:
+                envelope = motion.surprise_envelope(self._surprise_elapsed, duration)
+                for channel, delta in C.SURPRISE_POSES.get(self._surprise_kind.name, {}).items():
+                    if hasattr(target, channel):
+                        setattr(target, channel, getattr(target, channel) + delta * envelope)
 
     def keystroke_state(self) -> tuple[float, float, float, bool]:
         """返回当前敲击包络 ``(press, lift, curl, active)``。

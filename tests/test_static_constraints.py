@@ -271,7 +271,8 @@ def test_mood_has_four_states() -> None:
 
 
 def test_expression_count_matches_prd() -> None:
-    assert len(list(Expression)) == 8
+    # 2026-09-29 产品增补 TIRED（敲累了，由连续敲击时长自动触发）
+    assert len(list(Expression)) == 9
 
 
 def test_color_palette_matches_prd() -> None:

@@ -193,7 +193,7 @@ def test_glow_threshold_boundary_still_intact(qtbot, glow: float, full_window: b
 # --------------------------------------------------------------------------- #
 # C ★ 1x 真实尺寸观感
 # --------------------------------------------------------------------------- #
-def test_all_eight_expressions_distinct_and_nonblank_at_1x(capsys) -> None:
+def test_all_nine_expressions_distinct_and_nonblank_at_1x(capsys) -> None:
     renderer = PetRenderer()
     hashes: dict[str, str] = {}
     counts: dict[str, int] = {}

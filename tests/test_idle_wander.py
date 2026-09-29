@@ -8,7 +8,7 @@
 - 多屏 ``clamp_to_screens`` 越屏保护生效；
 - 游走 ``move()`` **不 emit** ``position_changed``（该信号只服务拖拽 → 持久化）；
 - 游走 ``QTimer`` 挂 parent，且 ``closeEvent`` / ``stop_animation`` 会 ``stop()``；
-- 换姿态：``SurpriseKind`` 新增 ``LOAF`` / ``LIE_SIDE``（``Expression`` 仍 == 8），
+- 换姿态：``SurpriseKind`` 新增 ``LOAF`` / ``LIE_SIDE``（``Expression`` 仍 == 8，后增 TIRED 至 9），
   使用 ``POSTURE_DURATION_S``，同样受 IDLE/REST 门控与 ``reduce_motion`` 抑制。
 
 纪律：期望值一律写**字面量**（不引用被测常量自身拼期望）；每条新增断言均经变异验证。
@@ -414,7 +414,7 @@ def test_calm_seconds_registered_as_public_api() -> None:
 def test_posture_kinds_are_surprise_members_not_expressions() -> None:
     names = {k.name for k in SurpriseKind}
     assert {"LOAF", "LIE_SIDE"} <= names
-    assert len(list(Expression)) == 8, "不得新增 Expression 成员"
+    assert len(list(Expression)) == 9, "新增 Expression 成员须同步本断言（2026-09-29 增补 TIRED）"
 
 
 def test_posture_poses_use_only_existing_channels() -> None:

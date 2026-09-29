@@ -25,7 +25,11 @@ class Mood(Enum):
 
 
 class Expression(Enum):
-    """8 种表情（PRD §3.3.1 / §4.5 / FR-11）。"""
+    """9 种表情（PRD §3.3.1 / §4.5 / FR-11；2026-09-29 增补 ``TIRED``）。
+
+    ``TIRED``（敲键盘敲累了）由 :class:`PetModel` 按**连续敲击时长**自动触发
+    （临时表情通道），不进状态机迁移表、不弹气泡 —— 纯表情自述。
+    """
 
     HAPPY = auto()
     FOCUS = auto()
@@ -35,6 +39,7 @@ class Expression(Enum):
     YAWN = auto()
     SLEEPING = auto()
     EXCITED = auto()
+    TIRED = auto()
 
 
 class Gesture(IntEnum):
@@ -544,7 +549,84 @@ POSTURE_DURATION_S: Final[float] = 6.0
 #: ``SURPRISE_DURATION_S``。以 ``.name`` 为键（constants 不能 import pet_model，同 ``SURPRISE_POSES`` 先例）。
 SURPRISE_POSTURE_KINDS: Final[frozenset[str]] = frozenset({"LOAF", "LIE_SIDE"})
 
-     # 两次敲键间隔超过该值 → 视为中断，重置累计
+# --------------------------------------------------------------------------- #
+# 分段小动作（2026-09-29）：按动作进度切换多段姿态增量 —— 观感是「有情节的小表演」
+# 而非单一姿势保持。键为 SurpriseKind 成员名（同 SURPRISE_POSES 先例）。
+#   SURPRISE_SEQUENCES[kind] = ((起始进度 0..1, 该段姿态增量), ...)，
+#   应用时取「起始进度 ≤ 当前进度」的**最后一段**（段间跳变由全局姿态平滑消化），
+#   不再乘 surprise_envelope（分段自身即时间轴）；未列入的 kind 走 SURPRISE_POSES 静态增量。
+SURPRISE_SEQUENCES: Final[dict[str, tuple[tuple[float, dict[str, float]], ...]]] = {
+    # 假睡偷看（闲暇调皮）：眯眼装睡冒 ZZZ → 中途偷偷睁开一条眼缝瞄一眼 → 再装回去。
+    # 装睡段出现在首尾（进度 0.42 起偷看、0.62 起装回去），眼缝与视线偏移是「调皮」核心。
+    # 注意增量为**叠加**语义：装睡段用负 eye_open 压闭 SLEEPY(0.28)/HAPPY(0.12) 的基础眼；
+    # 偷看段 eye_curve -1.0 压掉基础弧线眼判定（curve>0.6 会走闭眼弧线分支盖住实心眼）。
+    "FAKE_SLEEP": (
+        (
+            0.00,
+            {
+                "eye_open_l": -0.3, "eye_open_r": -0.3, "eye_curve": 0.0,
+                "zzz_alpha": 0.6, "body_y": 4.0, "body_squash": 0.05,
+                "ear_l_angle": 24.0, "ear_r_angle": 24.0,
+                "tail_curve": 0.8, "head_y": 3.0, "head_tilt": 5.0,
+            },
+        ),
+        (
+            0.42,
+            {
+                "eye_open_l": 0.42, "eye_open_r": 0.1, "eye_curve": -1.0,
+                "pupil_dilate": 0.3,
+                "zzz_alpha": 0.15, "look_x": 4.5, "head_tilt": 4.0,
+                "body_y": 4.0, "body_squash": 0.05,
+                "ear_l_angle": 18.0, "ear_r_angle": 24.0,
+                "tail_curve": 0.5, "head_y": 3.0,
+            },
+        ),
+        (
+            0.62,
+            {
+                "eye_open_l": -0.3, "eye_open_r": -0.3, "eye_curve": 0.0,
+                "zzz_alpha": 0.6, "body_y": 4.0, "body_squash": 0.05,
+                "ear_l_angle": 24.0, "ear_r_angle": 24.0,
+                "tail_curve": 0.8, "head_y": 3.0, "head_tilt": 5.0,
+            },
+        ),
+    ),
+    # 打嗝：平静 → 「嗝」地弹一下（身体上弹 + 嘴小张 + 耳一抖）→ 平静 → 再来一下 → 平静。
+    "HICCUP": (
+        (0.00, {}),
+        (
+            0.18,
+            {
+                "body_y": -4.0, "mouth_open": 0.55, "mouth_curve": 0.2,
+                "ear_l_tilt": -5.0, "ear_r_tilt": 3.0, "head_y": -2.0,
+            },
+        ),
+        (0.36, {}),
+        (
+            0.55,
+            {
+                "body_y": -3.0, "mouth_open": 0.45, "mouth_curve": 0.2,
+                "ear_l_tilt": 3.0, "ear_r_tilt": -5.0, "head_y": -2.0,
+            },
+        ),
+        (0.72, {}),
+    ),
+}
+
+#: 分段小动作的持续时长（秒）——假睡要「睡一会儿」才像，打嗝两声即可。
+#: 未列入的 kind 沿用 SURPRISE_POSTURE_KINDS / SURPRISE_DURATION_S 既有判定。
+SURPRISE_SEQUENCE_DURATIONS: Final[dict[str, float]] = {
+    "FAKE_SLEEP": 9.0,
+    "HICCUP": 3.4,
+}
+
+# --------------------------------------------------------------------------- #
+# 敲击疲劳（2026-09-29）：连续敲键盘太久 → 猫「敲累了」喊一声（TIRED 临时表情）。
+# 由 PetModel 在 press_arm 内累计连续敲击时长、帧循环判定触发 —— controller 零改动。
+TIRED_AFTER_TYPING_S: Final[float] = 10.0   # 连续敲击达到该时长 → 触发吃力表情
+TIRED_EXPRESSION_S: Final[float] = 3.5      # 吃力表情持续时间
+TIRED_COOLDOWN_S: Final[float] = 40.0       # 一次吃力后，冷却期内不再触发
+TYPING_BURST_GAP_S: Final[float] = 2.5      # 两次敲键间隔超过该值 → 视为中断，重置累计
 
 # 气泡时序（PRD §4.3）
 BUBBLE_FADE_IN_S: Final[float] = 0.2
@@ -587,69 +669,93 @@ BUBBLE_STROKE_MARGIN: Final[float] = 4.0   # 窗口四周为描边/白晕预留�
 # 通道含义见 core.pet_model.PetPose 字段。
 EXPRESSION_POSES: Final[dict[Expression, dict[str, float]]] = {
     # 开心：弯月眯眼、上扬笑弧、耳微前倾、尾巴大幅摆动、腮红加深
+    # （2026-09-29 生动化：笑弧更开 + 微歪头 + 腮红拉满）
     Expression.HAPPY: {
         "eye_open_l": 0.12, "eye_open_r": 0.12, "eye_curve": 1.0,
-        "mouth_curve": 0.9, "mouth_open": 0.05,
+        "mouth_curve": 1.25, "mouth_open": 0.05,
         "ear_l_tilt": 6.0, "ear_r_tilt": 6.0,
-        "tail_curve": 0.9, "blush_alpha": 0.85,
+        "tail_curve": 1.0, "blush_alpha": 0.95,
+        "head_tilt": 3.0,
     },
     # 专注：睁大圆眼、紧闭短线嘴、竖立耳、轻摆尾
+    # （生动化：瞳孔更凝、耳更竖、身体微微前倾压低）
     Expression.FOCUS: {
         "eye_open_l": 1.0, "eye_open_r": 1.0, "eye_curve": 0.0,
-        "pupil_dilate": 0.35, "mouth_curve": 0.0, "mouth_open": 0.0,
-        "ear_l_angle": -12.0, "ear_r_angle": -12.0,
+        "pupil_dilate": 0.55, "mouth_curve": 0.0, "mouth_open": 0.0,
+        "ear_l_angle": -15.0, "ear_r_angle": -15.0,
         "ear_l_tilt": -4.0, "ear_r_tilt": -4.0,
         "tail_curve": 0.35, "blush_alpha": 0.35,
+        "body_squash": 0.04,
     },
     # 犯困：半闭下垂眼、小圆嘴、耳微耷拉、慢摆尾
+    # （生动化：歪头打盹感 + 身体更沉 + 嘴张一点）
     Expression.SLEEPY: {
-        "eye_open_l": 0.35, "eye_open_r": 0.35, "eye_curve": -0.25,
-        "mouth_curve": 0.15, "mouth_open": 0.12,
+        "eye_open_l": 0.28, "eye_open_r": 0.28, "eye_curve": -0.25,
+        "mouth_curve": 0.15, "mouth_open": 0.22,
         "ear_l_angle": 18.0, "ear_r_angle": 18.0,
         "tail_curve": 0.25, "blush_alpha": 0.4,
-        "body_y": 3.0, "head_y": 2.0,
+        "body_y": 4.0, "head_y": 2.0, "head_tilt": 7.0,
     },
     # 惊讶：圆睁带高光、小○嘴、耳后仰、尾巴僵直、身体后仰
+    # （生动化：瞳孔放到最大、耳炸开、后仰更深、嘴张更圆）
     Expression.SURPRISED: {
         "eye_open_l": 1.25, "eye_open_r": 1.25, "eye_curve": 0.0,
-        "pupil_dilate": 0.8, "mouth_curve": 0.1, "mouth_open": 0.85,
-        "ear_l_angle": -22.0, "ear_r_angle": -22.0,
+        "pupil_dilate": 1.05, "mouth_curve": 0.1, "mouth_open": 1.05,
+        "ear_l_angle": -26.0, "ear_r_angle": -26.0,
         "tail_curve": 0.0, "head_tilt": 0.0,
-        "body_y": -4.0, "head_y": -2.0,
+        "body_y": -6.0, "head_y": -3.0,
     },
     # 委屈：上缘下弯眼、波浪嘴、耳完全耷拉、尾下垂不摆、眼角水光
+    # （生动化：偏头不看人 + 嘴撇更狠 + 身体更沉）
     Expression.SULKY: {
         "eye_open_l": 0.5, "eye_open_r": 0.5, "eye_curve": -0.9,
-        "mouth_curve": -0.7, "mouth_open": 0.1,
+        "mouth_curve": -0.95, "mouth_open": 0.1,
         "ear_l_angle": 32.0, "ear_r_angle": 32.0,
         "ear_l_tilt": 10.0, "ear_r_tilt": 10.0,
         "tail_curve": 0.05, "tail_angle": 20.0, "tear_alpha": 0.9,
-        "blush_alpha": 0.3, "body_y": 4.0, "head_y": 3.0,
+        "blush_alpha": 0.25, "body_y": 5.0, "head_y": 3.0,
+        "head_tilt": 9.0, "look_x": -3.0,
     },
     # 打呵欠：闭眼、大张○嘴（带舌）、耳后压、尾僵直、身体上提拉伸
+    # （生动化：哈欠带泪光 + 头后仰更深 + 舌头更露）
     Expression.YAWN: {
         "eye_open_l": 0.0, "eye_open_r": 0.0, "eye_curve": 1.0,
-        "mouth_curve": 0.0, "mouth_open": 1.0, "tongue_show": 0.7,
+        "mouth_curve": 0.0, "mouth_open": 1.0, "tongue_show": 0.85,
         "ear_l_angle": -8.0, "ear_r_angle": -8.0,
         "tail_curve": 0.0, "body_y": -6.0, "body_squash": -0.12,
-        "head_y": -4.0, "blush_alpha": 0.3,
+        "head_y": -5.0, "blush_alpha": 0.3, "tear_alpha": 0.3,
     },
     # 睡觉：闭眼弧线、小~嘴、耳耷拉、尾蜷起、ZZZ、淡蓝光、呼吸起伏
+    # （生动化：歪头睡更可爱）
     Expression.SLEEPING: {
         "eye_open_l": 0.0, "eye_open_r": 0.0, "eye_curve": 1.0,
         "mouth_curve": 0.1, "mouth_open": 0.0,
         "ear_l_angle": 30.0, "ear_r_angle": 30.0,
         "tail_curve": 1.0, "tail_angle": 150.0,
         "blush_alpha": 0.35, "zzz_alpha": 0.9, "glow_alpha": 0.5,
-        "body_y": 5.0, "body_squash": 0.06, "head_y": 4.0,
+        "body_y": 5.0, "body_squash": 0.06, "head_y": 4.0, "head_tilt": 6.0,
     },
     # 兴奋：星形睁大眼、大张笑、耳竖立抖动、尾高速摆动、暖黄光晕
+    # （生动化：嘴咧更大 + 腮红拉满 + 光晕更亮）
     Expression.EXCITED: {
         "eye_open_l": 1.35, "eye_open_r": 1.35, "eye_curve": 0.6,
-        "pupil_dilate": 0.6, "mouth_curve": 1.0, "mouth_open": 0.75,
-        "ear_l_angle": -16.0, "ear_r_angle": -16.0,
-        "tail_curve": 1.0, "blush_alpha": 0.9, "glow_alpha": 0.75,
+        "pupil_dilate": 0.7, "mouth_curve": 1.3, "mouth_open": 0.8,
+        "ear_l_angle": -18.0, "ear_r_angle": -18.0,
+        "tail_curve": 1.0, "blush_alpha": 1.0, "glow_alpha": 0.85,
         "body_y": -3.0, "head_y": -2.0,
+    },
+    # 敲累了（2026-09-29 新增）：眯眼用力、耳耷拉、身体瘫低、嘴微张喘气、
+    # 尾巴低垂、眼下汗滴（tear 通道复用为汗珠）、无腮红（累没血色）。
+    # 由 PetModel 按连续敲击时长自动触发（临时表情），持续 TIRED_EXPRESSION_S。
+    Expression.TIRED: {
+        "eye_open_l": 0.3, "eye_open_r": 0.3, "eye_curve": 0.0,
+        "pupil_dilate": 0.15,
+        "mouth_curve": -0.35, "mouth_open": 0.5,
+        "ear_l_angle": 6.0, "ear_r_angle": 6.0,
+        "ear_l_tilt": 9.0, "ear_r_tilt": 9.0,
+        "body_y": 3.0, "body_squash": 0.08, "head_y": 3.0,
+        "tail_curve": 0.05, "tail_angle": 8.0,
+        "tear_alpha": 0.45, "blush_alpha": 0.0,
     },
 }
 
@@ -796,6 +902,10 @@ BUBBLE_TEXTS: Final[dict[Expression | Mood, list[str]]] = {
     Expression.SULKY: ["唔…键盘声把我吵醒了…", "哼，键盘响个不停…", "轻一点敲啦…"],
     Expression.YAWN: ["哈啊~ 好困…", "该休息啦~", "打个大大的呵欠~"],
     Expression.SLEEPING: ["Zzz…", "嘘，我在做梦呢~"],
+    # 敲累了（2026-09-29）：连续敲击时长触发；含键盘关键字，与触发场景一致。
+    # TIRED 不进 KEYBOARD_BUBBLE_EXPRESSIONS（非状态机迁移键），当前仅 completeness
+    # 守卫与未来手动触发使用。
+    Expression.TIRED: ["敲得好累…手指头都酸了", "呼…让我甩甩爪子…", "码字辛苦，我也辛苦…"],
     Mood.IDLE: ["需要我陪着你吗？", "我在呢~", "要不要摸摸我呀？"],
     Mood.REST: ["歇一会儿吧~", "要不要喝口水？", "揉揉眼睛继续加油~"],
     Mood.SLEEP: ["Zzz…", "嘘，我在做梦呢~"],
@@ -1183,6 +1293,12 @@ __all__ = [
     "WANDER_TICK_MS",
     "POSTURE_DURATION_S",
     "SURPRISE_POSTURE_KINDS",
+    "SURPRISE_SEQUENCES",
+    "SURPRISE_SEQUENCE_DURATIONS",
+    "TIRED_AFTER_TYPING_S",
+    "TIRED_EXPRESSION_S",
+    "TIRED_COOLDOWN_S",
+    "TYPING_BURST_GAP_S",
     # 日语学习
     "JP_LEVELS",
     "JP_DEFAULT_LEVEL",
