@@ -316,12 +316,12 @@ def test_surprise_triggers_in_idle_when_all_gates_open() -> None:
     assert model._surprise_kind is not None, "门控全开时小动作应触发"
 
 
-def test_surprise_waits_for_rest_threshold() -> None:
-    """平静时长未达 ``REST_THRESHOLD_S`` 前不触发（复用同一空闲阈值，G3）。"""
+def test_surprise_waits_for_calm_threshold() -> None:
+    """平静时长未达 ``SURPRISE_CALM_THRESHOLD_S`` 前不触发（2026-09-29 独立门槛）。"""
 
     model = _happy_model()
     model._surprise_timer = 0.0
-    model._calm_seconds = C.REST_THRESHOLD_S - 1.0
+    model._calm_seconds = C.SURPRISE_CALM_THRESHOLD_S - 1.0
     model.update(0.033, 1.0)
     assert model._surprise_kind is None
 

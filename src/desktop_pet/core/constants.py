@@ -98,8 +98,11 @@ TEMP_EXPRESSION_S: Final[float] = 2.0       # 默认临时表情时长
 SURPRISED_ANIM_S: Final[float] = 1.2        # 惊讶表情时长
 
 # 偶发小动作（阶段 A5-2）——间隔区间（秒）与单次动作时长（秒）
-SURPRISE_MIN_S: Final[float] = 40.0
-SURPRISE_MAX_S: Final[float] = 80.0
+# 偶发小动作节奏（2026-09-29 灵动性调整：门槛与间隔都大幅提前，猫咪不再长时间
+# 维持同一表情发呆）：
+SURPRISE_CALM_THRESHOLD_S: Final[float] = 8.0    # 安静 8s 后小动作即开始待命（原复用 REST 阈值 120s，过于迟钝）
+SURPRISE_MIN_S: Final[float] = 12.0              # 相邻小动作最小间隔（原 40s）
+SURPRISE_MAX_S: Final[float] = 26.0              # 相邻小动作最大间隔（原 80s）
 SURPRISE_DURATION_S: Final[float] = 1.2
 
 # 敲键盘动画时间线（FR-02）——单次敲击拆为「落指 → 回弹」两段。
@@ -1275,6 +1278,7 @@ __all__ = [
     # 动效去机械化（阶段 A5）
     "BREATH_JITTER",
     "BLINK_EYE_DELAY_S",
+    "SURPRISE_CALM_THRESHOLD_S",
     "SURPRISE_MIN_S",
     "SURPRISE_MAX_S",
     "SURPRISE_DURATION_S",

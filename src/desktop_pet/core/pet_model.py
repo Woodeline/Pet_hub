@@ -431,8 +431,9 @@ class PetModel:
         基础表情属 IDLE / REST 对应态（``HAPPY`` / ``SLEEPY``）——即「安静地在场」。
 
         ``HAPPY`` / ``SLEEPY`` 正是状态机按 ``IDLE_START_S`` / ``REST_THRESHOLD_S``
-        判定 IDLE / REST 后给出的基础表情，故此处**复用同一空闲定义**，不再另设阈值，
-        避免与阶段 C 的游走出现两套「空闲」口径漂移。
+        判定 IDLE / REST 后给出的基础表情，故此处**复用同一表情集合**（2026-09-29 起
+        触发门槛改用独立的 ``SURPRISE_CALM_THRESHOLD_S``，与 REST 阈值解耦 —— 灵动性
+        优先；游走 wander 的门控仍用 REST 阈值）。
 
         .. note::
            阶段 B2-1 起把**悬停**也纳入抑制：悬停是「被抚摸」的**主动交互**态，
@@ -478,9 +479,12 @@ class PetModel:
                 self._surprise_elapsed = 0.0
             return
 
-        # 平静时长达到 REST_THRESHOLD_S 后才开始进入触发倒计时（复用同一空闲阈值）
-        if self._calm_seconds < C.REST_THRESHOLD_S:
-            self._calm_seconds += dt
+        # 平静时长**持续累加**（游走 wander 的门控仍需 ``REST_THRESHOLD_S`` 口径），
+        # 而小动作倒计时只在其独立门槛 ``SURPRISE_CALM_THRESHOLD_S`` 达到后才待命。
+        # （2026-09-29 灵动性调整：门槛由复用 REST_THRESHOLD_S=120s 改为 8s —— 原门槛
+        #   下猫要安静两分钟才有小动作，观感呆滞；两口径自此解耦。）
+        self._calm_seconds += dt
+        if self._calm_seconds < C.SURPRISE_CALM_THRESHOLD_S:
             return
 
         if self._surprise_kind is None:
