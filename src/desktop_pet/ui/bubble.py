@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final
 
-from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer
+from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QColor,
     QFont,
@@ -39,7 +39,19 @@ _MODE_WORD: Final[int] = 1
 
 
 class BubbleWindow(QWidget):
-    """气泡提示窗口（复用单个实例，避免频繁创建/销毁）。"""
+    """气泡提示窗口（复用单个实例，避免频繁创建/销毁）。
+
+    鼠标策略（2026-09-29 双击查详情）：
+    - **情绪气泡（默认）**：全穿透（``WindowTransparentForInput`` +
+      ``WA_TransparentForMouseEvents``），纯展示、不挡下层点击；
+    - **单词气泡**：显示期间解除穿透、接收鼠标 —— 双击即发
+      :attr:`word_detail_requested`（打开中文详情，controller 侧记入生词本）。
+      穿透切换在淡入起点（alpha=0）做 hide→set→show，无视觉闪烁；
+      运行时直接切已显示窗口的标志在 Windows 上不可靠（见 BubbleButtonBar 注释）。
+    """
+
+    #: 双击**单词**气泡 → 请求打开该词的中文详情（携带词条；情绪气泡不发）。
+    word_detail_requested = Signal(object)
 
     def __init__(self) -> None:
         """构造气泡窗口。"""
@@ -71,6 +83,9 @@ class BubbleWindow(QWidget):
         self._line_translation: str = ""
         self._line_meaning: str = ""
         self._line_level: str = ""  # 学习泡泡右上角等级 chip（N5..N1）
+        #: 当前单词态的词条引用（``show_word`` 置入 / ``show_message``·``hide`` 清空），
+        #: 双击时随 :attr:`word_detail_requested` 发给 controller。
+        self._word_entry: "VocabEntry | None" = None
 
         self._font = QFont("Microsoft YaHei")
         self._font.setPointSize(C.BUBBLE_FONT_SIZE)
@@ -131,6 +146,7 @@ class BubbleWindow(QWidget):
         if not text:
             return
         self._mode = _MODE_TEXT
+        self._word_entry = None  # 情绪气泡可双击无效（穿透态本身也收不到鼠标）
         self._text = text
         self._duration = min(C.BUBBLE_MAX_DURATION_S, max(C.BUBBLE_MIN_DURATION_S, float(duration)))
         self._elapsed = 0.0
@@ -139,6 +155,7 @@ class BubbleWindow(QWidget):
         # 情绪气泡为纯文本模式，非打字感目标 → 直接全显、停止逐字定时器
         self._reveal = 1.0
         self._reveal_timer.stop()
+        self._set_input_capture(False)  # 恢复穿透：情绪气泡纯展示
 
         geometry = self._compute_geometry(self._anchor)
         self.setGeometry(geometry)
@@ -158,6 +175,7 @@ class BubbleWindow(QWidget):
         if entry is None or not getattr(entry, "word", ""):
             return
         self._mode = _MODE_WORD
+        self._word_entry = entry  # 双击 → word_detail_requested(entry)
         self._line_word = entry.word
         self._line_kana = entry.kana
         self._line_translation = entry.translation
@@ -174,11 +192,14 @@ class BubbleWindow(QWidget):
         self._reveal_timer.stop()
         if not self._reduce_motion and self._line_word:
             self._reveal_timer.start()
-
         geometry = self._compute_geometry(self._anchor)
         self.setGeometry(geometry)
         self.setWindowOpacity(0.0)
         self.show()
+        # 切换鼠标捕获必须在窗口已创建（show 过）之后——未创建时移除穿透标志
+        # 不落盘（Qt/Windows 平台行为，实测 offscreen 同样如此）；此刻 alpha=0，
+        # 内部 hide→set→show 的窗口重建无视觉闪烁。
+        self._set_input_capture(True)  # 单词态接收鼠标（双击查详情）
         self.raise_()
         self._timer.start()
 
@@ -190,7 +211,46 @@ class BubbleWindow(QWidget):
         self._reveal = 1.0
         self._phase = _PHASE_HIDDEN
         self._alpha = 0.0
+        self._word_entry = None
+        self._set_input_capture(False)  # 隐藏态恢复穿透，下次情绪气泡零成本
         self.hide()
+
+    # ------------------------------------------------------------------ #
+    # 鼠标交互（2026-09-29：单词气泡双击查详情）
+    # ------------------------------------------------------------------ #
+    def _set_input_capture(self, capture: bool) -> None:
+        """切换单词态的鼠标捕获（情绪态穿透）。
+
+        运行时切换已显示窗口的穿透标志在 Windows 上不可靠（单比特切换坑，
+        见 ``BubbleButtonBar`` 刻意不设穿透的注释），必须 hide → set → show
+        重建窗口。两处调用点（``show_word`` / ``show_message``）都处于淡入
+        起点（alpha=0），重 show 无视觉闪烁；``hide_bubble`` 在隐藏态切换。
+
+        顺序敏感（实测 offscreen 复现）：Qt 在 ``setWindowFlag`` 内部会按
+        ``WA_TransparentForMouseEvents`` **重推** ``WindowTransparentForInput``
+        标志，故必须**先清属性再清标志**，反过来则标志清不掉（解穿透失效，
+        双击落到下层）。
+        """
+
+        was_visible = self.isVisible()
+        if was_visible:
+            self.hide()
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, not capture)
+        self.setWindowFlag(Qt.WindowType.WindowTransparentForInput, not capture)
+        if was_visible:
+            self.show()
+
+    def _emit_word_detail_if_word_mode(self) -> None:
+        """双击处理核心（可测）：仅单词态携带词条发信号，情绪态静默忽略。"""
+
+        if self._mode == _MODE_WORD and self._word_entry is not None:
+            self.word_detail_requested.emit(self._word_entry)
+
+    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802 (Qt 命名)
+        """双击单词气泡 → 请求打开中文详情；情绪气泡（穿透态）收不到本事件。"""
+
+        self._emit_word_detail_if_word_mode()
+        super().mouseDoubleClickEvent(event)
 
     # ------------------------------------------------------------------ #
     # 绘制

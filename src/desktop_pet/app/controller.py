@@ -312,6 +312,8 @@ class PetAppController(QObject):
         # 日语记忆：气泡按钮条（记住了 / 新单词）
         self._button_bar.mastered_clicked.connect(self._on_word_mastered)
         self._button_bar.vocab_clicked.connect(self._on_word_vocab)
+        # 双击单词气泡 → 记生词 + 打开中文详情（情绪气泡穿透收不到，天然无效）
+        self._bubble.word_detail_requested.connect(self._on_bubble_word_detail)
 
     # ------------------------------------------------------------------ #
     # 槽：键盘
@@ -1158,6 +1160,20 @@ class PetAppController(QObject):
         """气泡「新单词」按钮 → 处置为生词。"""
 
         self._dispose_word(C.DAILY_LOG_STATUS_VOCAB, time.monotonic())
+
+    def _on_bubble_word_detail(self, entry: VocabEntry) -> None:
+        """双击单词气泡 → 处置为生词 + 打开中文详情（学习闭环）。
+
+        用户双击的语义就是「这个单词不认识、想深入学习」：先把该词按**生词**
+        处置（``_dispose_word`` 负责隐藏气泡 / 按钮条并排期下一词，学习记录
+        与生词本同步更新），再打开详情窗口。情绪气泡为鼠标穿透态，天然收
+        不到双击，无需额外区分。
+        """
+
+        if self._current_word is None:
+            return
+        self._on_word_vocab()
+        self._open_word_detail(entry)
 
     def _now_iso(self) -> str:
         """返回当前 UTC 墙钟时间的 ISO8601 字符串（仅 app 层生成，注入 core）。"""
