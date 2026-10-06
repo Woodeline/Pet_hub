@@ -26,11 +26,14 @@ from PySide6.QtCore import QObject, QPoint, QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication, QFileDialog
 
+from desktop_pet import __version__
 from desktop_pet.app.keyboard_listener import KeystrokeBridge, KeyboardListener
 from desktop_pet.core import constants as C
 from desktop_pet.core import motion, paths
+from desktop_pet.core.backup import BackupError, create_backup, restore_backup
 from desktop_pet.core.config import AppConfig, ConfigStore
 from desktop_pet.core.constants import Expression, Gesture, Mood
+from desktop_pet.core.exporter import daily_log_to_csv, to_anki_tsv
 from desktop_pet.core.theme import resolve_theme, theme_stops, ui_accent_for_theme
 from desktop_pet.core.event_aggregator import KeystrokeAggregator
 from desktop_pet.core.mood_state_machine import (
@@ -57,6 +60,8 @@ from desktop_pet.core.word_details_cache_store import WordDetailsCacheStore
 from desktop_pet.ui.bubble import BubbleWindow
 from desktop_pet.ui.bubble_button_bar import BubbleButtonBar
 from desktop_pet.ui.bubble_text_dialog import BubbleTextDialog
+from desktop_pet.ui.confirm_dialog import ConfirmDialog
+from desktop_pet.ui.data_window import DataWindow
 from desktop_pet.ui.log_window import LogWindow
 from desktop_pet.ui.mastered_window import MasteredWindow
 from desktop_pet.ui.motion_ui import show_window_animated
@@ -185,6 +190,8 @@ class PetAppController(QObject):
         self._log_window: LogWindow | None = None
         # 学习统计窗口（懒加载单例，数据每次打开时经 build_summary 现聚合）
         self._stats_window: StatsWindow | None = None
+        # 数据管理窗口（懒加载单例；导出 / 备份的业务全在 controller）
+        self._data_window: DataWindow | None = None
 
         # —— 错题本（易错词）运行时状态：无独立存储，从每日记录 review_lapsed
         #    惰性派生（脏标记缓存）；每日一次提醒（托盘通知）走排期制 ——
@@ -379,6 +386,7 @@ class PetAppController(QObject):
         self._tray.jp_log_requested.connect(self._on_jp_log)
         self._tray.jp_stats_requested.connect(self._on_jp_stats)
         self._tray.jp_import_bank_requested.connect(self._on_jp_import_bank)
+        self._tray.data_manager_requested.connect(self._on_data_manager)
 
         # 日语记忆：气泡按钮条（记住了 / 新单词；复习模式 = 还记得 / 忘了）
         self._button_bar.mastered_clicked.connect(self._on_word_mastered)
@@ -662,6 +670,7 @@ class PetAppController(QObject):
             self._vocab_window,
             self._log_window,
             self._stats_window,
+            self._data_window,
             self._detail_window,
             self._mastered_window,
         ):
@@ -1211,6 +1220,175 @@ class PetAppController(QObject):
             self._tray.notify(
                 C.APP_DISPLAY_NAME,
                 C.JP_NOTIFY_BANK_IMPORT_FAILED.format(reason="未知错误，请稍后重试"),
+            )
+
+    # ------------------------------------------------------------------ #
+    # 内部：数据管理（导出 Anki/CSV、一键备份与还原）
+    # ------------------------------------------------------------------ #
+    def _on_data_manager(self) -> None:
+        """打开数据管理窗口（单例，重开则前置）。"""
+
+        try:
+            if self._data_window is None:
+                self._data_window = DataWindow()
+                self._data_window.set_accent(ui_accent_for_theme(self._current_theme))
+                self._data_window.anki_export_requested.connect(self._export_anki)
+                self._data_window.csv_export_requested.connect(self._export_daily_csv)
+                self._data_window.backup_export_requested.connect(self._export_backup)
+                self._data_window.backup_import_requested.connect(self._import_backup)
+            self._data_window.set_data_dir(str(ConfigStore.default_path().parent))
+            self._data_window.set_reduce_motion(self._cfg.reduce_motion)
+            show_window_animated(self._data_window, self._cfg.reduce_motion)
+            self._data_window.raise_()
+            self._data_window.activateWindow()
+        except Exception:  # noqa: BLE001
+            logger.exception("打开数据管理窗口异常（已忽略）")
+
+    def _ask_save_path(
+        self, title: str, prefix: str, ext: str, file_filter: str
+    ) -> Path | None:
+        """弹出保存对话框；取消时通知并返回 ``None``（每次点击必有可见反馈）。"""
+
+        default = f"{prefix}{datetime.now().strftime('%Y%m%d')}{ext}"
+        selected, _filter = QFileDialog.getSaveFileName(None, title, default, file_filter)
+        if not selected:
+            self._tray.notify(C.APP_DISPLAY_NAME, C.DATA_NOTIFY_EXPORT_CANCELLED)
+            return None
+        return Path(selected)
+
+    def _export_anki(self) -> None:
+        """导出已掌握词库为 Anki TSV（utf-8-sig 落盘，Anki 文本导入直接可用）。"""
+
+        try:
+            items = self._mastered.items()
+            if not items:
+                self._tray.notify(C.APP_DISPLAY_NAME, C.DATA_NOTIFY_EMPTY)
+                return
+            path = self._ask_save_path(
+                C.DATA_ANKI_DIALOG_TITLE,
+                C.DATA_ANKI_FILE_PREFIX,
+                ".txt",
+                C.DATA_ANKI_DIALOG_FILTER,
+            )
+            if path is None:
+                return
+            path.write_text(to_anki_tsv(items), encoding="utf-8-sig")
+            self._tray.notify(
+                C.APP_DISPLAY_NAME,
+                C.DATA_NOTIFY_ANKI_DONE.format(count=len(items), path=path),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("导出 Anki 词库失败")
+            self._tray.notify(
+                C.APP_DISPLAY_NAME, C.DATA_NOTIFY_EXPORT_FAILED.format(reason=exc)
+            )
+
+    def _export_daily_csv(self) -> None:
+        """导出全部每日学习记录为 CSV（utf-8-sig，Excel 可直接打开）。"""
+
+        try:
+            total = sum(
+                self._daily_log.count_for(day) for day in self._daily_log.days()
+            )
+            if not total:
+                self._tray.notify(C.APP_DISPLAY_NAME, C.DATA_NOTIFY_EMPTY)
+                return
+            path = self._ask_save_path(
+                C.DATA_CSV_DIALOG_TITLE,
+                C.DATA_CSV_FILE_PREFIX,
+                ".csv",
+                C.DATA_CSV_DIALOG_FILTER,
+            )
+            if path is None:
+                return
+            path.write_text(daily_log_to_csv(self._daily_log), encoding="utf-8-sig")
+            self._tray.notify(
+                C.APP_DISPLAY_NAME,
+                C.DATA_NOTIFY_CSV_DONE.format(count=total, path=path),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("导出学习记录 CSV 失败")
+            self._tray.notify(
+                C.APP_DISPLAY_NAME, C.DATA_NOTIFY_EXPORT_FAILED.format(reason=exc)
+            )
+
+    def _backup_sources(self) -> dict[str, Path]:
+        """备份收录文件 → 实际路径映射（缺失的文件由 create_backup 自行跳过）。"""
+
+        return {
+            C.CONFIG_FILE_NAME: ConfigStore.default_path(),
+            C.VOCAB_FILE_NAME: VocabStore.default_path(),
+            C.MASTERED_FILE_NAME: MasteredStore.default_path(),
+            C.DAILY_LOG_FILE_NAME: DailyLogStore.default_path(),
+            C.WORD_DETAILS_CACHE_FILENAME: WordDetailsCacheStore.default_path(),
+            C.EXTRA_WORD_BANK_FILE_NAME: paths.extra_word_bank_path(),
+        }
+
+    def _export_backup(self) -> None:
+        """一键备份：数据目录内全部用户数据打包为 zip（清单含版本与创建时间）。"""
+
+        try:
+            path = self._ask_save_path(
+                C.DATA_BACKUP_DIALOG_TITLE,
+                C.DATA_BACKUP_FILE_PREFIX,
+                ".zip",
+                C.DATA_BACKUP_DIALOG_FILTER,
+            )
+            if path is None:
+                return
+            create_backup(
+                self._backup_sources(),
+                path,
+                app_version=__version__,
+                created_at=self._now_iso(),
+            )
+            self._tray.notify(
+                C.APP_DISPLAY_NAME, C.DATA_NOTIFY_BACKUP_DONE.format(path=path)
+            )
+        except BackupError as exc:
+            logger.warning("备份失败：%s", exc)
+            self._tray.notify(
+                C.APP_DISPLAY_NAME, C.DATA_NOTIFY_EXPORT_FAILED.format(reason=exc)
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("备份异常")
+            self._tray.notify(
+                C.APP_DISPLAY_NAME, C.DATA_NOTIFY_EXPORT_FAILED.format(reason=exc)
+            )
+
+    def _import_backup(self) -> None:
+        """从备份 zip 还原数据（先确认；覆盖前留档；还原后需重启生效）。"""
+
+        try:
+            selected, _filter = QFileDialog.getOpenFileName(
+                None,
+                C.DATA_RESTORE_DIALOG_TITLE,
+                "",
+                C.DATA_RESTORE_DIALOG_FILTER,
+            )
+            if not selected:
+                self._tray.notify(C.APP_DISPLAY_NAME, C.DATA_NOTIFY_RESTORE_CANCELLED)
+                return
+            confirmed = ConfirmDialog.ask(
+                None,
+                C.DATA_RESTORE_CONFIRM_TITLE,
+                C.DATA_RESTORE_CONFIRM_TEXT,
+                C.DATA_RESTORE_CONFIRM_BUTTON,
+            )
+            if not confirmed:
+                self._tray.notify(C.APP_DISPLAY_NAME, C.DATA_NOTIFY_RESTORE_CANCELLED)
+                return
+            restore_backup(Path(selected), ConfigStore.default_path().parent)
+            self._tray.notify(C.APP_DISPLAY_NAME, C.DATA_NOTIFY_RESTORE_DONE)
+        except BackupError as exc:
+            logger.warning("还原失败：%s", exc)
+            self._tray.notify(
+                C.APP_DISPLAY_NAME, C.DATA_NOTIFY_RESTORE_FAILED.format(reason=exc)
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("还原备份异常")
+            self._tray.notify(
+                C.APP_DISPLAY_NAME, C.DATA_NOTIFY_RESTORE_FAILED.format(reason=exc)
             )
 
     def _on_jp_vocab(self) -> None:
@@ -2181,6 +2359,7 @@ class PetAppController(QObject):
                 self._vocab_window,
                 self._log_window,
                 self._stats_window,
+                self._data_window,
                 self._detail_window,
                 self._mastered_window,
             ):

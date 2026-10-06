@@ -1327,6 +1327,62 @@ WORD_DETAILS_CACHE_FILENAME: Final[str] = "word_details_cache.json"
 WORD_DETAILS_CACHE_VERSION: Final[int] = 1
 WORD_DETAILS_CACHE_TTL_DAYS: Final[int] = 0
 
+# --------------------------------------------------------------------------- #
+# 12b. 数据管理（导出 Anki/CSV、一键备份与还原）
+# --------------------------------------------------------------------------- #
+TRAY_MENU_DATA: Final[str] = "数据管理…"
+DATA_WINDOW_TITLE: Final[str] = "数据管理"
+DATA_WINDOW_W: Final[int] = 460
+DATA_WINDOW_H: Final[int] = 340
+DATA_BTN_ANKI: Final[str] = "导出 Anki（已掌握）"
+DATA_BTN_CSV: Final[str] = "导出学习记录 CSV"
+DATA_BTN_BACKUP: Final[str] = "导出全部数据备份"
+DATA_BTN_RESTORE: Final[str] = "导入备份…"
+DATA_ANKI_TIP: Final[str] = "把已掌握词库导出为 Anki 可直接导入的 TSV 文件"
+DATA_CSV_TIP: Final[str] = "把全部每日学习记录导出为 CSV（Excel 可直接打开）"
+DATA_BACKUP_TIP: Final[str] = "把配置、词库、学习记录等全部数据打包为 zip 备份"
+DATA_RESTORE_TIP: Final[str] = "从备份 zip 还原数据（还原后需重启应用生效）"
+DATA_PATH_LABEL: Final[str] = "数据目录："
+DATA_ANKI_DIALOG_TITLE: Final[str] = "导出 Anki 词库（TSV）"
+DATA_ANKI_DIALOG_FILTER: Final[str] = "Anki 词库文本 (*.txt);;所有文件 (*)"
+DATA_CSV_DIALOG_TITLE: Final[str] = "导出学习记录（CSV）"
+DATA_CSV_DIALOG_FILTER: Final[str] = "CSV 表格 (*.csv);;所有文件 (*)"
+DATA_BACKUP_DIALOG_TITLE: Final[str] = "备份数据（zip）"
+DATA_BACKUP_DIALOG_FILTER: Final[str] = "备份包 (*.zip);;所有文件 (*)"
+DATA_RESTORE_DIALOG_TITLE: Final[str] = "选择备份包"
+DATA_RESTORE_DIALOG_FILTER: Final[str] = "备份包 (*.zip);;所有文件 (*)"
+DATA_ANKI_FILE_PREFIX: Final[str] = "desktop-pet-anki-"
+DATA_CSV_FILE_PREFIX: Final[str] = "desktop-pet-学习记录-"
+DATA_BACKUP_FILE_PREFIX: Final[str] = "desktop-pet-backup-"
+DATA_NOTIFY_ANKI_DONE: Final[str] = "已导出 Anki 词库（{count} 词）：{path}"
+DATA_NOTIFY_CSV_DONE: Final[str] = "已导出学习记录（{count} 条）：{path}"
+DATA_NOTIFY_EMPTY: Final[str] = "没有可导出的数据"
+DATA_NOTIFY_EXPORT_CANCELLED: Final[str] = "已取消导出"
+DATA_NOTIFY_EXPORT_FAILED: Final[str] = "导出失败：{reason}"
+DATA_NOTIFY_BACKUP_DONE: Final[str] = "备份完成：{path}"
+DATA_NOTIFY_RESTORE_DONE: Final[str] = "备份已还原，重启应用后生效"
+DATA_NOTIFY_RESTORE_CANCELLED: Final[str] = "已取消还原"
+DATA_NOTIFY_RESTORE_FAILED: Final[str] = "还原失败：{reason}"
+DATA_RESTORE_CONFIRM_TITLE: Final[str] = "还原备份"
+DATA_RESTORE_CONFIRM_TEXT: Final[str] = (
+    "将用备份包中的文件覆盖当前数据（覆盖前会先在数据目录留档），"
+    "还原后需要重启应用生效。确定继续吗？"
+)
+DATA_RESTORE_CONFIRM_BUTTON: Final[str] = "还原"
+#: 备份清单格式版本（manifest.json 的 version 字段）
+BACKUP_MANIFEST_VERSION: Final[int] = 1
+#: 备份包收录的用户数据文件（数据目录下；app.log / audio_cache 可再生，不入包）
+BACKUP_FILES: Final[tuple[str, ...]] = (
+    CONFIG_FILE_NAME,
+    VOCAB_FILE_NAME,
+    MASTERED_FILE_NAME,
+    DAILY_LOG_FILE_NAME,
+    WORD_DETAILS_CACHE_FILENAME,
+    EXTRA_WORD_BANK_FILE_NAME,
+)
+#: 还原前对既有文件的留档后缀（同目录、不覆盖旧留档）
+BACKUP_PRE_RESTORE_SUFFIX: Final[str] = ".pre-restore"
+
 # —— DeepSeek 联网（OpenAI 兼容接口；仅标准库 urllib，默认超时 10s / 重试 1）——
 LLM_ENDPOINT: Final[str] = "https://api.deepseek.com/v1/chat/completions"
 LLM_MODEL: Final[str] = "deepseek-chat"

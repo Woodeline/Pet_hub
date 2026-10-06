@@ -56,6 +56,8 @@ class TrayController(QObject):
     jp_log_requested = Signal()
     jp_stats_requested = Signal()
     jp_import_bank_requested = Signal()
+    #: 打开「数据管理」窗口（导出 Anki/CSV、一键备份与还原）
+    data_manager_requested = Signal()
 
     def __init__(self, icon: QIcon, cfg: AppConfig) -> None:
         """构造托盘控制器。
@@ -425,6 +427,11 @@ class TrayController(QObject):
             lambda _checked=False: self.jp_import_bank_requested.emit()
         )
 
+        self._action_data = QAction(C.TRAY_MENU_DATA, self._menu)
+        self._action_data.triggered.connect(
+            lambda _checked=False: self.data_manager_requested.emit()
+        )
+
         scale_menu = ShadowMenu("大小", self._menu)
         self._scale_group = QActionGroup(self._menu)
         self._scale_group.setExclusive(True)
@@ -501,6 +508,7 @@ class TrayController(QObject):
         jp.addAction(self._action_jp_stats)
         jp.addAction(self._action_jp_import)
         menu.addMenu(jp)
+        menu.addAction(self._action_data)
         menu.addSeparator()
         # 「外观」三兄弟：大小 + 主题（配色）+ 皮肤（MOD 包）
         menu.addMenu(scale_menu)
