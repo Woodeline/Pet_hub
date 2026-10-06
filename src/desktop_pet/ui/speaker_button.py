@@ -63,7 +63,10 @@ class SpeakerButton(QLabel):
         self._size = QSize(C.SPACING["xl"], C.SPACING["xl"])
         self._state: str = STATE_NORMAL
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setStyleSheet("background: transparent;")
+        # 透明底声明必须带类选择器：无选择器写法会被 Qt 包装成 ``* {…}`` 并
+        # 泄漏给 tooltip 窗口（QTipLabel 继承 hover 部件的规则集），背景被画成
+        # 透明——tooltip 无 alpha 通道，Windows 上渲染成黑色色块。
+        self.setStyleSheet("SpeakerButton { background: transparent; }")
         self.set_state(STATE_NORMAL)
 
     @property
