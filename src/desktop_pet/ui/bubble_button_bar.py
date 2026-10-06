@@ -31,10 +31,18 @@ _BUTTON_SPACING: Final[int] = 8
 
 
 class BubbleButtonBar(QWidget):
-    """学习单词按钮条（常驻可交互浮层，复用单实例）。"""
+    """学习单词按钮条（常驻可交互浮层，复用单实例）。
+
+    双模式（几何 / 样式完全复用，仅换文案与信号路由）：
+    - 学习模式（默认）：「记住了」（主色）/「新单词」（描边）→ ``mastered_clicked`` / ``vocab_clicked``；
+    - 复习模式（``show_bar(review=True)``，记忆曲线）：「还记得」/「忘了」
+      → ``review_ok_clicked`` / ``review_lapsed_clicked``。
+    """
 
     mastered_clicked = Signal()
     vocab_clicked = Signal()
+    review_ok_clicked = Signal()
+    review_lapsed_clicked = Signal()
 
     def __init__(self) -> None:
         """构造按钮条窗口。"""
@@ -66,8 +74,11 @@ class BubbleButtonBar(QWidget):
         layout.addWidget(self._btn_mastered)
         layout.addWidget(self._btn_vocab)
 
-        self._btn_mastered.clicked.connect(self.mastered_clicked.emit)
-        self._btn_vocab.clicked.connect(self.vocab_clicked.emit)
+        self._btn_mastered.clicked.connect(self._emit_primary)
+        self._btn_vocab.clicked.connect(self._emit_secondary)
+
+        # 复习模式标志：True 时主按钮 = 「还记得」(review_ok)、副按钮 = 「忘了」(review_lapsed)
+        self._review_mode: bool = False
 
         self.setStyleSheet(self._build_qss())
 
@@ -97,7 +108,12 @@ class BubbleButtonBar(QWidget):
     # 公共 API
     # ------------------------------------------------------------------ #
     def show_bar(
-        self, anchor: QPoint, bubble_rect: QRect, pointing_down: bool, duration: float
+        self,
+        anchor: QPoint,
+        bubble_rect: QRect,
+        pointing_down: bool,
+        duration: float,
+        review: bool = False,
     ) -> None:
         """在气泡尾尖下方（或上方）显示按钮条并启动相位机。
 
@@ -106,8 +122,10 @@ class BubbleButtonBar(QWidget):
             bubble_rect: 气泡窗口的全局 :class:`QRect`。
             pointing_down: 气泡三角尖是否朝下（决定按钮条在气泡下方还是上方）。
             duration: 停留时长（秒，钳制到学习泡泡时长范围）。
+            review: ``True`` = 复习模式（「还记得 / 忘了」，记忆曲线作答按钮）。
         """
 
+        self._set_review_mode(review)
         self._duration = min(
             C.JP_BUBBLE_MAX_DURATION_S, max(C.JP_BUBBLE_MIN_DURATION_S, float(duration))
         )
@@ -128,7 +146,38 @@ class BubbleButtonBar(QWidget):
         self._timer.stop()
         self._phase = _PHASE_HIDDEN
         self._alpha = 0.0
+        self._review_mode = False
         self.hide()
+
+    # ------------------------------------------------------------------ #
+    # 模式与信号路由
+    # ------------------------------------------------------------------ #
+    def _set_review_mode(self, review: bool) -> None:
+        """切换学习 / 复习模式文案（信号路由在点击时按标志分发）。"""
+
+        self._review_mode = bool(review)
+        if self._review_mode:
+            self._btn_mastered.setText(C.JP_BUTTON_REVIEW_OK)
+            self._btn_vocab.setText(C.JP_BUTTON_REVIEW_LAPSED)
+        else:
+            self._btn_mastered.setText(C.JP_BUTTON_MASTERED)
+            self._btn_vocab.setText(C.JP_BUTTON_VOCAB)
+
+    def _emit_primary(self) -> None:
+        """主按钮点击 → 按当前模式分发（复习 = 还记得；学习 = 记住了）。"""
+
+        if self._review_mode:
+            self.review_ok_clicked.emit()
+        else:
+            self.mastered_clicked.emit()
+
+    def _emit_secondary(self) -> None:
+        """副按钮点击 → 按当前模式分发（复习 = 忘了；学习 = 新单词）。"""
+
+        if self._review_mode:
+            self.review_lapsed_clicked.emit()
+        else:
+            self.vocab_clicked.emit()
 
     # ------------------------------------------------------------------ #
     # 绘制

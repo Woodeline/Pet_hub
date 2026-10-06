@@ -18,8 +18,9 @@ import random
 import shutil
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Callable
 
 from PySide6.QtCore import QObject, QPoint, QTimer
 from PySide6.QtGui import QGuiApplication
@@ -38,7 +39,7 @@ from desktop_pet.core.mood_state_machine import (
     expression_for_mood,
 )
 from desktop_pet.core.daily_log_store import DailyLogEntry, DailyLogStore
-from desktop_pet.core.mastered_store import MasteredStore
+from desktop_pet.core.mastered_store import MasteredItem, MasteredStore
 from desktop_pet.core.pet_model import PetModel
 from desktop_pet.core.vocab_store import VocabStore
 from desktop_pet.core.vocabulary import (
@@ -55,10 +56,12 @@ from desktop_pet.ui.bubble import BubbleWindow
 from desktop_pet.ui.bubble_button_bar import BubbleButtonBar
 from desktop_pet.ui.bubble_text_dialog import BubbleTextDialog
 from desktop_pet.ui.log_window import LogWindow
+from desktop_pet.ui.mastered_window import MasteredWindow
 from desktop_pet.ui.motion_ui import show_window_animated
 from desktop_pet.ui.pet_renderer import PetRenderer
 from desktop_pet.ui.pet_window import PetWindow
 from desktop_pet.ui.skin_renderer import build_skin_renderer
+from desktop_pet.ui.speaker_button import PronunciationController
 from desktop_pet.ui.tray import TrayController
 from desktop_pet.ui.vocab_window import VocabWindow
 from desktop_pet.ui.word_detail_window import WordDetailWindow
@@ -70,6 +73,38 @@ logger = logging.getLogger(__name__)
 _MAX_FRAME_DT_S: float = 0.25
 #: 敲击后维持活跃帧率的时长（秒）
 _ACTIVE_HOLD_S: float = 1.0
+
+# —— ISO8601 UTC 时间助手（记忆曲线复习排期专用；core 层零 datetime，日期算术全在 app 层）——
+#: 与各 store 注入格式一致：定长零填充 UTC，字典序即时间序
+_ISO_FMT: str = "%Y-%m-%dT%H:%M:%SZ"
+
+
+def _iso_shift(iso: str, *, days: int = 0, hours: int = 0) -> str:
+    """把 ISO8601 UTC 字符串平移 ``days`` 天 / ``hours`` 小时后返回同格式字符串。
+
+    解析失败时原样返回（调用方保证入参来自 :meth:`_now_iso`，正常不会触发）。
+    """
+
+    try:
+        dt = datetime.strptime(iso, _ISO_FMT).replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return str(iso)
+    shifted = dt + timedelta(days=days, hours=hours)
+    return shifted.strftime(_ISO_FMT)
+
+
+def _iso_to_wall(iso: str) -> float:
+    """ISO8601 UTC 字符串 → 墙钟秒（``time.time`` 同基准）；非法返回 ``inf``。
+
+    用墙钟而非 ``time.monotonic``：``due_at`` 是日历时刻，睡眠 / 休眠唤醒后
+    依然正确；帧循环仅做浮点比较，代价可忽略。
+    """
+
+    try:
+        dt = datetime.strptime(str(iso), _ISO_FMT).replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return float("inf")
+    return dt.timestamp()
 #: 触发气泡的"瞬时反馈"表情集合 —— 即**键盘敲击专属文案键**，唯一来源为
 #: ``constants.KEYBOARD_BUBBLE_EXPRESSIONS``（这些键的文案都含键盘关键字，
 #: 且只会由 :meth:`PetAppController._on_keystroke` 驱动，保证文案与触发方式相匹配）。
@@ -160,12 +195,31 @@ class PetAppController(QObject):
         # 置 True 后排期置 inf 停止空转；等级切换 / 导入词库 / 跨日 时复位。
         self._pool_exhausted: bool = False
 
+        # —— 记忆曲线（间隔重复）运行时状态（已掌握词库窗口单例 / 复习单飞）——
+        # 复习与展示共用「当前词」单飞槽：复习态由 ``_reviewing`` 区分，
+        # 处置走 ``_dispose_review``（还记得 / 忘了），与新词三态处置互斥。
+        self._reviewing: bool = False
+        self._mastered_window: MasteredWindow | None = None
+        # 最早到期复习的墙钟秒（``time.time`` 基准；inf = 无排期 / 学习关闭）。
+        # 仅在 mastered 集合变化与学习开关切换时重算，帧循环只做浮点比较。
+        self._next_review_wall_ts: float = float("inf")
+        # 复习节奏门控（monotonic）：下一次复习泡泡允许展示的最早时刻。
+        # 每次复习处置后重排为 now + 30~600s（与生词同款节奏）——唤醒器不得
+        # 早于此拉起单词槽，杜绝「到期复习连环轰炸」（2026-10-01 用户反馈）。
+        self._next_review_ts: float = float("-inf")
+        # 当日复习额度用完的一次性通知标志（跨日复位）
+        self._review_done_notified: bool = False
+        # 墙钟源（可注入替身：测试钉死时刻，规避真实时钟不可复现）
+        self._wall_now: Callable[[], float] = time.time
+
         # —— 单词详情（中文五要素）：打包详情库（只读）+ 用户缓存 + 详情窗口单例 ——
         self._detail_bank: WordDetailBank = WordDetailBank.empty()
         self._detail_cache: WordDetailsCacheStore = WordDetailsCacheStore(
             WordDetailsCacheStore.default_path()
         )
         self._detail_window: WordDetailWindow | None = None
+        # —— 单词发音：详情窗 / 生词本卡片共用一个发音控制器（联网 + 缓存 + 播放）——
+        self._pronunciation: PronunciationController = PronunciationController(parent=self)
 
         # —— 主题皮肤：当前生效皮肤名 + 每日重估定时器（挂 parent，随控制器销毁）——
         self._current_theme: str = C.DEFAULT_THEME
@@ -207,6 +261,7 @@ class PetAppController(QObject):
         self._tray.set_jp_level_checked(self._cfg.jp_level)
         self._tray.set_jp_duration_checked(self._cfg.jp_bubble_duration_s)
         self._tray.set_jp_daily_limit_checked(self._cfg.jp_daily_limit)
+        self._tray.set_jp_review_limit_checked(self._cfg.jp_review_daily_limit)
         self._tray.set_jp_enabled(self._cfg.jp_enabled)
         self._tray.show()
         self._notify_jp_startup_state()
@@ -304,14 +359,18 @@ class PetAppController(QObject):
         self._tray.jp_level_selected.connect(self._on_jp_level_selected)
         self._tray.jp_duration_selected.connect(self._on_jp_duration_selected)
         self._tray.jp_daily_limit_selected.connect(self._on_jp_daily_limit_selected)
+        self._tray.jp_review_limit_selected.connect(self._on_jp_review_limit_selected)
         self._tray.jp_show_now_requested.connect(self._on_jp_show_now)
         self._tray.jp_vocab_requested.connect(self._on_jp_vocab)
+        self._tray.jp_mastered_requested.connect(self._on_jp_mastered)
         self._tray.jp_log_requested.connect(self._on_jp_log)
         self._tray.jp_import_bank_requested.connect(self._on_jp_import_bank)
 
-        # 日语记忆：气泡按钮条（记住了 / 新单词）
+        # 日语记忆：气泡按钮条（记住了 / 新单词；复习模式 = 还记得 / 忘了）
         self._button_bar.mastered_clicked.connect(self._on_word_mastered)
         self._button_bar.vocab_clicked.connect(self._on_word_vocab)
+        self._button_bar.review_ok_clicked.connect(self._on_review_ok)
+        self._button_bar.review_lapsed_clicked.connect(self._on_review_lapsed)
         # 双击单词气泡 → 记生词 + 打开中文详情（情绪气泡穿透收不到，天然无效）
         self._bubble.word_detail_requested.connect(self._on_bubble_word_detail)
 
@@ -371,6 +430,8 @@ class PetAppController(QObject):
             if today != self._today_str:
                 self._today_str = today
                 self._today_done_notified = False
+                # 跨日：复习额度通知标志复位（配额按日重计）
+                self._review_done_notified = False
                 # 跨日：清空内存级「当日手动展示」去重集合（D2，不落盘）
                 self._manual_shown_ids_today.clear()
                 # 跨日：当日已展示排除集随新日期 key 自然清空，池耗尽可能解除
@@ -379,13 +440,17 @@ class PetAppController(QObject):
                 # 跨日 → 顺带重估主题（保证跨月零点自动换肤，而非最多等一天）
                 self._recheck_theme()
 
-            # ② 超时检测：当前词到点未处置 → 记「未处理」（与按钮点击单飞互斥）
+            # ② 超时检测：当前词到点未处置 → 记「未处理」（与按钮点击单飞互斥）；
+            #    复习泡泡超时不算遗忘：仅顺延 due（无痕跳过，见 _postpone_review）
             if (
                 self._current_word is not None
                 and not self._word_disposed
                 and now >= self._word_deadline
             ):
-                self._dispose_word(C.DAILY_LOG_STATUS_UNPROCESSED, now)
+                if self._reviewing:
+                    self._postpone_review(now)
+                else:
+                    self._dispose_word(C.DAILY_LOG_STATUS_UNPROCESSED, now)
 
             transition = self._sm.update(now)
             if transition.changed:
@@ -416,6 +481,9 @@ class PetAppController(QObject):
                     self._show_bubble_for(self._sm.mood, now)
 
             # 学习模式：独立随机节奏（30~600s）展示日语单词（挂在既有帧循环，不新开 QTimer）
+            # 之前先做「复习唤醒」：有到期复习时把单词排期提前到下一帧——
+            # 到期复习卡片优先于新词展示（复习是记忆曲线的刚性约定，见 _show_word_bubble）。
+            self._maybe_wake_for_review(now)
             if self._cfg.jp_enabled and now >= self._next_word_ts:
                 self._show_word_bubble(now)
                 self._schedule_next_word(now)
@@ -567,7 +635,7 @@ class PetAppController(QObject):
     def _apply_reduce_motion_to_windows(self, enabled: bool) -> None:
         """把「减少动效」同步到已创建的业务窗口（未创建则跳过，show 时会再读配置）。"""
 
-        for window in (self._vocab_window, self._log_window, self._detail_window):
+        for window in (self._vocab_window, self._log_window, self._detail_window, self._mastered_window):
             if window is None:
                 continue
             try:
@@ -698,6 +766,8 @@ class PetAppController(QObject):
         except Exception:  # noqa: BLE001
             logger.exception("加载已掌握集合失败（已忽略，使用空集合）")
             self._mastered = MasteredStore(MasteredStore.default_path())
+        # v1 → v2 迁移：旧记录无 SRS 字段（stage=0 / due_at 空），就位补首轮排期
+        self._migrate_mastered_review()
 
         try:
             self._daily_log = DailyLogStore(DailyLogStore.default_path())
@@ -774,6 +844,22 @@ class PetAppController(QObject):
         if not self._today_str:
             self._today_str = self._local_date_str()
 
+        # 复习优先（记忆曲线）：有到期复习先弹复习卡片，再轮到新词。
+        # 复习**不受新词每日配额约束**，但受两道自有闸门（2026-10-01 用户反馈
+        # 「连续不断」后的优化）：
+        # - 节奏门控 ``_next_review_ts``：两次复习之间强制 30~600s 间隔，
+        #   未到点时本槽让位给新词（有到期复习也不再连环弹）；
+        # - 每日复习上限 ``jp_review_daily_limit``：作答数达上限后今日不再自动弹
+        #   （一次性通知后恢复新词节奏；手动「立即复习」不受限）。
+        if not manual:
+            due = self._mastered.due_items(self._now_iso())
+            if due:
+                if self._review_quota_reached():
+                    self._maybe_notify_review_done()
+                elif now >= self._next_review_ts:
+                    self._begin_review(due[0], now)
+                    return
+
         # 停止判定：达到每日上限 → 一次性通知后今日不再弹
         # 仅自动路径受限；手动「立即显示」传 manual=True 可突破（用户决策）
         if not manual and self._jp_stop_for_today():
@@ -813,6 +899,7 @@ class PetAppController(QObject):
         self._word_deadline = now + self._cfg.jp_bubble_duration_s
         self._word_disposed = False
         self._word_manual = manual
+        self._reviewing = False
 
         anchor = self._bubble_anchor()
         self._bubble.set_anchor(anchor)
@@ -835,6 +922,9 @@ class PetAppController(QObject):
         if checked:
             self._level_done_notified = False
             self._pool_exhausted = False
+            self._review_done_notified = False
+            self._next_review_ts = float("-inf")
+            self._refresh_review_schedule()
             self._schedule_next_word(now)
             if not self._cfg.bubble_enabled:
                 self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_NEED_BUBBLE)
@@ -843,6 +933,7 @@ class PetAppController(QObject):
                 self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_BANK_UNAVAILABLE)
         else:
             self._next_word_ts = float("inf")
+            self._next_review_wall_ts = float("inf")
             # 关闭学习时若仍有展示词：清理气泡/按钮条（不落库，用户主动关闭）
             if self._current_word is not None:
                 self._bubble.hide_bubble()
@@ -851,6 +942,7 @@ class PetAppController(QObject):
                 self._word_deadline = float("inf")
                 self._word_disposed = True
                 self._word_manual = False
+                self._reviewing = False
         self._persist()
 
     def _on_jp_level_selected(self, level: str) -> None:
@@ -890,6 +982,20 @@ class PetAppController(QObject):
         self._tray.set_jp_daily_limit_checked(value)
         self._persist()
 
+    def _on_jp_review_limit_selected(self, value: int) -> None:
+        """切换「复习上限」档位（单选，持久化，只信任档位值）。
+
+        上限调大后若当日已用完额度，允许再次弹出（一次性通知标志随之复位）。
+        """
+
+        value = int(value)
+        if value not in C.JP_REVIEW_DAILY_LIMIT_OPTIONS:
+            return
+        self._cfg.jp_review_daily_limit = value
+        self._tray.set_jp_review_limit_checked(value)
+        self._review_done_notified = False
+        self._persist()
+
     def _on_jp_show_now(self) -> None:
         """托盘「立即显示一个新单词」→ 先等价超时未处理当前词，再立即弹新词（方案 A）。
 
@@ -913,16 +1019,20 @@ class PetAppController(QObject):
                 self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_BANK_UNAVAILABLE)
                 return
 
-            # 当前词在展示 → 先等价超时落「未处理」；是否计数由 _dispose_word 内的
-            # _word_manual 标记天然决定（旧词为自动词则正常计数，为手动词则不计数）。
+            # 当前词在展示 → 先等价超时处置让位；复习词走无痕顺延（不算遗忘），
+            # 新词落「未处理」；是否计数由 _dispose_word 内的 _word_manual 标记
+            # 天然决定（旧词为自动词则正常计数，为手动词则不计数）。
             if self._current_word is not None and not self._word_disposed:
-                self._dispose_word(C.DAILY_LOG_STATUS_UNPROCESSED, now)
+                if self._reviewing:
+                    self._postpone_review(now)
+                else:
+                    self._dispose_word(C.DAILY_LOG_STATUS_UNPROCESSED, now)
 
             # manual=True：跳过每日上限停止判定，且处置时不计入每日数量统计
             self._show_word_bubble(now, bypass_gap=True, manual=True)
             if self._current_word is not None:
                 today = self._today_str or self._local_date_str()
-                count = self._daily_log.count_for(today)
+                count = self._daily_log.new_word_count_for(today)
                 limit = self._cfg.jp_daily_limit
                 # 已达/超出目标时用专用文案（明确「手动显示不计入每日数量」）
                 template = (
@@ -1027,7 +1137,7 @@ class PetAppController(QObject):
 
         try:
             if self._vocab_window is None:
-                self._vocab_window = VocabWindow()
+                self._vocab_window = VocabWindow(pronunciation=self._pronunciation)
                 self._vocab_window.set_accent(ui_accent_for_theme(self._current_theme))
                 self._vocab_window.remove_requested.connect(self._on_vocab_remove)
                 self._vocab_window.clear_requested.connect(self._on_vocab_clear)
@@ -1059,13 +1169,118 @@ class PetAppController(QObject):
         except Exception:  # noqa: BLE001
             logger.exception("清空生词本异常（已忽略）")
 
+    # ------------------------------------------------------------------ #
+    # 内部：已掌握词库窗口（查看 / 管理 / 手动复习）
+    # ------------------------------------------------------------------ #
+    def _on_jp_mastered(self) -> None:
+        """打开已掌握词库窗口（单例，重开则前置）。"""
+
+        try:
+            if self._mastered_window is None:
+                self._mastered_window = MasteredWindow(pronunciation=self._pronunciation)
+                self._mastered_window.set_accent(ui_accent_for_theme(self._current_theme))
+                self._mastered_window.review_requested.connect(self._on_mastered_review_now)
+                self._mastered_window.back_to_vocab_requested.connect(
+                    self._on_mastered_back_to_vocab
+                )
+                self._mastered_window.clear_requested.connect(self._on_mastered_clear)
+                self._mastered_window.word_double_clicked.connect(
+                    self._on_mastered_word_double_clicked
+                )
+            self._mastered_window.refresh(self._mastered.items())
+            self._mastered_window.set_reduce_motion(self._cfg.reduce_motion)
+            show_window_animated(self._mastered_window, self._cfg.reduce_motion)
+            self._mastered_window.raise_()
+            self._mastered_window.activateWindow()
+        except Exception:  # noqa: BLE001
+            logger.exception("打开已掌握词库窗口异常（已忽略）")
+
+    def _refresh_mastered_window(self) -> None:
+        """已掌握词库窗口若已打开则即时刷新（数据状态与页面展示一致）。"""
+
+        if self._mastered_window is not None:
+            self._mastered_window.refresh(self._mastered.items())
+
+    def _on_mastered_review_now(self, item_id: str) -> None:
+        """已掌握词库「立即复习」→ 让位当前词后直接弹该词的复习泡泡。
+
+        与托盘「立即显示」同口径：每次点击都必须给出可见反馈，严禁静默返回；
+        跳过最小间隔（用户显式点击），但保留睡觉 / 气泡关守卫。
+        """
+
+        try:
+            item = self._mastered.get(str(item_id))
+            if item is None:
+                return
+            if not self._cfg.jp_enabled:
+                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_JP_OFF)
+                return
+            if not self._cfg.bubble_enabled:
+                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_NEED_BUBBLE)
+                return
+            if self._sm.mood == Mood.SLEEP:
+                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_REVIEW_BLOCKED)
+                return
+
+            now = time.monotonic()
+            # 当前词在展示 → 先等价超时处置让位（复习词顺延 / 新词落未处理）
+            if self._current_word is not None and not self._word_disposed:
+                if self._reviewing:
+                    self._postpone_review(now)
+                else:
+                    self._dispose_word(C.DAILY_LOG_STATUS_UNPROCESSED, now)
+            self._begin_review(item, now)
+            self._tray.notify(
+                C.APP_DISPLAY_NAME,
+                C.JP_NOTIFY_REVIEW_NOW.format(word=item.word, kana=item.kana),
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("立即复习异常（已忽略）")
+
+    def _on_mastered_back_to_vocab(self, item_id: str) -> None:
+        """已掌握词库「退回生词本」→ 移出掌握集合（SRS 状态一并清除）+ 加入生词本。"""
+
+        try:
+            item = self._mastered.get(str(item_id))
+            if item is None or not self._mastered.remove(str(item_id)):
+                return
+            self._vocab.add(self._entry_from_mastered_item(item), self._now_iso())
+            self._tray.notify(
+                C.APP_DISPLAY_NAME,
+                C.JP_NOTIFY_MASTERED_BACK_TO_VOCAB.format(word=item.word),
+            )
+            self._refresh_review_schedule()
+            self._refresh_mastered_window()
+            if self._vocab_window is not None:
+                self._vocab_window.refresh(self._vocab.items())
+        except Exception:  # noqa: BLE001
+            logger.exception("退回生词本异常（已忽略）")
+
+    def _on_mastered_clear(self) -> None:
+        """清空已掌握词库（窗口内已二次确认）→ 全部词回到学习池。"""
+
+        try:
+            self._mastered.clear()
+            self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_MASTERED_CLEARED)
+            self._refresh_review_schedule()
+            self._refresh_mastered_window()
+        except Exception:  # noqa: BLE001
+            logger.exception("清空已掌握词库异常（已忽略）")
+
+    def _on_mastered_word_double_clicked(self, item_id: str) -> None:
+        """已掌握词库双击 → 按 id 还原词条并打开详情窗口。"""
+
+        item = self._mastered.get(str(item_id))
+        if item is not None:
+            self._open_word_detail(self._entry_from_mastered_item(item))
+
     def _local_date_str(self) -> str:
         """返回本地自然日字符串 ``YYYY-MM-DD``（仅 app 层使用 ``datetime``）。"""
 
         return datetime.now().strftime("%Y-%m-%d")
 
     def _jp_stop_for_today(self) -> bool:
-        """当日停止判定：仅达到每日上限时停止。
+        """当日停止判定：仅达到每日上限时停止（只数**新词**，复习两态不占配额）。
 
         不再用 ``all_mastered``（「当日已展示词全部点了掌握」）作为早停条件——
         那会让用户对第一个展示词点一次「记住了」就误判为「全部掌握」、当天后续
@@ -1075,7 +1290,7 @@ class PetAppController(QObject):
         """
 
         today = self._today_str or self._local_date_str()
-        return self._daily_log.count_for(today) >= self._cfg.jp_daily_limit
+        return self._daily_log.new_word_count_for(today) >= self._cfg.jp_daily_limit
 
     def _dispose_word(self, status: str, now: float) -> None:
         """单飞处置当前展示词（三态互斥：一次展示恰好落一种终态）。
@@ -1091,11 +1306,12 @@ class PetAppController(QObject):
         if entry is None:
             return
 
-        # 2) 置已处置标志，杜绝竞态；读取并即刻复位「手动展示」标记
+        # 2) 置已处置标志，杜绝竞态；读取并即刻复位「手动展示」/「复习」标记
         #    （末尾会排期下一词 / 或被守卫提前 return，标记不残留污染下次自动展示）
         self._word_disposed = True
         manual = self._word_manual
         self._word_manual = False
+        self._reviewing = False
 
         # 3) 立即隐藏气泡与按钮条
         self._bubble.hide_bubble()
@@ -1107,18 +1323,12 @@ class PetAppController(QObject):
         today = self._today_str or self._local_date_str()
         iso = self._now_iso()
         if status == C.DAILY_LOG_STATUS_MASTERED:
-            added = self._mastered.add(entry, iso)
             if not manual:
                 self._daily_log.add_entry(
                     today, DailyLogEntry.from_entry(entry, iso, status)
                 )
-            if added:
-                self._tray.notify(
-                    C.APP_DISPLAY_NAME,
-                    C.JP_NOTIFY_MASTERED_ADDED.format(word=entry.word, kana=entry.kana),
-                )
-            else:
-                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_MASTERED_DUPLICATE)
+            # 已掌握 = 不再需要当生词复习：同步移出生词本并即时刷新窗口
+            self._mark_word_mastered(entry, iso, self._remove_word_from_vocab(entry))
         elif status == C.DAILY_LOG_STATUS_VOCAB:
             added = self._vocab.add(entry, iso)
             if not manual:
@@ -1151,6 +1361,59 @@ class PetAppController(QObject):
         # 7) 排期下一词
         self._schedule_next_word(now)
 
+    def _mark_word_mastered(
+        self, entry: VocabEntry, iso: str, vocab_removed: bool = False
+    ) -> bool:
+        """写入已掌握集合并给出托盘反馈（气泡 / 详情「记住了」共用的唯一实现）。
+
+        掌握即入 SRS：首轮复习排在 ``REVIEW_INTERVALS_DAYS[0]`` 天后（记忆曲线
+        从掌握瞬间起算），并同步重估复习排期与已掌握词库窗口。
+
+        Args:
+            entry: 待标记词条。
+            iso: 掌握时间（ISO8601 UTC 字符串，由 app 层注入 core）。
+            vocab_removed: 本次是否**同时**把它从生词本移出（决定反馈文案后缀）。
+
+        Returns:
+            ``True`` = 新增掌握；``False`` = 此前已掌握（重复标记）。
+        """
+
+        added = self._mastered.add(
+            entry, iso, stage=0, due_at=_iso_shift(iso, days=C.REVIEW_INTERVALS_DAYS[0])
+        )
+        if added:
+            self._refresh_review_schedule()
+            self._refresh_mastered_window()
+        message = (
+            C.JP_NOTIFY_MASTERED_ADDED.format(word=entry.word, kana=entry.kana)
+            if added
+            else C.JP_NOTIFY_MASTERED_DUPLICATE
+        )
+        if vocab_removed:
+            message += C.JP_NOTIFY_VOCAB_REMOVED_SUFFIX
+        self._tray.notify(C.APP_DISPLAY_NAME, message)
+        return added
+
+    def _remove_word_from_vocab(self, entry: VocabEntry) -> bool:
+        """把词条移出生词本并即时刷新生词本窗口（若有）。
+
+        「记住了」= 已掌握，不再需要作为生词复习，故掌握处置必须同步移出生词本，
+        保持数据状态与页面展示一致。
+
+        Returns:
+            ``True`` = 确有移除（此前在生词本中）；``False`` = 不在生词本 / 词条非法。
+        """
+
+        try:
+            if entry is None or not self._vocab.remove(str(entry.id)):
+                return False
+            if self._vocab_window is not None:
+                self._vocab_window.refresh(self._vocab.items())
+            return True
+        except Exception:  # noqa: BLE001
+            logger.exception("移出生词本异常（已忽略）")
+            return False
+
     def _on_word_mastered(self) -> None:
         """气泡「记住了」按钮 → 处置为已掌握。"""
 
@@ -1161,6 +1424,245 @@ class PetAppController(QObject):
 
         self._dispose_word(C.DAILY_LOG_STATUS_VOCAB, time.monotonic())
 
+    # ------------------------------------------------------------------ #
+    # 记忆曲线（间隔重复）：复习排期 / 复习泡泡 / 三态处置
+    # ------------------------------------------------------------------ #
+    def _maybe_wake_for_review(self, now: float) -> None:
+        """帧循环每帧调用：有到期复习且排期还远 → 把单词排期提前到当前帧。
+
+        三道前置闸门（2026-10-01「连续不断」优化）：
+        - 节奏门控 ``_next_review_ts``：复习处置后强制等 30~600s，期间**不得**
+          唤醒（否则处置后下一帧立即拉起下一条，形成连环轰炸）；
+        - 每日复习上限：额度用完后不再唤醒（复习分支同样拦截）；
+        - 墙钟比较（``_wall_now``，``time.time`` 基准）：``due_at`` 是日历时刻，
+          睡眠 / 休眠唤醒后依然正确。
+
+        唤醒只是把 ``_next_word_ts`` 拉近，真正的守卫（单飞 / 睡觉 / 最小间隔 /
+        节奏 / 配额）都在 :meth:`_show_word_bubble` 内统一执行。
+        """
+
+        if not self._cfg.jp_enabled or not self._cfg.bubble_enabled:
+            return
+        if self._current_word is not None:
+            return
+        if now < self._next_review_ts:
+            return
+        if self._review_quota_reached():
+            return
+        if self._wall_now() < self._next_review_wall_ts:
+            return
+        if now < self._next_word_ts:
+            self._next_word_ts = now
+
+    def _review_quota_reached(self) -> bool:
+        """当日复习额度是否用完（只数已作答的复习：记得 + 忘了）。"""
+
+        today = self._today_str or self._local_date_str()
+        return self._daily_log.review_count_for(today) >= self._cfg.jp_review_daily_limit
+
+    def _maybe_notify_review_done(self) -> None:
+        """复习额度用完的一次性托盘通知（跨日复位；手动复习不经过此路径）。"""
+
+        if self._review_done_notified or not self._review_quota_reached():
+            return
+        self._review_done_notified = True
+        self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_REVIEW_TODAY_DONE)
+
+    def _refresh_review_schedule(self) -> None:
+        """重估最早到期复习的墙钟时刻（mastered 集合变化 / 学习开关切换后调用）。"""
+
+        if not self._cfg.jp_enabled:
+            self._next_review_wall_ts = float("inf")
+            return
+        earliest = self._mastered.earliest_due_iso()
+        self._next_review_wall_ts = _iso_to_wall(earliest) if earliest else float("inf")
+
+    def _migrate_mastered_review(self) -> None:
+        """v1 → v2 迁移：旧已掌握记录（无 SRS 字段）就位补首轮复习排期。
+
+        v1 记录取缺省 ``stage=0`` / ``due_at=""``：补 ``due = 现在 + 首轮间隔``，
+        即升级后的首个自然日起陆续进入复习。幂等：仅处理 ``due_at`` 为空的
+        未毕业记录；每次只落盘有变化的部分由 :meth:`MasteredStore.set_due_at` 自带。
+        """
+
+        try:
+            first_days = C.REVIEW_INTERVALS_DAYS[0]
+            iso_now = self._now_iso()
+            migrated = 0
+            for item in self._mastered.items():
+                if item.stage < len(C.REVIEW_INTERVALS_DAYS) and not item.due_at:
+                    if self._mastered.set_due_at(item.id, _iso_shift(iso_now, days=first_days)):
+                        migrated += 1
+            if migrated:
+                logger.info("已掌握记录 v1→v2 迁移：为 %d 条补排首轮复习（+%d 天）", migrated, first_days)
+        except Exception:  # noqa: BLE001 —— 迁移失败不阻塞启动
+            logger.exception("已掌握记录迁移异常（已忽略）")
+        self._refresh_review_schedule()
+
+    def _entry_from_mastered_item(self, item: MasteredItem) -> VocabEntry:
+        """由已掌握记录还原词条：词库优先，库中已不存在时用记录字段兜底。"""
+
+        entry = self._bank.entry_by_id(item.id)
+        if entry is not None:
+            return entry
+        return VocabEntry(
+            id=item.id,
+            level=item.level,
+            word=item.word,
+            kana=item.kana,
+            translation=item.translation,
+            meaning="",
+            romaji="",
+        )
+
+    def _begin_review(self, item: MasteredItem, now: float) -> None:
+        """弹出复习泡泡（无守卫——守卫由调用方负责；与展示词共用单飞槽）。
+
+        复习泡泡为**主动回忆**形态：隐藏翻译 / 释义行，仅展示单词 + 假名 +
+        作答提示；按钮条切复习模式（还记得 / 忘了）。双击气泡可打开详情「偷看」，
+        不打断本次复习（详见 :meth:`_on_bubble_word_detail`）。
+        """
+
+        entry = self._entry_from_mastered_item(item)
+        self._current_word = entry
+        self._word_deadline = now + self._cfg.jp_bubble_duration_s
+        self._word_disposed = False
+        self._word_manual = False
+        self._reviewing = True
+
+        anchor = self._bubble_anchor()
+        self._bubble.set_anchor(anchor)
+        self._bubble.show_word(entry, self._cfg.jp_bubble_duration_s, review=True)
+        self._button_bar.show_bar(
+            anchor,
+            self._bubble.geometry(),
+            self._bubble.pointing_down(),
+            self._cfg.jp_bubble_duration_s,
+            review=True,
+        )
+        self._last_bubble_ts = now
+
+    def _dispose_review(self, ok: bool, now: float) -> None:
+        """复习处置（两态互斥，与 :meth:`_dispose_word` 同构的单飞保证）。
+
+        - 还记得（``ok=True``）→ 阶段 +1、按阶梯重排 ``due_at``；走完阶梯则
+          毕业（不再排期）。写每日记录 ``review_ok``。
+        - 忘了（``ok=False``）→ 移出已掌握集合并**退回生词本**重学（SRS 状态
+          随记录一并清除，再次掌握时从首轮重新爬梯）。写每日记录 ``review_lapsed``。
+        - 两态都不占新词每日配额（复习不是新词学习量）。
+        """
+
+        # 1) 单飞守卫：同词二次处置直接丢弃
+        if self._word_disposed:
+            return
+        entry = self._current_word
+        if entry is None:
+            return
+
+        # 2) 置已处置标志并复位复习态
+        self._word_disposed = True
+        self._reviewing = False
+
+        # 3) 立即隐藏气泡与按钮条
+        self._bubble.hide_bubble()
+        self._button_bar.hide_bar()
+
+        # 4) 落库 + 反馈（复习处置恒写每日记录，无手动 / 自动之分）
+        today = self._today_str or self._local_date_str()
+        iso = self._now_iso()
+        item = self._mastered.get(entry.id)
+        if ok and item is not None:
+            new_stage = item.stage + 1
+            graduated = new_stage >= len(C.REVIEW_INTERVALS_DAYS)
+            due_iso = (
+                ""
+                if graduated
+                else _iso_shift(iso, days=C.REVIEW_INTERVALS_DAYS[new_stage])
+            )
+            self._mastered.apply_review(
+                entry.id, stage=new_stage, due_at=due_iso, reviewed_at=iso
+            )
+            self._daily_log.add_entry(
+                today, DailyLogEntry.from_entry(entry, iso, C.DAILY_LOG_STATUS_REVIEW_OK)
+            )
+            if graduated:
+                self._tray.notify(
+                    C.APP_DISPLAY_NAME,
+                    C.JP_NOTIFY_REVIEW_GRADUATED.format(word=entry.word, kana=entry.kana),
+                )
+            else:
+                self._tray.notify(
+                    C.APP_DISPLAY_NAME,
+                    C.JP_NOTIFY_REVIEW_OK.format(
+                        word=entry.word, days=C.REVIEW_INTERVALS_DAYS[new_stage]
+                    ),
+                )
+        elif item is not None:
+            self._mastered.remove(entry.id)
+            self._vocab.add(self._entry_from_mastered_item(item), iso)
+            self._daily_log.add_entry(
+                today,
+                DailyLogEntry.from_entry(entry, iso, C.DAILY_LOG_STATUS_REVIEW_LAPSED),
+            )
+            self._tray.notify(
+                C.APP_DISPLAY_NAME,
+                C.JP_NOTIFY_REVIEW_LAPSED.format(word=entry.word),
+            )
+            if self._vocab_window is not None:
+                self._vocab_window.refresh(self._vocab.items())
+
+        # 5) 清单飞状态 → 重估复习排期 → 节奏门控重排 → 排期下一词
+        self._current_word = None
+        self._word_deadline = float("inf")
+        self._refresh_review_schedule()
+        self._refresh_mastered_window()
+        # 节奏门控：下一轮复习强制等 30~600s（与生词同款节奏，杜绝连环轰炸）
+        self._next_review_ts = now + motion.random_interval(
+            C.JP_WORD_MIN_INTERVAL_S, C.JP_WORD_MAX_INTERVAL_S, self._rng
+        )
+        self._maybe_notify_review_done()
+        self._schedule_next_word(now)
+
+    def _postpone_review(self, now: float) -> None:
+        """复习泡泡超时（两个按钮都没点）→ 无痕顺延。
+
+        不算遗忘、不推进阶段、不写每日记录：用户可能只是离开了一会儿；
+        ``due_at`` 顺延 :data:`C.REVIEW_TIMEOUT_POSTPONE_HOURS` 小时，避免同一词
+        反复打断（等价于「这次先不算，晚点再考」）。
+        """
+
+        if self._word_disposed:
+            return
+        entry = self._current_word
+        if entry is None:
+            return
+        self._word_disposed = True
+        self._reviewing = False
+        self._bubble.hide_bubble()
+        self._button_bar.hide_bar()
+        iso = self._now_iso()
+        self._mastered.set_due_at(
+            entry.id, _iso_shift(iso, hours=C.REVIEW_TIMEOUT_POSTPONE_HOURS)
+        )
+        self._current_word = None
+        self._word_deadline = float("inf")
+        self._refresh_review_schedule()
+        # 节奏门控同样生效：本词顺延了，其余到期词也不得立刻顶上（连环弹）
+        self._next_review_ts = now + motion.random_interval(
+            C.JP_WORD_MIN_INTERVAL_S, C.JP_WORD_MAX_INTERVAL_S, self._rng
+        )
+        self._schedule_next_word(now)
+
+    def _on_review_ok(self) -> None:
+        """按钮条「还记得」→ 复习通过。"""
+
+        self._dispose_review(True, time.monotonic())
+
+    def _on_review_lapsed(self) -> None:
+        """按钮条「忘了」→ 复习遗忘，退回生词本。"""
+
+        self._dispose_review(False, time.monotonic())
+
     def _on_bubble_word_detail(self, entry: VocabEntry) -> None:
         """双击单词气泡 → 处置为生词 + 打开中文详情（学习闭环）。
 
@@ -1168,9 +1670,15 @@ class PetAppController(QObject):
         处置（``_dispose_word`` 负责隐藏气泡 / 按钮条并排期下一词，学习记录
         与生词本同步更新），再打开详情窗口。情绪气泡为鼠标穿透态，天然收
         不到双击，无需额外区分。
+
+        复习态例外（记忆曲线）：双击 = 「偷看答案」，仅打开详情、**不打断**
+        本次复习——作答仍由按钮条「还记得 / 忘了」完成，偷看不等于遗忘。
         """
 
         if self._current_word is None:
+            return
+        if self._reviewing:
+            self._open_word_detail(entry)
             return
         self._on_word_vocab()
         self._open_word_detail(entry)
@@ -1218,10 +1726,13 @@ class PetAppController(QObject):
             if entry is None:
                 return
             if self._detail_window is None:
-                self._detail_window = WordDetailWindow()
+                self._detail_window = WordDetailWindow(
+                    pronunciation=self._pronunciation
+                )
                 self._detail_window.set_accent(ui_accent_for_theme(self._current_theme))
                 self._detail_window.detail_succeeded.connect(self._on_detail_succeeded)
                 self._detail_window.detail_failed.connect(self._on_detail_failed)
+                self._detail_window.mastered_clicked.connect(self._on_detail_mastered)
             detail, source = self._lookup_word_detail(entry.id)
             net = self._detail_net_config()
             # 动效开关须在 show_entry **之前**注入：show_entry 的加载分支（联网态）会读取
@@ -1229,6 +1740,8 @@ class PetAppController(QObject):
             # _on_jp_vocab 保持一致；否则 reduce_motion=True 时首开详情窗仍会创建一个动画。
             self._detail_window.set_reduce_motion(self._cfg.reduce_motion)
             self._detail_window.show_entry(entry, detail, source, net)
+            # 「记住了」按钮初始态：已掌握词直接呈现「已掌握」禁用态（与气泡一次性语义一致）
+            self._detail_window.set_mastered_state(self._mastered.contains(entry.id))
             show_window_animated(self._detail_window, self._cfg.reduce_motion)
             self._detail_window.raise_()
             self._detail_window.activateWindow()
@@ -1278,6 +1791,37 @@ class PetAppController(QObject):
         """联网失败回调：仅记日志（窗口已做中文降级展示）。"""
 
         logger.info("详情联网失败（%s）：%s", item_id, msg)
+
+    def _on_detail_mastered(self, entry: VocabEntry) -> None:
+        """详情窗口「记住了」→ 与气泡按钮复用同一处置逻辑（落 mastered + 移出生词本）。
+
+        - 详情展示的恰是**当前气泡词**：走 ``_on_word_mastered`` 完整处置（隐藏气泡 /
+          按钮条、按 manual 规则写每日日志、排期下一词），与点气泡按钮完全一致。
+        - 否则（学习记录 / 生词本打开的词，或当前词刚被处置）：仅写 mastered 集合 +
+          托盘反馈，不触碰自动展示流程与每日配额（口径同手动词「记住了」，决策 D1）。
+
+        两条路径都同步**移出生词本并即时刷新窗口**（数据状态与页面展示一致），
+        视觉反馈（托盘通知 + 按钮转「已掌握」禁用态）保持一致，无重复实现。
+        """
+
+        try:
+            if entry is None:
+                return
+            current = self._current_word
+            if current is not None and current.id == entry.id:
+                if self._reviewing:
+                    # 详情展示的恰是当前复习词：详情里确认「记住了」= 复习通过
+                    # （按钮此时已呈「已掌握」禁用态，此分支兜底其它触发路径）
+                    self._on_review_ok()
+                else:
+                    self._on_word_mastered()
+            else:
+                removed = self._remove_word_from_vocab(entry)
+                self._mark_word_mastered(entry, self._now_iso(), removed)
+            if self._detail_window is not None:
+                self._detail_window.set_mastered_state(self._mastered.contains(entry.id))
+        except Exception:  # noqa: BLE001
+            logger.exception("详情窗口「记住了」处理异常（已忽略）")
 
     # ------------------------------------------------------------------ #
     # 内部：应用迁移 / 帧率 / 气泡 / 缩放 / 持久化
@@ -1484,7 +2028,7 @@ class PetAppController(QObject):
 
         try:
             accent = ui_accent_for_theme(self._current_theme)
-            for window in (self._vocab_window, self._log_window, self._detail_window):
+            for window in (self._vocab_window, self._log_window, self._detail_window, self._mastered_window):
                 if window is not None:
                     window.set_accent(accent)
         except Exception:  # noqa: BLE001

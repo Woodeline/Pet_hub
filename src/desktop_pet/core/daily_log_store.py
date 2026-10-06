@@ -224,6 +224,32 @@ class DailyLogStore:
 
         return len(self._days.get(str(day), []))
 
+    def new_word_count_for(self, day: str) -> int:
+        """返回指定日期的**新词**展示数（排除复习两态）。
+
+        每日数量配额的语义是「新词学习量」：复习处置（``review_ok`` /
+        ``review_lapsed``）虽写入每日记录留痕，但不占用新词配额——
+        否则复习多的日子会挤掉新词学习（记忆曲线的复习是刚性约定）。
+        """
+
+        review_statuses = (C.DAILY_LOG_STATUS_REVIEW_OK, C.DAILY_LOG_STATUS_REVIEW_LAPSED)
+        return sum(
+            1
+            for entry in self._days.get(str(day), [])
+            if entry.status not in review_statuses
+        )
+
+    def review_count_for(self, day: str) -> int:
+        """返回指定日期已**作答**的复习轮数（记得 + 忘了）。
+
+        每日复习上限的计数口径：只数真实作答（消耗用户注意力的复习）；
+        超时顺延不算——没作答的复习没有消耗，不应烧掉额度。
+        """
+
+        return self._count_status(day, C.DAILY_LOG_STATUS_REVIEW_OK) + self._count_status(
+            day, C.DAILY_LOG_STATUS_REVIEW_LAPSED
+        )
+
     def mastered_count_for(self, day: str) -> int:
         """返回指定日期「已掌握」条数。"""
 

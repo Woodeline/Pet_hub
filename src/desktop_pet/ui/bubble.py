@@ -83,6 +83,9 @@ class BubbleWindow(QWidget):
         self._line_translation: str = ""
         self._line_meaning: str = ""
         self._line_level: str = ""  # 学习泡泡右上角等级 chip（N5..N1）
+        #: 复习模式（记忆曲线）：隐藏翻译/释义行、以作答提示语替代——主动回忆，
+        #: 答案经双击详情偷看。仅 ``show_word(review=True)`` 置位。
+        self._review_mode: bool = False
         #: 当前单词态的词条引用（``show_word`` 置入 / ``show_message``·``hide`` 清空），
         #: 双击时随 :attr:`word_detail_requested` 发给 controller。
         self._word_entry: "VocabEntry | None" = None
@@ -164,22 +167,32 @@ class BubbleWindow(QWidget):
         self.raise_()
         self._timer.start()
 
-    def show_word(self, entry: "VocabEntry", duration: float) -> None:
+    def show_word(self, entry: "VocabEntry", duration: float, review: bool = False) -> None:
         """显示一条日语单词（四行多字号：单词 / 假名 / 翻译 / 释义）。
 
-        空 ``entry`` 视为 no-op；``duration`` 钳制到学习泡泡范围 ``[JP_BUBBLE_MIN, JP_BUBBLE_MAX]``
-        秒（默认 30s，与情绪泡泡 ``[2,4]s`` 解耦，见设计 §1.4 难点 4）。
-        学习泡泡**固定内容宽度** = :data:`C.JP_BUBBLE_MAX_WIDTH`，保证测量换行宽 == 绘制换行宽。
+        Args:
+            entry: 待展示词条；空 ``entry`` 视为 no-op。
+            duration: 停留时长，钳制到学习泡泡范围 ``[JP_BUBBLE_MIN, JP_BUBBLE_MAX]``
+                秒（默认 30s，与情绪泡泡 ``[2,4]s`` 解耦，见设计 §1.4 难点 4）。
+            review: 复习模式（记忆曲线）：隐藏翻译/释义行、以作答提示语替代——
+                主动回忆后再点按钮条「还记得 / 忘了」；答案经双击详情偷看。
+                学习泡泡**固定内容宽度** = :data:`C.JP_BUBBLE_MAX_WIDTH`，
+                保证测量换行宽 == 绘制换行宽。
         """
 
         if entry is None or not getattr(entry, "word", ""):
             return
         self._mode = _MODE_WORD
         self._word_entry = entry  # 双击 → word_detail_requested(entry)
+        self._review_mode = bool(review)
         self._line_word = entry.word
         self._line_kana = entry.kana
-        self._line_translation = entry.translation
-        self._line_meaning = entry.meaning
+        if self._review_mode:
+            self._line_translation = ""  # 空行在 _word_layout 中被跳过
+            self._line_meaning = C.JP_BUBBLE_REVIEW_HINT
+        else:
+            self._line_translation = entry.translation
+            self._line_meaning = entry.meaning
         self._line_level = entry.level
         self._duration = min(
             C.JP_BUBBLE_MAX_DURATION_S, max(C.JP_BUBBLE_MIN_DURATION_S, float(duration))
@@ -212,6 +225,7 @@ class BubbleWindow(QWidget):
         self._phase = _PHASE_HIDDEN
         self._alpha = 0.0
         self._word_entry = None
+        self._review_mode = False
         self._set_input_capture(False)  # 隐藏态恢复穿透，下次情绪气泡零成本
         self.hide()
 
@@ -584,7 +598,12 @@ class BubbleWindow(QWidget):
         h = int(round(content_h)) + int(round(C.BUBBLE_TAIL_H)) + int(round(m2))
 
         x = int(round(anchor.x() - w / 2.0))
-        y_above = int(round(anchor.y() - C.BUBBLE_GAP_TO_PET - h))
+        # 词卡模式整体上移 JP_WORD_BUBBLE_LIFT_PX：按钮条贴在本气泡**下方**
+        # （条高 ≈46px），不预留这段距离时按钮条会压在猫头上（2026-10-01 反馈）。
+        # 按钮条几何以气泡矩形为基准（见 BubbleButtonBar._compute_geometry），
+        # 气泡上移即整体上移；普通文本气泡无按钮条，不上移。
+        lift = C.JP_WORD_BUBBLE_LIFT_PX if self._mode == _MODE_WORD else 0.0
+        y_above = int(round(anchor.y() - C.BUBBLE_GAP_TO_PET - h - lift))
 
         # 屏幕边界处理（贴近顶部翻转 + 水平钳制）
         screen = QGuiApplication.screenAt(anchor)

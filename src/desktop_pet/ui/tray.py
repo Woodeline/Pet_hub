@@ -49,8 +49,10 @@ class TrayController(QObject):
     jp_level_selected = Signal(str)
     jp_duration_selected = Signal(int)
     jp_daily_limit_selected = Signal(int)
+    jp_review_limit_selected = Signal(int)
     jp_show_now_requested = Signal()
     jp_vocab_requested = Signal()
+    jp_mastered_requested = Signal()
     jp_log_requested = Signal()
     jp_import_bank_requested = Signal()
 
@@ -100,8 +102,12 @@ class TrayController(QObject):
         self._jp_daily_limit_menu: QMenu | None = None
         self._jp_daily_limit_group: QActionGroup | None = None
         self._jp_daily_limit_actions: dict[int, QAction] = {}
+        self._jp_review_limit_menu: QMenu | None = None
+        self._jp_review_limit_group: QActionGroup | None = None
+        self._jp_review_limit_actions: dict[int, QAction] = {}
         self._action_jp_show_now: QAction | None = None
         self._action_jp_vocab: QAction | None = None
+        self._action_jp_mastered: QAction | None = None
         self._action_jp_log: QAction | None = None
         self._action_jp_import: QAction | None = None
 
@@ -270,6 +276,8 @@ class TrayController(QObject):
             self._jp_duration_menu.setEnabled(enabled)
         if self._jp_daily_limit_menu is not None:
             self._jp_daily_limit_menu.setEnabled(enabled)
+        if self._jp_review_limit_menu is not None:
+            self._jp_review_limit_menu.setEnabled(enabled)
         if self._action_jp_show_now is not None:
             self._action_jp_show_now.setEnabled(enabled)
 
@@ -285,6 +293,14 @@ class TrayController(QObject):
         """同步「每日数量」单选状态（不触发信号）。"""
 
         for option, action in self._jp_daily_limit_actions.items():
+            action.blockSignals(True)
+            action.setChecked(option == int(value))
+            action.blockSignals(False)
+
+    def set_jp_review_limit_checked(self, value: int) -> None:
+        """同步「复习上限」单选状态（不触发信号）。"""
+
+        for option, action in self._jp_review_limit_actions.items():
             action.blockSignals(True)
             action.setChecked(option == int(value))
             action.blockSignals(False)
@@ -362,6 +378,21 @@ class TrayController(QObject):
             self._jp_daily_limit_menu.addAction(action)
             self._jp_daily_limit_actions[option] = action
 
+        self._jp_review_limit_menu = ShadowMenu(C.JP_MENU_REVIEW_LIMIT, self._menu)
+        self._jp_review_limit_group = QActionGroup(self._menu)
+        self._jp_review_limit_group.setExclusive(True)
+        for option in C.JP_REVIEW_DAILY_LIMIT_OPTIONS:
+            label = C.JP_REVIEW_DAILY_LIMIT_LABELS.get(option, f"{option} 个")
+            action = QAction(label, self._jp_review_limit_menu)
+            action.setCheckable(True)
+            action.setChecked(option == self._cfg.jp_review_daily_limit)
+            action.triggered.connect(
+                lambda _checked=False, opt=option: self.jp_review_limit_selected.emit(opt)
+            )
+            self._jp_review_limit_group.addAction(action)
+            self._jp_review_limit_menu.addAction(action)
+            self._jp_review_limit_actions[option] = action
+
         self._action_jp_show_now = QAction(C.JP_MENU_SHOW_NOW, self._menu)
         self._action_jp_show_now.triggered.connect(
             lambda _checked=False: self.jp_show_now_requested.emit()
@@ -370,6 +401,11 @@ class TrayController(QObject):
         self._action_jp_vocab = QAction(C.JP_MENU_VOCAB, self._menu)
         self._action_jp_vocab.triggered.connect(
             lambda _checked=False: self.jp_vocab_requested.emit()
+        )
+
+        self._action_jp_mastered = QAction(C.JP_MENU_MASTERED, self._menu)
+        self._action_jp_mastered.triggered.connect(
+            lambda _checked=False: self.jp_mastered_requested.emit()
         )
 
         self._action_jp_log = QAction(C.JP_MENU_LOG, self._menu)
@@ -450,8 +486,10 @@ class TrayController(QObject):
         jp.addMenu(self._jp_level_menu)
         jp.addMenu(self._jp_duration_menu)
         jp.addMenu(self._jp_daily_limit_menu)
+        jp.addMenu(self._jp_review_limit_menu)
         jp.addSeparator()
         jp.addAction(self._action_jp_vocab)
+        jp.addAction(self._action_jp_mastered)
         jp.addAction(self._action_jp_log)
         jp.addAction(self._action_jp_import)
         menu.addMenu(jp)

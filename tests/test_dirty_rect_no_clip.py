@@ -161,10 +161,16 @@ def test_rendered_content_contained_in_pet_rect(qtbot, scale: float, capsys) -> 
 
 
 # --------------------------------------------------------------------------- #
-# ★ 必验项 1b：光晕态（睡觉/兴奋）确实需要"回退整窗"，且确实铺满近乎整窗
+# ★ 必验项 1b：光晕态（睡觉/兴奋）确实需要"回退整窗"，且光晕**必须在画布内
+#   完全衰减到 0**（否则窗口矩形上出现硬切直边，观感 = 背景不是透明的）
 # --------------------------------------------------------------------------- #
-def test_glow_states_fallback_full_window_and_would_clip_if_narrowed(qtbot, capsys) -> None:
-    """睡觉/兴奋态：必须回退整窗，且**收窄矩形确实装不下光晕**（证明回退非多此一举）。"""
+def test_glow_states_fallback_full_window_and_fade_within_canvas(qtbot, capsys) -> None:
+    """睡觉/兴奋态：必须回退整窗；光晕可以很宽，但**窗口边缘必须全透明**。
+
+    历史：曾断言「光晕横向铺满整窗（span>0.95）」——那正是「某动作背景不是
+    透明」缺陷的根源（渐变半径超出画布，衰减被窗口矩形硬切出直边）。2026-10-01
+    起 ``_draw_glow`` 半径收进画布，本测试改钉新不变式：边缘 alpha=0。
+    """
 
     renderer = PetRenderer()
     for expr in (Expression.SLEEPING, Expression.EXCITED):
@@ -185,27 +191,27 @@ def test_glow_states_fallback_full_window_and_would_clip_if_narrowed(qtbot, caps
             w = image.width()
             span_x = (bbox[2] - bbox[0] + 1) / w
 
-            # 收窄矩形（不含光晕）能否装下实际内容？装不下 → 回退整窗是必要且正确的。
-            narrowed = PetRenderer.body_bounds(pose, scale)
-            narrowed_contains = (
-                narrowed.left() <= bbox[0]
-                and narrowed.top() <= bbox[1]
-                and narrowed.right() >= bbox[2]
-                and narrowed.bottom() >= bbox[3]
-            )
+            # 光晕仍须显著宽于猫身（回退整窗有实际意义），但绝不允许顶到窗口边缘
+            assert span_x > 0.8, f"{expr.name}@scale{scale} 光晕过窄（{span_x:.0%}）"
+            for x in range(image.width()):
+                assert image.pixelColor(x, 0).alpha() <= 2, (
+                    f"{expr.name}@scale{scale} 顶边缘 alpha>0（光晕被窗口矩形硬切）"
+                )
+                assert image.pixelColor(x, image.height() - 1).alpha() <= 2, (
+                    f"{expr.name}@scale{scale} 底边缘 alpha>0（光晕被窗口矩形硬切）"
+                )
+            for y in range(image.height()):
+                assert image.pixelColor(0, y).alpha() <= 2, (
+                    f"{expr.name}@scale{scale} 左边缘 alpha>0（光晕被窗口矩形硬切）"
+                )
+                assert image.pixelColor(image.width() - 1, y).alpha() <= 2, (
+                    f"{expr.name}@scale{scale} 右边缘 alpha>0（光晕被窗口矩形硬切）"
+                )
             with capsys.disabled():
                 print(
                     f"[glow] {expr.name}@scale{scale} bbox={bbox} 水平覆盖={span_x:.0%} "
-                    f"narrowed=({narrowed.left()},{narrowed.top()},{narrowed.right()},{narrowed.bottom()}) "
-                    f"would_clip={not narrowed_contains}"
+                    f"边缘透明=OK"
                 )
-
-            # 光晕横向铺满整窗 → 收窄必裁；据此断言回退整窗的必要性
-            assert span_x > 0.95, f"{expr.name}@scale{scale} 光晕未铺满整窗宽度（{span_x:.0%}）"
-            assert not narrowed_contains, (
-                f"{expr.name}@scale{scale} 收窄矩形竟能装下光晕内容，回退整窗存疑"
-            )
-            _assert_contained(bbox, rect, f"{expr.name}@scale{scale}")
 
 
 # --------------------------------------------------------------------------- #

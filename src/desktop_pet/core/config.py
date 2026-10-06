@@ -181,6 +181,15 @@ def _coerce_daily_limit(value: Any, default: int) -> int:
     return int(default)
 
 
+def _coerce_review_limit(value: Any, default: int) -> int:
+    """把每日复习上限收敛到档位 ``JP_REVIEW_DAILY_LIMIT_OPTIONS``；非法值回落默认。"""
+
+    candidate = _coerce_int(value, default)
+    if candidate in C.JP_REVIEW_DAILY_LIMIT_OPTIONS:
+        return candidate
+    return int(default)
+
+
 def _coerce_str(value: Any, default: str, allow_empty: bool = True) -> str:
     """把任意值安全转换为字符串。
 
@@ -224,6 +233,7 @@ class AppConfig:
         jp_level: 日语难度等级（JP-06，默认 ``N5``，取值 ``N5..N1``）。
         jp_bubble_duration_s: 学习泡泡停留时长（秒，默认 30，取值 15/30/60）。
         jp_daily_limit: 每日展示上限（默认 15，取值 5/10/15/20/30）。
+        jp_review_daily_limit: 每日复习上限（默认 20，取值 10/20/30/50）。
         deepseek_api_key: DeepSeek API Key（默认空 ⇒ 直接离线降级，不发请求）。
         deepseek_base_url: DeepSeek OpenAI 兼容接口地址（默认 ``LLM_ENDPOINT``）。
         deepseek_model: 模型名（默认 ``deepseek-chat``）。
@@ -248,6 +258,8 @@ class AppConfig:
     jp_level: str = C.JP_DEFAULT_LEVEL
     jp_bubble_duration_s: int = C.JP_BUBBLE_DURATION_S
     jp_daily_limit: int = C.JP_DAILY_LIMIT
+    #: 每日复习上限（默认 20，取值 10/20/30/50）——复习作答数达上限后今日不再自动弹
+    jp_review_daily_limit: int = C.JP_REVIEW_DAILY_LIMIT
     deepseek_api_key: str = ""
     deepseek_base_url: str = C.LLM_ENDPOINT
     deepseek_model: str = C.LLM_MODEL
@@ -281,6 +293,7 @@ class AppConfig:
             "jp_level": str(self.jp_level),
             "jp_bubble_duration_s": int(self.jp_bubble_duration_s),
             "jp_daily_limit": int(self.jp_daily_limit),
+            "jp_review_daily_limit": int(self.jp_review_daily_limit),
             "deepseek_api_key": str(self.deepseek_api_key),
             "deepseek_base_url": str(self.deepseek_base_url),
             "deepseek_model": str(self.deepseek_model),
@@ -336,6 +349,9 @@ class AppConfig:
                 get("jp_bubble_duration_s"), defaults.jp_bubble_duration_s
             ),
             jp_daily_limit=_coerce_daily_limit(get("jp_daily_limit"), defaults.jp_daily_limit),
+            jp_review_daily_limit=_coerce_review_limit(
+                get("jp_review_daily_limit"), defaults.jp_review_daily_limit
+            ),
             deepseek_api_key=_coerce_str(
                 get("deepseek_api_key"), defaults.deepseek_api_key, allow_empty=True
             ),

@@ -147,7 +147,7 @@ def test_log_window_statistics_are_unfiltered(qtbot) -> None:
     window.refresh("2025-01-01", entries, 15)
 
     expected = C.JP_LOG_STATUS_TEMPLATE.format(
-        shown=4, limit=15, mastered=2, vocab=1, unprocessed=1
+        shown=4, limit=15, mastered=2, vocab=1, unprocessed=1, review_ok=0, review_lapsed=0
     )
     assert window._status_label.text() == expected
 
@@ -194,6 +194,35 @@ def test_bubble_pointing_down_accessor(qtbot) -> None:
     assert bubble.pointing_down() is True
     bubble._pointing_down = False
     assert bubble.pointing_down() is False
+
+
+def test_word_bubble_lifted_above_button_bar(qtbot) -> None:
+    """词卡气泡整体上移 ``JP_WORD_BUBBLE_LIFT_PX``：按钮条贴在气泡下方，
+    不预留距离时按钮条会压在猫头上（2026-10-01 用户反馈遮挡）。普通文本气泡不上移。
+    """
+
+    bubble = BubbleWindow()
+    qtbot.addWidget(bubble)
+    anchor = QPoint(400, 300)
+
+    # 文本气泡：气泡底边（Qt 含端点 bottom = top+h-1）= anchor.y - GAP - 1
+    bubble.set_anchor(anchor)
+    bubble.show_message("测试文本", 5.0)
+    text_geom = bubble._compute_geometry(anchor)
+    assert text_geom.bottom() == anchor.y() - int(C.BUBBLE_GAP_TO_PET) - 1
+
+    # 词卡气泡：整体上移 LIFT（按钮条再贴其下 GAP 处）
+    bubble.show_word(_entry(), 5.0)
+    word_geom = bubble._compute_geometry(anchor)
+    assert word_geom.bottom() == int(
+        round(anchor.y() - C.BUBBLE_GAP_TO_PET - C.JP_WORD_BUBBLE_LIFT_PX)
+    ) - 1
+
+    # 闭环核对：按钮条底边必须高于锚点（猫头顶）——不再遮挡猫
+    bar = BubbleButtonBar()
+    qtbot.addWidget(bar)
+    bar_geom = bar._compute_geometry(anchor, word_geom, pointing_down=True)
+    assert bar_geom.bottom() < anchor.y()
 
 
 # --------------------------------------------------------------------------- #

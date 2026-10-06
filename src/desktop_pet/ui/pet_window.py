@@ -2,6 +2,8 @@
 
 窗口标志：``FramelessWindowHint | WindowStaysOnTopHint | Qt.Tool``
 + ``WA_TranslucentBackground``（FR-15/16/17）。
+置顶为**运行期保底**：低频定时（``TOPMOST_REASSERT_MS``）重申标志并 ``raise_()``，
+防止其他同样置顶的窗口后来居上把宠物盖住。
 
 手势区分（架构 §1.3）：
 - 位移 < ``DRAG_THRESHOLD_PX``(5) 且松手 → 判定为**点击**（FR-27）。
@@ -118,6 +120,13 @@ class PetWindow(QWidget):
         self._timer.setTimerType(Qt.TimerType.PreciseTimer)
         self._timer.timeout.connect(self._on_frame)
 
+        # 置顶重申（FR-16 运行期保底）：低频 raise_() 防止其他**同样置顶**的窗口
+        # 后来居上把宠物盖住。WindowStaysOnTopHint 只保证进入置顶层，不保证在该
+        # 层内永远居首；托盘恢复 / 某些系统事件后标志也可能失效，故同时补挂标志。
+        self._topmost_timer = QTimer(self)
+        self._topmost_timer.setInterval(C.TOPMOST_REASSERT_MS)
+        self._topmost_timer.timeout.connect(self._reassert_topmost)
+
         self._apply_size()
 
     # ------------------------------------------------------------------ #
@@ -150,17 +159,20 @@ class PetWindow(QWidget):
         self._timer.setInterval(C.interval_for_fps(fps))
 
     def start_animation(self) -> None:
-        """启动帧循环与空闲游走。"""
+        """启动帧循环、空闲游走与置顶重申。"""
 
         if not self._timer.isActive():
             self._timer.start(C.interval_for_fps(self._fps))
         self.start_wander()
+        if not self._topmost_timer.isActive():
+            self._topmost_timer.start()
 
     def stop_animation(self) -> None:
-        """停止帧循环与空闲游走（避免残留定时器 / 事件，FR-24）。"""
+        """停止帧循环、空闲游走与置顶重申（避免残留定时器 / 事件，FR-24）。"""
 
         self._timer.stop()
         self.stop_wander()
+        self._topmost_timer.stop()
 
     def set_anchor(self, x: int, y: int) -> None:
         """把 ``(x, y)`` 设为游走锚点、复位瞬态偏移，并把窗口移到锚点。
@@ -358,7 +370,7 @@ class PetWindow(QWidget):
         Python 层 ``try/except`` 无法拦截）。
         """
 
-        for t in (self._timer, self._wander_timer, self._hover_timer):
+        for t in (self._timer, self._wander_timer, self._hover_timer, self._topmost_timer):
             t.stop()
         # 显式断开（按绑定方法）。PySide6 下对未连接信号断开**不抛异常**、只发
         # RuntimeWarning —— 而「未连接」本就是目标状态，故就地压掉该警告。
@@ -366,6 +378,7 @@ class PetWindow(QWidget):
         for t, slot in (
             (self._timer, self._on_frame),
             (self._wander_timer, self._on_wander_tick),
+            (self._topmost_timer, self._reassert_topmost),
         ):
             try:
                 with warnings.catch_warnings():
@@ -387,6 +400,7 @@ class PetWindow(QWidget):
             self._timer.isActive()
             or self._wander_timer.isActive()
             or self._hover_timer.isActive()
+            or self._topmost_timer.isActive()
         )
 
     # ------------------------------------------------------------------ #
@@ -398,6 +412,22 @@ class PetWindow(QWidget):
         width = int(round(C.BASE_W * self._scale))
         height = int(round(C.BASE_H * self._scale))
         self.setFixedSize(QSize(width, height))
+
+    def _reassert_topmost(self) -> None:
+        """一次置顶重申：补挂丢失的置顶标志并把窗口拉回最前（FR-16 运行期保底）。
+
+        ``raise_()`` 不激活窗口（无焦点抢夺），对用户操作零干扰；标志经窗口句柄
+        补挂（``setFlag``）不会触发 Qt 重建原生窗口（``setWindowFlags`` 会隐藏窗口）。
+        """
+
+        if not self.isVisible():
+            return
+        handle = self.windowHandle()
+        if handle is not None and not bool(
+            handle.flags() & Qt.WindowType.WindowStaysOnTopHint
+        ):
+            handle.setFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+        self.raise_()
 
     def _absorb_wander_offset(self) -> None:
         """把当前瞬态偏移吸收进锚点并清零 offset（拖拽开始时调用，G2）。

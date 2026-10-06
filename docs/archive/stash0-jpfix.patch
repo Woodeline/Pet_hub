@@ -1,0 +1,135 @@
+diff --git a/src/desktop_pet/app/controller.py b/src/desktop_pet/app/controller.py
+index c66eadb..292a6c7 100644
+--- a/src/desktop_pet/app/controller.py
++++ b/src/desktop_pet/app/controller.py
+@@ -607,7 +607,7 @@ class PetAppController(QObject):
+         if not self._today_str:
+             self._today_str = self._local_date_str()
+ 
+-        # 停止判定：达到每日上限 或 当日已展示词全部掌握 → 一次性通知后今日不再弹
++        # 停止判定：达到每日上限 → 一次性通知后今日不再弹
+         # 仅自动路径受限；手动「立即显示」传 ignore_daily_limit=True 可突破（用户决策）
+         if not ignore_daily_limit and self._jp_stop_for_today():
+             if not self._today_done_notified:
+@@ -802,13 +802,17 @@ class PetAppController(QObject):
+         return datetime.now().strftime("%Y-%m-%d")
+ 
+     def _jp_stop_for_today(self) -> bool:
+-        """当日停止判定：达到每日上限，或当日已展示词已全部掌握。"""
++        """当日停止判定：仅达到每日上限时停止。
++
++        不再用 ``all_mastered``（「当日已展示词全部点了掌握」）作为早停条件——
++        那会让用户对第一个展示词点一次「记住了」就误判为「全部掌握」、当天后续
++        单词全部停摆（跨天才恢复）。「当前等级词库已全部掌握」这一语义已由
++        :meth:`_show_word_bubble` 中 :meth:`WeightedWordPicker.pick` 返回 ``None``
++        的分支正确兜底，无需在此重复判定。
++        """
+ 
+         today = self._today_str or self._local_date_str()
+-        return (
+-            self._daily_log.count_for(today) >= self._cfg.jp_daily_limit
+-            or self._daily_log.all_mastered(today)
+-        )
++        return self._daily_log.count_for(today) >= self._cfg.jp_daily_limit
+ 
+     def _dispose_word(self, status: str, now: float) -> None:
+         """单飞处置当前展示词（三态互斥：一次展示恰好落一种终态）。
+diff --git a/src/desktop_pet/core/daily_log_store.py b/src/desktop_pet/core/daily_log_store.py
+index da94821..58ab22e 100644
+--- a/src/desktop_pet/core/daily_log_store.py
++++ b/src/desktop_pet/core/daily_log_store.py
+@@ -245,7 +245,13 @@ class DailyLogStore:
+         return {entry.id for entry in self._days.get(str(day), [])}
+ 
+     def all_mastered(self, day: str) -> bool:
+-        """当日「已展示 > 0 且 已掌握 == 已展示」，即所有展示词均已标记掌握。"""
++        """当日「已展示 > 0 且 已掌握 == 已展示」，即所有展示词均已标记掌握。
++
++        注意：该方法已**不再用于停止判定**（``_jp_stop_for_today`` 只按每日上限判断）。
++        它曾被误用于「当日全部掌握即早停」，导致用户对第一个词点「记住了」就误触发
++        （count==mastered_count），当天后续单词全部停摆。保留本方法仅为既有调用方
++        （学习记录窗口状态栏展示）与兼容性，不再承载业务停止语义。
++        """
+ 
+         count = self.count_for(day)
+         return count > 0 and self.mastered_count_for(day) == count
+diff --git a/tests/test_jp_config_b_qa_edges.py b/tests/test_jp_config_b_qa_edges.py
+index 609fe9f..0c772ea 100644
+--- a/tests/test_jp_config_b_qa_edges.py
++++ b/tests/test_jp_config_b_qa_edges.py
+@@ -170,13 +170,18 @@ def test_show_now_blocked_by_limit_notifies(controller: PetAppController) -> Non
+     assert controller._today_done_notified is True  # 已给「今日完成」通知
+ 
+ 
+-def test_show_now_blocked_by_all_mastered_notifies(controller: PetAppController) -> None:
++def test_show_now_not_blocked_by_all_mastered(controller: PetAppController) -> None:
++    """当日已展示词全部点了掌握，也不应拦截「立即显示」——仅每日上限才是硬停止。
++
++    回归：曾因 `_jp_stop_for_today` 混入 `all_mastered`，点一次「记住了」就误停当天。
++    """
++
+     controller._daily_log.add_entry("2025-01-01", _log_entry(1, C.DAILY_LOG_STATUS_MASTERED))
+     controller._daily_log.add_entry("2025-01-01", _log_entry(2, C.DAILY_LOG_STATUS_MASTERED))
+     controller._today_done_notified = False
+     controller._on_jp_show_now()
+-    assert controller._current_word is None
+-    assert controller._today_done_notified is True
++    assert controller._current_word is not None
++    assert controller._today_done_notified is False
+ 
+ 
+ def test_show_now_dispose_then_hit_limit_no_new_word(controller: PetAppController) -> None:
+diff --git a/tests/test_jp_memory_qa_edges.py b/tests/test_jp_memory_qa_edges.py
+index 4451934..4235772 100644
+--- a/tests/test_jp_memory_qa_edges.py
++++ b/tests/test_jp_memory_qa_edges.py
+@@ -134,7 +134,7 @@ def test_show_word_bubble_noop_when_current_word_exists(controller: PetAppContro
+ 
+ 
+ # --------------------------------------------------------------------------- #
+-# 5. 每日上限 / all_mastered 到达后不再展示
++# 5. 每日上限到达后不再展示（all_mastered 不再作为早停条件）
+ # --------------------------------------------------------------------------- #
+ def test_daily_limit_reached_no_show(controller: PetAppController) -> None:
+     for i in range(1, 6):  # limit = 5
+@@ -145,13 +145,13 @@ def test_daily_limit_reached_no_show(controller: PetAppController) -> None:
+     assert controller._current_word is None
+ 
+ 
+-def test_all_mastered_early_stop_no_show(controller: PetAppController) -> None:
+-    # shown=2 > 0 且 mastered==2，未达上限 5，也应提前停
++def test_all_mastered_does_not_early_stop(controller: PetAppController) -> None:
++    # shown=2 > 0 且 mastered==2，未达上限 5，不应提前停（回归：曾误判早停）
+     controller._daily_log.add_entry("2025-01-01", _log_entry(1, C.DAILY_LOG_STATUS_MASTERED))
+     controller._daily_log.add_entry("2025-01-01", _log_entry(2, C.DAILY_LOG_STATUS_MASTERED))
+-    assert controller._jp_stop_for_today() is True
++    assert controller._jp_stop_for_today() is False
+     controller._show_word_bubble(0.0)
+-    assert controller._current_word is None
++    assert controller._current_word is not None
+ 
+ 
+ # --------------------------------------------------------------------------- #
+diff --git a/tests/test_jp_memory_ui.py b/tests/test_jp_memory_ui.py
+index c1c7c18..24e523a 100644
+--- a/tests/test_jp_memory_ui.py
++++ b/tests/test_jp_memory_ui.py
+@@ -287,10 +287,16 @@ def test_controller_daily_limit_stops(controller: PetAppController) -> None:
+     assert controller._current_word is None  # 达上限不再展示
+ 
+ 
+-def test_controller_all_mastered_stops_early(controller: PetAppController) -> None:
++def test_controller_all_mastered_does_not_stop_early(controller: PetAppController) -> None:
++    """当日已展示词全部点了掌握，也不应早停——「全部掌握」只由抽取空池兜底判断。
++
++    回归：曾因 `_jp_stop_for_today` 混入 `all_mastered` 判定，导致点一次「记住了」
++    就 count==mastered、当天后续单词全部停摆（跨天才恢复）。
++    """
++
+     controller._daily_log.add_entry("2025-01-01", _log_entry(1, C.DAILY_LOG_STATUS_MASTERED))
+     controller._daily_log.add_entry("2025-01-01", _log_entry(2, C.DAILY_LOG_STATUS_MASTERED))
+-    assert controller._jp_stop_for_today() is True
++    assert controller._jp_stop_for_today() is False
+ 
+ 
+ def test_controller_cross_day_resets(controller: PetAppController, monkeypatch) -> None:

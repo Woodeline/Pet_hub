@@ -187,6 +187,7 @@ def test_load_after_save_is_json_readable(config_store: ConfigStore, config_path
         "bubble_texts_custom_keyboard",
         "jp_enabled", "jp_level",
         "jp_bubble_duration_s", "jp_daily_limit",
+        "jp_review_daily_limit",
         # 增量改造：DeepSeek 联网 / 中文详情配置（CONFIG_VERSION 保持 1）
         "deepseek_api_key", "deepseek_base_url", "deepseek_model",
         "word_detail_llm_timeout_s", "word_detail_llm_retries",
@@ -314,6 +315,23 @@ def test_jp_bubble_duration_coercion(raw, expected) -> None:
 def test_jp_daily_limit_coercion(raw, expected) -> None:
     cfg = AppConfig.from_dict({"jp_daily_limit": raw})
     assert cfg.jp_daily_limit == expected
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        (10, 10),
+        (20, 20),
+        (30, 30),
+        (50, 50),
+        (-5, C.JP_REVIEW_DAILY_LIMIT),
+        (7, C.JP_REVIEW_DAILY_LIMIT),         # 不在档位 → 默认
+        (99999, C.JP_REVIEW_DAILY_LIMIT),     # 越界 → 默认
+    ],
+)
+def test_jp_review_limit_coercion(raw, expected) -> None:
+    cfg = AppConfig.from_dict({"jp_review_daily_limit": raw})
+    assert cfg.jp_review_daily_limit == expected
 
 
 def test_missing_jp_memory_fields_use_defaults() -> None:

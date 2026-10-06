@@ -122,6 +122,28 @@ def test_tray_jp_menu_structure_and_signals(qtbot) -> None:
     ]
 
 
+def test_tray_review_limit_menu_structure_and_sync(qtbot) -> None:
+    """「复习上限」子菜单：档位集合 / 信号载荷 / 勾选同步 / 关闭学习置灰。"""
+
+    tray = TrayController(QIcon(), AppConfig())
+    captured: list[int] = []
+    tray.jp_review_limit_selected.connect(captured.append)
+
+    assert set(tray._jp_review_limit_actions) == set(C.JP_REVIEW_DAILY_LIMIT_OPTIONS)
+
+    tray._jp_review_limit_actions[30].trigger()
+    assert captured == [30]
+
+    tray.set_jp_review_limit_checked(50)
+    assert tray._jp_review_limit_actions[50].isChecked()
+    assert not tray._jp_review_limit_actions[30].isChecked()
+
+    tray.set_jp_enabled(False)
+    assert not tray._jp_review_limit_menu.isEnabled()
+    tray.set_jp_enabled(True)
+    assert tray._jp_review_limit_menu.isEnabled()
+
+
 def test_tray_set_jp_enabled_greys_out(qtbot) -> None:
     tray = TrayController(QIcon(), AppConfig())
 

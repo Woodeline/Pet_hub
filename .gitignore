@@ -54,3 +54,5 @@ app.log
 # 诊断遗留文件（非下划线前缀，单独排除）
 /shell_ok.txt
 /pytest*_out*.txt
+# 词库清洗回滚备份（tools/clean_reading_conflicts.py 生成，仅本地保留）
+/jlpt_words_extra.json.bak-*

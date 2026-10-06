@@ -72,6 +72,19 @@ def word_details_path() -> Path:
     return package_data_dir() / C.WORD_DETAILS_FILE_NAME
 
 
+def audio_cache_dir() -> Path:
+    """返回发音 MP3 缓存目录意图路径（始终返回，不因目录缺失而抛）。
+
+    位置与用户数据一致：``%APPDATA%\\desktop-pet\\audio_cache\\``
+    （``APPDATA`` 不可用回落到用户主目录，与 :meth:`extra_word_bank_path` 同口径）。
+    目录由 :class:`~desktop_pet.core.audio_cache.AudioCacheStore` 在首次写入时创建。
+    """
+
+    appdata = os.environ.get("APPDATA")
+    base = Path(appdata) if appdata else Path.home()
+    return base / C.CONFIG_DIR_NAME / C.AUDIO_CACHE_DIR_NAME
+
+
 def skins_dir() -> Path:
     """返回用户自装皮肤包根目录（``skins/``，本地投放、不入库）。
 
@@ -93,5 +106,6 @@ __all__ = [
     "word_bank_path",
     "extra_word_bank_path",
     "word_details_path",
+    "audio_cache_dir",
     "skins_dir",
 ]

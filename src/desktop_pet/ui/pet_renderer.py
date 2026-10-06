@@ -1106,6 +1106,13 @@ class PetRenderer:
         for tx, ty in PetRenderer.tail_spine(pose):
             add(tx - tail_pad, ty - tail_pad, tx + tail_pad, ty + tail_pad)
 
+        # --- ZZZ（对应 _draw_zzz：三段文本含字体上伸部。假睡分段同样画 ZZZ 却无
+        #     光晕 → 走收窄脏区，漏算会把窗口顶部的 Z 裁掉并在屏上留残影）---
+        if pose.zzz_alpha > 0.01:
+            zx = _GEO_BODY_CX + _GEO_BODY_RX * 0.72
+            zy = _GEO_BODY_CY - _GEO_BODY_RY + 2.0 + pose.body_y
+            add(zx - 4.0, zy - 36.0, zx + 36.0, zy + 4.0)
+
         # --- 合并 + 反锯齿外扩 + 钳制到逻辑画布 ---
         bx0 = max(0.0, min(b[0] for b in boxes) - _BOUNDS_PAD_PX)
         by0 = max(0.0, min(b[1] for b in boxes) - _BOUNDS_PAD_PX)
@@ -1268,9 +1275,16 @@ class PetRenderer:
 
         cx = _GEO_BODY_CX + pose.look_x * 0.2
         cy = _GEO_BODY_CY + pose.body_y
-        radius = _GEO_BODY_RY * 2.2
+        # 半径必须收进画布：径向渐变若越过窗口边界，衰减会在窗口矩形上被硬切，
+        # 屏幕上出现带直边边界的整窗色晕（观感 = 「背景不是透明的」）。取光心到
+        # 四边最近距离作上界；中段停靠点补回近身浓度，保证衰减仍集中在猫周围。
+        edge = min(cx, cy, _GEO_CANVAS_W - cx, _GEO_CANVAS_H - cy)
+        radius = min(_GEO_BODY_RY * 2.2, edge)
+        mid = QColor(base)
+        mid.setAlphaF(base.alphaF() * 0.55)
         gradient = QRadialGradient(QPointF(cx, cy), radius)
         gradient.setColorAt(0.0, base)
+        gradient.setColorAt(0.55, mid)
         gradient.setColorAt(1.0, trans)
 
         painter.setPen(Qt.PenStyle.NoPen)
@@ -2025,7 +2039,9 @@ class PetRenderer:
         font.setBold(True)
         painter.setFont(font)
         base_x = _GEO_BODY_CX + _GEO_BODY_RX * 0.72
-        base_y = _GEO_BODY_CY - _GEO_BODY_RY - 6.0 + pose.body_y
+        # 纵向偏移 +2：原 -6 使最上「z」的字形顶到/越出画布顶边（睡觉与假睡两态
+        # 均如此）——屏上表现为 Z 被窗口上沿削平，脏区收窄时还会留残影。
+        base_y = _GEO_BODY_CY - _GEO_BODY_RY + 2.0 + pose.body_y
         painter.drawText(QPointF(base_x, base_y), "Z")
         painter.drawText(QPointF(base_x + 10.0, base_y - 10.0), "z")
         painter.drawText(QPointF(base_x + 18.0, base_y - 19.0), "z")

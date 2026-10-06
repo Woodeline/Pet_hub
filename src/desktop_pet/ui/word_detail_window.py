@@ -26,9 +26,17 @@ from PySide6.QtWidgets import (
 )
 
 from desktop_pet.core import constants as C
+from desktop_pet.core.tts_client import spoken_text
 from desktop_pet.core.vocabulary import VocabEntry
 from desktop_pet.core.word_detail import WordDetail
 from desktop_pet.ui import icon_factory, motion_ui, theme
+from desktop_pet.ui.speaker_button import (
+    PronunciationController,
+    STATE_ERROR,
+    STATE_LOADING,
+    STATE_NORMAL,
+    SpeakerButton,
+)
 from desktop_pet.ui.spinner import Spinner
 from desktop_pet.ui.word_detail_worker import (
     WordDetailNetConfig,
@@ -45,16 +53,21 @@ class WordDetailWindow(QWidget):
     #: 上报 controller 持久化用户缓存（成功 / 失败）
     detail_succeeded = Signal(str, object)  # (item_id, WordDetail)
     detail_failed = Signal(str, str)        # (item_id, error_message)
+    #: 点击「记住了」：携带当前词条上报 controller（与气泡按钮复用同一处置逻辑）
+    mastered_clicked = Signal(object)       # VocabEntry
 
     def __init__(
         self,
         pool: QThreadPool | None = None,
+        pronunciation: PronunciationController | None = None,
         parent: QWidget | None = None,
     ) -> None:
         """构造详情窗口。
 
         Args:
             pool: 外部 ``QThreadPool``；``None`` 时自建（挂到本窗口生命周期）。
+            pronunciation: 发音控制器（app 层单例注入）；``None`` 时喇叭保持
+                常态但不响应点击（单测 / 未装配场景）。
             parent: 父窗口。
         """
 
@@ -63,6 +76,7 @@ class WordDetailWindow(QWidget):
         self.resize(C.WORD_DETAIL_WINDOW_W, C.WORD_DETAIL_WINDOW_H)
 
         self._pool: QThreadPool = pool if pool is not None else QThreadPool()
+        self._pronunciation: PronunciationController | None = pronunciation
         self._entry: VocabEntry | None = None
         self._item_id: str = ""
         self._net: WordDetailNetConfig | None = None
@@ -70,6 +84,9 @@ class WordDetailWindow(QWidget):
         self._closed: bool = False
         #: 「减少动效」开关（由 controller 在 show 之前经 :meth:`set_reduce_motion` 注入）。
         self._reduce_motion: bool = False
+
+        if self._pronunciation is not None:
+            self._pronunciation.state_changed.connect(self._on_pronunciation_state)
 
         self._build_ui()
 
@@ -95,10 +112,15 @@ class WordDetailWindow(QWidget):
         # 重开前置：先断连上一次查询（丢弃在途信号），再复位关闭守卫。
         self._disconnect_active()
         self._closed = False
+        if entry.id != self._item_id:
+            # 切换到新词条：复位「记住了」按钮为未掌握态（实际状态由 controller
+            # 在 show_entry 之后经 set_mastered_state 注入；同词条重试不复位）
+            self.set_mastered_state(False)
         self._entry = entry
         self._item_id = entry.id
         self._net = net
         self._render_header(entry)
+        self._speaker.set_state(STATE_NORMAL)
 
         if detail is not None and not detail.is_empty():
             # 本地/缓存命中：丢弃在途任务，杜绝旧 worker 迟到回填当前词条。
@@ -189,6 +211,19 @@ class WordDetailWindow(QWidget):
             " background: transparent;"
         )
 
+    def set_mastered_state(self, mastered: bool) -> None:
+        """设置「记住了」按钮的掌握态视觉反馈（controller 注入 / 点击后确认）。
+
+        ``True`` → 文案置为「已掌握」并禁用（对应气泡「记住了」的一次性语义：
+        气泡点击后即隐藏，详情窗口以禁用态表达同一终态）；``False`` → 恢复
+        「记住了」可点击态（与气泡按钮同文案 ``JP_BUTTON_MASTERED``）。
+        """
+
+        self._mastered_btn.setText(
+            C.WORD_DETAIL_MASTERED_DONE if mastered else C.JP_BUTTON_MASTERED
+        )
+        self._mastered_btn.setEnabled(not mastered)
+
     def _fit_height_to_content(self) -> None:
         """窗口高度随内容自适应（钳制屏幕可用高度 85%），消除底部固定留白。
 
@@ -265,18 +300,13 @@ class WordDetailWindow(QWidget):
         header.addWidget(self._level_chip)
         root.addLayout(header)
 
-        # 假名行：假名 + 喇叭占位（置灰，发音功能预留，点击无响应）
+        # 假名行：假名 + 喇叭（点击发音；联网获取 + 本地缓存，见 speaker_button）
         kana_row = QHBoxLayout()
         self._kana_label = self._add_field(root, kana_row, C.WORD_DETAIL_LABEL_KANA)
         kana_row.addStretch(1)
-        speaker = QLabel(self)
-        speaker.setPixmap(
-            icon_factory.make_icon(
-                "speaker", color=C.SEMANTIC_COLORS["text_faint"]
-            ).pixmap(QSize(C.SPACING["xl"], C.SPACING["xl"]))
-        )
-        speaker.setToolTip(C.JP_SPEAKER_TIP)
-        kana_row.addWidget(speaker)
+        self._speaker = SpeakerButton(self)
+        self._speaker.clicked.connect(self._on_speaker_clicked)
+        kana_row.addWidget(self._speaker)
         root.addLayout(kana_row)
 
         self._source_label = QLabel("", self)
@@ -319,6 +349,15 @@ class WordDetailWindow(QWidget):
         root.addLayout(status_row)
 
         bottom = QHBoxLayout()
+        # 「记住了」：与气泡按钮条同文案（JP_BUTTON_MASTERED）、同绿色**渐变**——
+        # ``success`` 变体的三态渐变端点（success_hover/success/pressed）与气泡的
+        # jp_button_primary_hover/bg/pressed 同值（test_design_tokens 钉死映射），
+        # 点击后由 controller 复用气泡按钮的同一处置逻辑（落 mastered + 移出生词本）。
+        # 置于底栏最左：重试按钮显隐不影响其位置。
+        self._mastered_btn = QPushButton(C.JP_BUTTON_MASTERED, self)
+        theme.set_variant(self._mastered_btn, "success")
+        self._mastered_btn.clicked.connect(self._on_mastered_clicked)
+        bottom.addWidget(self._mastered_btn)
         self._retry_btn = QPushButton(C.WORD_DETAIL_RETRY, self)
         theme.set_variant(self._retry_btn, "primary")
         self._retry_btn.setIcon(
@@ -495,6 +534,39 @@ class WordDetailWindow(QWidget):
         if self._closed or self._entry is None:
             return
         self.show_entry(self._entry, None, None, self._net)
+
+    def _on_mastered_clicked(self) -> None:
+        """点击「记住了」→ 携带当前词条上报 controller（复用气泡按钮处置逻辑）。"""
+
+        if self._closed or self._entry is None:
+            return
+        self.mastered_clicked.emit(self._entry)
+
+    # ------------------------------------------------------------------ #
+    # 内部：发音（speaker_button / pronunciation_controller）
+    # ------------------------------------------------------------------ #
+    def _on_speaker_clicked(self) -> None:
+        """点击喇叭 → 交发音控制器（缓存快路 / 后台抓取 + 播放）。"""
+
+        if self._closed or self._entry is None or self._pronunciation is None:
+            return
+        self._pronunciation.play(self._entry.word, self._entry.kana)
+
+    def _on_pronunciation_state(self, key: str, state: str, message: str) -> None:
+        """发音状态回播（主线程）→ 刷新喇叭三态；失败时补底部状态提示。
+
+        ``key``（= 发音文本）守卫：只响应**当前词条**的状态，隔离陈旧回调。
+        """
+
+        if self._closed or self._entry is None:
+            return
+        if spoken_text(self._entry.word, self._entry.kana) != str(key):
+            return
+        self._speaker.set_state(state, message)
+        if state == STATE_ERROR and not self._status_label.isVisible():
+            # 底部状态行空闲（详情流程未在使用）时才借用，避免抢占详情加载/错误文案。
+            self._status_label.setText(C.JP_SPEAKER_ERROR_TIP)
+            self._status_label.setVisible(True)
 
     def _on_worker_succeeded(self, item_id: str, detail: WordDetail) -> None:
         """后台成功回调（主线程）→ 回填并上报 controller。

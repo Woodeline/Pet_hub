@@ -1,0 +1,22 @@
+diff --git a/src/desktop_pet/core/constants.py b/src/desktop_pet/core/constants.py
+index a5a4a1d..bb9ab59 100644
+--- a/src/desktop_pet/core/constants.py
++++ b/src/desktop_pet/core/constants.py
+@@ -485,7 +485,7 @@ EXPRESSION_POSES: Final[dict[Expression, dict[str, float]]] = {
+         "ear_l_angle": 32.0, "ear_r_angle": 32.0,
+         "ear_l_tilt": 10.0, "ear_r_tilt": 10.0,
+         "tail_curve": 0.05, "tail_angle": 20.0, "tear_alpha": 0.9,
+-        "blush_alpha": 0.3, "body_y": 4.0, "head_y": 3.0,
++        "blush_alpha": 0.3, "body_y": 4.0, "head_y": 3.5,
+     },
+     # 打呵欠：闭眼、大张○嘴（带舌）、耳后压、尾僵直、身体上提拉伸
+     Expression.YAWN: {
+@@ -545,7 +545,7 @@ SURPRISE_POSES: Final[dict[str, dict[str, float]]] = {
+     # 趴下 LOAF：重心下压、身体摊宽（squash>0）、头低垂、双耳后压、尾巴蜷在身侧、视线下垂
+     "LOAF": {
+         "body_y": 6.0, "body_squash": 0.10,
+-        "head_y": 3.0,
++        "head_y": 3.5,
+         "ear_l_tilt": 8.0, "ear_r_tilt": 8.0,
+         "tail_curve": 0.70, "tail_angle": 12.0,
+         "look_y": 2.0,

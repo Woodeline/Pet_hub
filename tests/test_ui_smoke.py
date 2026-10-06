@@ -69,6 +69,55 @@ def test_window_flags_frameless_topmost_tool(qtbot) -> None:
     assert bool(flags & Qt.WindowType.Tool), "缺少 Tool 标志（不进任务栏，FR-17）"
 
 
+# --------------------------------------------------------------------------- #
+# 1b. 置顶重申定时器（FR-16 运行期保底）
+# --------------------------------------------------------------------------- #
+def test_topmost_reassert_timer_lifecycle(qtbot) -> None:
+    """置顶重申表随 ``start_animation()`` 启停，间隔取自常量，收尾不留活表。"""
+
+    window = PetWindow(PetModel(), PetRenderer(), 1.0)
+    qtbot.addWidget(window)
+    assert window._topmost_timer.interval() == C.TOPMOST_REASSERT_MS
+    window.start_animation()
+    assert window._topmost_timer.isActive()
+    window.start_animation()  # 幂等
+    assert window._topmost_timer.isActive()
+    window.stop_animation()
+    assert not window._topmost_timer.isActive()
+    assert not window.has_active_timers()
+
+
+def test_topmost_reassert_restores_dropped_flag(qtbot) -> None:
+    """置顶标志被系统/他方丢弃后，重申应经窗口句柄补挂，且不隐藏窗口。"""
+
+    window = PetWindow(PetModel(), PetRenderer(), 1.0)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    handle = window.windowHandle()
+    if handle is None:  # 平台插件不给句柄时无从模拟丢弃，保底逻辑仍在
+        window.hide()
+        return
+    handle.setFlag(Qt.WindowType.WindowStaysOnTopHint, False)
+    assert not bool(handle.flags() & Qt.WindowType.WindowStaysOnTopHint)
+    window._reassert_topmost()
+    assert bool(handle.flags() & Qt.WindowType.WindowStaysOnTopHint), (
+        "置顶标志丢失后未被重申补挂 (FR-16)"
+    )
+    assert window.isVisible(), "重申置顶不得隐藏窗口"
+    window.hide()
+
+
+def test_topmost_reassert_noop_when_hidden(qtbot) -> None:
+    """不可见时重申必须是 no-op（不崩溃、不拉起隐藏窗口）。"""
+
+    window = PetWindow(PetModel(), PetRenderer(), 1.0)
+    qtbot.addWidget(window)
+    assert not window.isVisible()
+    window._reassert_topmost()
+    assert not window.isVisible()
+
+
 def test_window_translucent_background(qtbot) -> None:
     window = PetWindow(PetModel(), PetRenderer(), 1.0)
     qtbot.addWidget(window)

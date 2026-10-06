@@ -1,6 +1,6 @@
 # desktop-pet · 小喵酱桌面宠物
 
-**当前版本：v0.6.1** ｜ Python 3.13 + PySide6 ｜ 1324 项自动化测试全绿
+**当前版本：v0.6.2** ｜ Python 3.13 + PySide6 ｜ 1502 项自动化测试全绿
 
 一只常驻 Windows 桌面、会"陪你敲键盘"的治愈系程序化猫咪。
 监听全局键盘敲击并同步做出"敲键盘"动画，在**空闲 / 专注 / 休息 / 睡觉**四态间
@@ -44,6 +44,8 @@ https://github.com/Woodeline/Pet_hub/releases/latest
 | 配置持久化 | JSON 配置，损坏自动回落默认 | FR-36~39 |
 | 日语学习 | 单词泡泡 + 「记住了 / 新单词」按钮 + 生词本 / 学习记录窗；每日配额与泡泡时长可调 | JP-01~19 |
 | 释义查询 | 「纯中文五要素」详情窗；查找链 = 打包词库 → 本地缓存 → LLM 联网兜底，**离线可用** | — |
+| 单词发音 | 详情窗 / 生词本卡片点击喇叭听发音：多源回退（有道词典 TTS 为主源，国内可达；Google 翻译 TTS 回退）；**发音输入优先假名**（防熟字训如「明後日」被字面拼读错，词库 7738 条实测 99.9% 走假名），MP3 按词缓存到 `%APPDATA%\desktop-pet\audio_cache`（二次点击秒播、离线可播）；播放走系统 winmm/MCI，**零新增依赖** | — |
+| 记忆曲线复习 | 「记住了」即入已掌握词库，按 1→3→7→14→30→60→120 天间隔阶梯自动安排复习（7 轮毕业）；复习泡泡**主动回忆**（隐藏翻译，还记得 / 忘了自评），忘了自动退回生词本重学；**节奏门控**（两次复习间隔 30~600s）+ **每日复习上限**（10/20/30/50，默认 20）+ 复习不受新词每日配额占用；托盘「已掌握词库…」窗可视阶段 / 到期 / 毕业状态并管理 | JP-M |
 | 视觉设计系统 | 语义色 / 间距 / 字号 / 圆角四组设计 token + QSS 主题生成器 + 程序化图标工厂 | — |
 | 主题皮肤 | 6 套配色主题（四季自动换肤 + 节日），跨月零点自动重估 | — |
 | 皮肤包（MOD） | 直接投放 DyberPet 社区皮肤包：托盘「皮肤」子菜单切换、多包共存、超大画布自动等比适配 | — |
@@ -269,15 +271,18 @@ desktop-pet/
 │  │  ├─ pet_model.py          # 姿态模型
 │  │  ├─ vocabulary.py         # 词条模型
 │  │  ├─ vocab_store.py        # 生词本持久化
-│  │  ├─ mastered_store.py     # 「记住了」集合持久化
-│  │  ├─ daily_log_store.py    # 每日学习记录持久化
+│  │  ├─ mastered_store.py     # 已掌握词库 + 记忆曲线（SRS 阶段 / 到期）持久化
+│  │  ├─ daily_log_store.py    # 每日学习记录持久化（新词三态 + 复习两态）
 │  │  ├─ weighted_picker.py    # 加权抽样
 │  │  ├─ word_detail.py        # 释义聚合与降级
 │  │  ├─ word_detail_bank.py   # 打包词库读取
 │  │  ├─ word_details_cache_store.py  # 释义本地缓存
 │  │  ├─ llm_client.py         # 联网兜底客户端
+│  │  ├─ tts_client.py         # 发音联网客户端（Google 翻译 TTS，tl=ja）
+│  │  ├─ audio_cache.py        # 发音 MP3 本地缓存
 │  │  └─ paths.py              # 用户数据目录解析
 │  ├─ ui/                      # 渲染层（PySide6）
+│  │  ├─ mastered_window.py    # 已掌握词库窗口（阶段 / 到期 / 毕业卡片化管理）
 │  │  ├─ pet_renderer.py       # QPainter 矢量猫咪
 │  │  ├─ pet_window.py         # 无边框透明置顶窗口
 │  │  ├─ bubble.py             # 气泡浮层
@@ -291,6 +296,10 @@ desktop-pet/
 │  │  ├─ vocab_window.py       # 生词本 / 学习记录窗
 │  │  ├─ word_detail_window.py # 释义详情窗
 │  │  ├─ word_detail_worker.py # 释义请求线程
+│  │  ├─ speaker_button.py     # 喇叭按钮 + 发音控制器（详情窗 / 生词本共用）
+│  │  ├─ pronunciation_worker.py # 发音抓取线程（缓存 → 联网 → 落盘）
+│  │  ├─ pronunciation_player.py # 发音播放封装（winmm/MCI，零新增依赖）
+│  │  ├─ confirm_dialog.py     # 主题化二次确认对话框（清空等危险操作）
 │  │  ├─ skin_renderer.py      # 皮肤包帧图渲染通道（MOD）
 │  │  └─ pet_renderer.py       # QPainter 矢量猫咪（含主题装饰特效）
 │  ├─ data/                    # 打包词库与释义数据（离线可用）
@@ -298,7 +307,7 @@ desktop-pet/
 │     ├─ keyboard_listener.py  # pynput 守护线程 + 跨线程信号桥
 │     └─ controller.py         # 装配 / 接线 / 生命周期
 ├─ skins/                      # 皮肤包投放区（gitignore，第三方素材不入库）
-├─ tests/                      # 55 个测试文件 / 1303 项用例 + 人工验收清单
+├─ tests/                      # 67 个测试文件 / 1502 项用例 + 人工验收清单
 ├─ tools/                      # 词库与审阅页构建脚本
 ├─ scripts/                    # 皮肤包下载 / 发布等辅助脚本
 ├─ docs/                       # PRD / 架构 / 类图 / 时序图 / 参数总表 / 皮肤包规范

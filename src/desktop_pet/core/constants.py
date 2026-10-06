@@ -545,6 +545,11 @@ WANDER_STEP_PX: Final[float] = 6.0
 #: 游走节拍间隔（毫秒）。
 WANDER_TICK_MS: Final[int] = 3000
 
+#: 置顶重申间隔（毫秒）：低频定时 ``raise_()`` 把宠物拉回最前，防止其他**同样置顶**
+#: 的窗口后来居上把宠物盖住（FR-16 的运行期保底——``WindowStaysOnTopHint`` 只保证
+#: 进入置顶层，不保证在该层内永远居首）。
+TOPMOST_REASSERT_MS: Final[int] = 4000
+
 #: 偶发「换姿态」（LOAF 趴着 / LIE_SIDE 侧卧）的持续时间（秒）。
 #: 比 1.2s 的小动作长得多 —— 「换姿态」需要维持一会儿才像姿势，而非一闪而过的抽搐。
 POSTURE_DURATION_S: Final[float] = 6.0
@@ -1005,6 +1010,7 @@ JP_MENU_TITLE: Final[str] = "日语学习"
 JP_MENU_ENABLE: Final[str] = "启用日语学习"
 JP_MENU_LEVEL: Final[str] = "难度"
 JP_MENU_VOCAB: Final[str] = "生词本…"
+JP_MENU_MASTERED: Final[str] = "已掌握词库…"
 
 # —— 托盘通知文案（JP_NOTIFY_REMEMBER_ADDED 用 str.format(word=..., kana=...)）——
 JP_NOTIFY_REMEMBER_ADDED: Final[str] = "已加入生词本：{word}（{kana}）"
@@ -1016,8 +1022,17 @@ JP_NOTIFY_BANK_UNAVAILABLE: Final[str] = "日语词库不可用，已跳过日�
 JP_VOCAB_WINDOW_TITLE: Final[str] = "生词本"
 JP_VOCAB_FILTER_ALL: Final[str] = "全部"
 JP_VOCAB_LEVEL_FILTER_LABEL: Final[str] = "等级："
-#: 发音按钮占位提示（TTS 未实现，仅置灰图标）
-JP_SPEAKER_TIP: Final[str] = "发音功能即将上线"
+# —— 单词发音（Google 翻译 TTS + 本地缓存）——
+#: 发音目标语言（Google TTS ``tl`` 参数，日语固定）
+TTS_LANG: Final[str] = "ja"
+#: 发音 MP3 缓存目录名（位于 ``%APPDATA%\\desktop-pet\\`` 下，不随包分发）
+AUDIO_CACHE_DIR_NAME: Final[str] = "audio_cache"
+#: 发音按钮提示（点击联网获取发音并本地缓存；后续点击秒播）
+JP_SPEAKER_TIP: Final[str] = "点击听发音"
+#: 发音获取中的按钮提示
+JP_SPEAKER_LOADING_TIP: Final[str] = "正在获取发音…"
+#: 发音获取失败的按钮提示（详情窗状态栏同样引用）
+JP_SPEAKER_ERROR_TIP: Final[str] = "发音获取失败，请检查网络"
 JP_VOCAB_COL_WORD: Final[str] = "单词"
 JP_VOCAB_COL_KANA: Final[str] = "假名"
 JP_VOCAB_COL_TRANSLATION: Final[str] = "翻译"
@@ -1029,6 +1044,30 @@ JP_VOCAB_EMPTY_TEXT: Final[str] = "还没有生词哦～ 打开「日语学习�
 JP_VOCAB_STATUS_TEMPLATE: Final[str] = "共 {count} 个生词"
 JP_VOCAB_CLEAR_CONFIRM_TITLE: Final[str] = "清空生词本"
 JP_VOCAB_CLEAR_CONFIRM_TEXT: Final[str] = "确定要清空全部生词吗？此操作不可撤销。"
+
+# —— 已掌握词库窗口文案（与生词本窗口同构）——
+JP_MASTERED_WINDOW_TITLE: Final[str] = "已掌握词库"
+JP_MASTERED_BTN_REVIEW: Final[str] = "立即复习"
+JP_MASTERED_BTN_BACK: Final[str] = "退回生词本"
+JP_MASTERED_BTN_CLEAR: Final[str] = "清空…"
+JP_MASTERED_BTN_CLOSE: Final[str] = "关闭"
+JP_MASTERED_EMPTY_TEXT: Final[str] = (
+    "还没有已掌握的单词哦～ 学习泡泡里点「记住了」就会收进这里，"
+    "并按记忆曲线自动安排复习"
+)
+JP_MASTERED_STATUS_TEMPLATE: Final[str] = "共 {count} 个词 · 待复习 {due} 个"
+JP_MASTERED_CLEAR_CONFIRM_TITLE: Final[str] = "清空已掌握词库"
+JP_MASTERED_CLEAR_CONFIRM_TEXT: Final[str] = (
+    "确定要清空全部已掌握记录吗？这些词将回到学习池重新学起，此操作不可撤销。"
+)
+#: 卡片状态行（阶段 / 到期描述），由 UI 层按 ``due_at`` 计算填充
+JP_MASTERED_STAGE_TEMPLATE: Final[str] = "记忆阶段 {stage}/{total}"
+JP_MASTERED_REVIEWED_TEMPLATE: Final[str] = "已复习 {count} 次"
+JP_MASTERED_DUE_NOW: Final[str] = "待复习"
+JP_MASTERED_DUE_OVERDUE_TEMPLATE: Final[str] = "待复习（已过 {days} 天）"
+JP_MASTERED_DUE_SOON: Final[str] = "24 小时内复习"
+JP_MASTERED_DUE_IN_TEMPLATE: Final[str] = "{days} 天后复习"
+JP_MASTERED_GRADUATED: Final[str] = "已毕业 · 长期记忆"
 
 # --------------------------------------------------------------------------- #
 # 11. 日语记忆（JP-17+）—— 时长 / 上限 / 权重 / 三态 / 文件 / 按钮条 / 托盘 / 记录窗口
@@ -1048,36 +1087,71 @@ JP_DAILY_LIMIT_LABELS: Final[dict[int, str]] = {
 }
 JP_VOCAB_WEIGHT: Final[float] = 3.0
 
+# —— 记忆曲线（间隔重复）复习阶梯 ——
+#: 复习间隔阶梯（天）。``stage`` = 下一轮复习使用的间隔下标：掌握瞬间 stage=0，
+#: ``due_at`` = 掌握时间 + ``INTERVALS[0]`` 天；某轮复习点「还记得」→ stage+1、
+#: ``due_at`` = 复习时间 + ``INTERVALS[stage+1]`` 天；通过最后一轮（stage=len-1 的
+#: 复习）→ 毕业（stage == len、``due_at`` 置空，不再排期）。
+REVIEW_INTERVALS_DAYS: Final[tuple[int, ...]] = (1, 3, 7, 14, 30, 60, 120)
+#: 复习泡泡超时（「还记得 / 忘了」都没点）→ 不算遗忘、不推进阶段、不写日志，
+#: 仅把 ``due_at`` 顺延的小时数（避免用户离开时同一词反复弹）。
+REVIEW_TIMEOUT_POSTPONE_HOURS: Final[int] = 1
+#: 复习节奏门控：两次复习泡泡之间的最小间隔（秒）——与生词同款 30~600s 随机
+#: 节奏，杜绝「到期复习连环轰炸」（复习处置后强制等一拍，唤醒器不得提前）。
+#: 间隔数值复用 :data:`JP_WORD_MIN_INTERVAL_S` / :data:`JP_WORD_MAX_INTERVAL_S`。
+#: 每日复习上限（档位枚举，默认 20）：复习**作答**（还记得/忘了）数达到上限后
+#: 今日不再自动弹复习（超时顺延不计数；手动「立即复习」不受限）。
+JP_REVIEW_DAILY_LIMIT: Final[int] = 20
+JP_REVIEW_DAILY_LIMIT_OPTIONS: Final[tuple[int, ...]] = (10, 20, 30, 50)
+JP_REVIEW_DAILY_LIMIT_LABELS: Final[dict[int, str]] = {
+    10: "10 个", 20: "20 个", 30: "30 个", 50: "50 个",
+}
+
 # —— 已掌握集合 / 每日记录 文件与版本 ——
 MASTERED_FILE_NAME: Final[str] = "mastered.json"
-MASTERED_VERSION: Final[int] = 1
+#: v2：新增 SRS 字段（stage / due_at / last_review_at / review_count），v1 记录
+#: 逐字段容错读入（缺省 stage=0、due_at=""），由 app 层启动迁移补排期。
+MASTERED_VERSION: Final[int] = 2
 DAILY_LOG_FILE_NAME: Final[str] = "daily_log.json"
 DAILY_LOG_VERSION: Final[int] = 1
 
 # —— 每日记录三态（一次展示恰好落一种终态；与设计 §7.6 一致）——
+# 复习两态：记忆曲线系统的复习处置（记得 / 忘了），不占新词每日配额。
 DAILY_LOG_STATUS_MASTERED: Final[str] = "mastered"
 DAILY_LOG_STATUS_VOCAB: Final[str] = "vocab"
 DAILY_LOG_STATUS_UNPROCESSED: Final[str] = "unprocessed"
+DAILY_LOG_STATUS_REVIEW_OK: Final[str] = "review_ok"
+DAILY_LOG_STATUS_REVIEW_LAPSED: Final[str] = "review_lapsed"
 DAILY_LOG_STATUSES: Final[tuple[str, ...]] = (
     DAILY_LOG_STATUS_MASTERED,
     DAILY_LOG_STATUS_VOCAB,
     DAILY_LOG_STATUS_UNPROCESSED,
+    DAILY_LOG_STATUS_REVIEW_OK,
+    DAILY_LOG_STATUS_REVIEW_LAPSED,
 )
 
 # —— 气泡按钮条（几何 / 文案 / 字号，见设计 §3.1）——
 JP_BUTTON_MASTERED: Final[str] = "记住了"
 JP_BUTTON_VOCAB: Final[str] = "新单词"
+#: 复习模式按钮文案（同一按钮条、同一几何，仅换文案与信号路由）
+JP_BUTTON_REVIEW_OK: Final[str] = "还记得"
+JP_BUTTON_REVIEW_LAPSED: Final[str] = "忘了"
 JP_BUTTON_RADIUS: Final[int] = 16
 JP_BUTTON_PAD_X: Final[int] = 14
 JP_BUTTON_PAD_Y: Final[int] = 8
 JP_BUTTON_BAR_GAP_PX: Final[int] = 6
 JP_BUTTON_BAR_PAD: Final[int] = 6
 JP_BUTTON_FONT_SIZE: Final[int] = 12
+#: 词卡气泡的**整体上移量**（逻辑像素）：按钮条贴在词卡气泡下方（条高 ≈46px），
+#: 不预留这段距离时按钮条会压在猫头上（2026-10-01 用户反馈遮挡）。仅词卡模式
+#: 生效——普通文本气泡没有按钮条，不上移。
+JP_WORD_BUBBLE_LIFT_PX: Final[float] = 52.0
 
 # —— 托盘菜单文案（B 版：显示时长 / 每日数量 / 立即显示）——
 JP_MENU_LOG: Final[str] = "学习记录…"
 JP_MENU_DURATION: Final[str] = "显示时长"
 JP_MENU_DAILY_LIMIT: Final[str] = "每日数量"
+JP_MENU_REVIEW_LIMIT: Final[str] = "复习上限"
 JP_MENU_SHOW_NOW: Final[str] = "立即显示一个新单词"
 JP_MENU_IMPORT_BANK: Final[str] = "导入词库…"
 
@@ -1094,6 +1168,8 @@ JP_NOTIFY_BANK_IMPORT_CANCELLED: Final[str] = "已取消导入词库"
 
 # —— 记忆闭环通知文案（str.format(word=..., kana=...)）——
 JP_NOTIFY_MASTERED_ADDED: Final[str] = "已标记为掌握：{word}（{kana}）"
+#: 标记掌握时**同时**从生词本移出的反馈后缀（拼在掌握文案之后）
+JP_NOTIFY_VOCAB_REMOVED_SUFFIX: Final[str] = "，已移出生词本"
 JP_NOTIFY_MASTERED_DUPLICATE: Final[str] = "这个单词已经掌握啦"
 JP_NOTIFY_LEVEL_DONE: Final[str] = "该等级单词已全部掌握，切换难度继续学习吧~"
 JP_NOTIFY_TODAY_DONE: Final[str] = "今日学习完成，明天继续加油！"
@@ -1109,6 +1185,32 @@ JP_NOTIFY_POOL_EXHAUSTED: Final[str] = "{level} 的词都学完了，换个难�
 JP_NOTIFY_JP_OFF: Final[str] = "请先开启「日语学习」哦～"
 JP_NOTIFY_SHOW_NOW_FAILED: Final[str] = "显示单词时出错了，请稍后重试"
 
+# —— 记忆曲线复习通知文案（str.format；word/kana/days）——
+#: 复习通过（还记得）→ 进入下一阶段，days = 距下次复习的天数
+JP_NOTIFY_REVIEW_OK: Final[str] = "还记得「{word}」，很棒！{days} 天后再来复习"
+#: 最后一轮复习通过 → 毕业，不再排期
+JP_NOTIFY_REVIEW_GRADUATED: Final[str] = (
+    "「{word}（{kana}）」已通过全部复习，进入长期记忆，不用再复习啦！"
+)
+#: 复习遗忘（忘了）→ 退回生词本重学
+JP_NOTIFY_REVIEW_LAPSED: Final[str] = (
+    "没关系，忘了很正常～「{word}」已放回生词本，重学后再战"
+)
+#: 已掌握词库窗口手动「立即复习」
+JP_NOTIFY_REVIEW_NOW: Final[str] = "开始复习：{word}（{kana}）"
+#: 复习被睡觉挡住（猫猫睡着不打扰）
+JP_NOTIFY_REVIEW_BLOCKED: Final[str] = "猫猫睡着啦，等它醒了再复习吧～"
+#: 手动「退回生词本」（用户在已掌握词库窗口操作）
+JP_NOTIFY_MASTERED_BACK_TO_VOCAB: Final[str] = "已把「{word}」退回生词本，将重新安排学习"
+#: 清空已掌握词库
+JP_NOTIFY_MASTERED_CLEARED: Final[str] = "已清空已掌握词库"
+#: 当日复习额度用完（一次性，跨日复位）
+JP_NOTIFY_REVIEW_TODAY_DONE: Final[str] = "今日复习任务完成，剩下的明天继续～"
+
+# —— 复习泡泡文案 ——
+#: 复习模式隐藏翻译/释义，用提示语替代（主动回忆；答案双击气泡进详情偷看）
+JP_BUBBLE_REVIEW_HINT: Final[str] = "回想一下意思，点下方按钮作答"
+
 # —— 学习记录窗口文案 / 尺寸 ——
 JP_LOG_WINDOW_TITLE: Final[str] = "学习记录"
 JP_LOG_WINDOW_W: Final[int] = 560
@@ -1119,6 +1221,8 @@ JP_LOG_FILTER_ALL: Final[str] = "全部"
 JP_LOG_STATUS_MASTERED: Final[str] = "已掌握"
 JP_LOG_STATUS_VOCAB: Final[str] = "生词"
 JP_LOG_STATUS_UNPROCESSED: Final[str] = "未处理"
+JP_LOG_STATUS_REVIEW_OK: Final[str] = "复习·记得"
+JP_LOG_STATUS_REVIEW_LAPSED: Final[str] = "复习·忘了"
 JP_LOG_COL_WORD: Final[str] = "单词"
 JP_LOG_COL_KANA: Final[str] = "假名"
 JP_LOG_COL_TRANSLATION: Final[str] = "翻译"
@@ -1127,7 +1231,10 @@ JP_LOG_COL_STATUS: Final[str] = "状态"
 JP_LOG_EMPTY_TEXT: Final[str] = "这一天还没有学习记录哦～"
 JP_LOG_STATUS_TEMPLATE: Final[str] = (
     "当日 {shown}/{limit} 条 · 已掌握 {mastered} · 生词 {vocab} · 未处理 {unprocessed}"
+    " · 复习 {review_ok}记/{review_lapsed}忘"
 )
+#: 底栏「关闭」按钮文案（与生词本底栏结构对齐；独立标量，不进任何 token 字典）。
+JP_LOG_BTN_CLOSE: Final[str] = "关闭"
 
 # --------------------------------------------------------------------------- #
 # 12. 单词详情（B 版 JC-*）—— 窗口
@@ -1141,6 +1248,8 @@ WORD_DETAIL_WINDOW_H: Final[int] = 560
 WORD_DETAIL_LABEL_KANA: Final[str] = "假名"
 WORD_DETAIL_RETRY: Final[str] = "重试"
 WORD_DETAIL_CLOSE: Final[str] = "关闭"
+#: 详情窗口「记住了」按钮的已掌握态文案（未掌握态复用 ``JP_BUTTON_MASTERED``）
+WORD_DETAIL_MASTERED_DONE: Final[str] = "已掌握"
 WORD_DETAIL_NO_VALUE: Final[str] = "—"
 
 # --------------------------------------------------------------------------- #
@@ -1295,6 +1404,7 @@ __all__ = [
     "WANDER_MAX_PX",
     "WANDER_STEP_PX",
     "WANDER_TICK_MS",
+    "TOPMOST_REASSERT_MS",
     "POSTURE_DURATION_S",
     "SURPRISE_POSTURE_KINDS",
     "SURPRISE_SEQUENCES",
@@ -1334,6 +1444,11 @@ __all__ = [
     "JP_DAILY_LIMIT_OPTIONS",
     "JP_DAILY_LIMIT_LABELS",
     "JP_VOCAB_WEIGHT",
+    "REVIEW_INTERVALS_DAYS",
+    "REVIEW_TIMEOUT_POSTPONE_HOURS",
+    "JP_REVIEW_DAILY_LIMIT",
+    "JP_REVIEW_DAILY_LIMIT_OPTIONS",
+    "JP_REVIEW_DAILY_LIMIT_LABELS",
     "MASTERED_FILE_NAME",
     "MASTERED_VERSION",
     "DAILY_LOG_FILE_NAME",
@@ -1341,24 +1456,31 @@ __all__ = [
     "DAILY_LOG_STATUS_MASTERED",
     "DAILY_LOG_STATUS_VOCAB",
     "DAILY_LOG_STATUS_UNPROCESSED",
+    "DAILY_LOG_STATUS_REVIEW_OK",
+    "DAILY_LOG_STATUS_REVIEW_LAPSED",
     "DAILY_LOG_STATUSES",
     "JP_BUTTON_MASTERED",
     "JP_BUTTON_VOCAB",
+    "JP_BUTTON_REVIEW_OK",
+    "JP_BUTTON_REVIEW_LAPSED",
     "JP_BUTTON_RADIUS",
     "JP_BUTTON_PAD_X",
     "JP_BUTTON_PAD_Y",
     "JP_BUTTON_BAR_GAP_PX",
     "JP_BUTTON_BAR_PAD",
+    "JP_WORD_BUBBLE_LIFT_PX",
     "JP_BUTTON_FONT_SIZE",
     "JP_MENU_LOG",
     "JP_MENU_DURATION",
     "JP_MENU_DAILY_LIMIT",
+    "JP_MENU_REVIEW_LIMIT",
     "JP_MENU_SHOW_NOW",
     "TRAY_MENU_REDUCE_MOTION",
     "TRAY_MENU_REDUCE_MOTION_TIP",
     "TRAY_NOTIFY_REDUCE_MOTION_ON",
     "TRAY_NOTIFY_REDUCE_MOTION_OFF",
     "JP_NOTIFY_MASTERED_ADDED",
+    "JP_NOTIFY_VOCAB_REMOVED_SUFFIX",
     "JP_NOTIFY_MASTERED_DUPLICATE",
     "JP_NOTIFY_LEVEL_DONE",
     "JP_NOTIFY_TODAY_DONE",
@@ -1368,6 +1490,32 @@ __all__ = [
     "JP_NOTIFY_POOL_EXHAUSTED",
     "JP_NOTIFY_JP_OFF",
     "JP_NOTIFY_SHOW_NOW_FAILED",
+    "JP_NOTIFY_REVIEW_OK",
+    "JP_NOTIFY_REVIEW_GRADUATED",
+    "JP_NOTIFY_REVIEW_LAPSED",
+    "JP_NOTIFY_REVIEW_NOW",
+    "JP_NOTIFY_REVIEW_BLOCKED",
+    "JP_NOTIFY_MASTERED_BACK_TO_VOCAB",
+    "JP_NOTIFY_MASTERED_CLEARED",
+    "JP_NOTIFY_REVIEW_TODAY_DONE",
+    "JP_BUBBLE_REVIEW_HINT",
+    "JP_MENU_MASTERED",
+    "JP_MASTERED_WINDOW_TITLE",
+    "JP_MASTERED_BTN_REVIEW",
+    "JP_MASTERED_BTN_BACK",
+    "JP_MASTERED_BTN_CLEAR",
+    "JP_MASTERED_BTN_CLOSE",
+    "JP_MASTERED_EMPTY_TEXT",
+    "JP_MASTERED_STATUS_TEMPLATE",
+    "JP_MASTERED_CLEAR_CONFIRM_TITLE",
+    "JP_MASTERED_CLEAR_CONFIRM_TEXT",
+    "JP_MASTERED_STAGE_TEMPLATE",
+    "JP_MASTERED_REVIEWED_TEMPLATE",
+    "JP_MASTERED_DUE_NOW",
+    "JP_MASTERED_DUE_OVERDUE_TEMPLATE",
+    "JP_MASTERED_DUE_SOON",
+    "JP_MASTERED_DUE_IN_TEMPLATE",
+    "JP_MASTERED_GRADUATED",
     "JP_LOG_WINDOW_TITLE",
     "JP_LOG_WINDOW_W",
     "JP_LOG_WINDOW_H",
@@ -1377,6 +1525,8 @@ __all__ = [
     "JP_LOG_STATUS_MASTERED",
     "JP_LOG_STATUS_VOCAB",
     "JP_LOG_STATUS_UNPROCESSED",
+    "JP_LOG_STATUS_REVIEW_OK",
+    "JP_LOG_STATUS_REVIEW_LAPSED",
     "JP_LOG_COL_WORD",
     "JP_LOG_COL_KANA",
     "JP_LOG_COL_TRANSLATION",
@@ -1384,6 +1534,7 @@ __all__ = [
     "JP_LOG_COL_STATUS",
     "JP_LOG_EMPTY_TEXT",
     "JP_LOG_STATUS_TEMPLATE",
+    "JP_LOG_BTN_CLOSE",
     # 单词详情窗口（基础几何 / 标签 / 通用按钮）
     "WORD_DETAIL_WINDOW_TITLE",
     "WORD_DETAIL_WINDOW_W",
@@ -1391,6 +1542,7 @@ __all__ = [
     "WORD_DETAIL_LABEL_KANA",
     "WORD_DETAIL_RETRY",
     "WORD_DETAIL_CLOSE",
+    "WORD_DETAIL_MASTERED_DONE",
     "WORD_DETAIL_NO_VALUE",
     # 中文详情五要素 / 用户缓存 / DeepSeek 联网（增量改造 §13）
     "WORD_DETAIL_FIELD_MEANING",

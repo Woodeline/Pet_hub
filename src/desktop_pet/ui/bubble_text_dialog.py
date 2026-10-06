@@ -129,7 +129,9 @@ class BubbleTextDialog(QDialog):
         self._update_counts()
 
         apply_btn = QPushButton("应用")
+        theme.set_variant(apply_btn, "primary")
         cancel_btn = QPushButton("取消")
+        theme.set_variant(cancel_btn, "ghost")
         apply_btn.setDefault(True)
         apply_btn.clicked.connect(self._on_apply)
         cancel_btn.clicked.connect(self.reject)

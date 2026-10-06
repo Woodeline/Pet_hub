@@ -5,7 +5,7 @@
 - ``build_qss()`` 是**纯字符串**产物，**无需 QApplication 即可调用**（子进程验证）。
 - QSS 命中关键选择器：按钮四变体 × 四态、chip、斑马纹、滚动条、输入框。
 - QSS 里出现的**每一个** ``#RRGGBB`` 都来自 ``SEMANTIC_COLORS`` 的值（无裸 hex）。
-- 统一圆角命中 ``RADIUS["md"]``；焦点环含 ``FOCUS_RING_PX`` 与 ``primary`` 色值。
+- 统一圆角命中 ``RADIUS["md"]``；焦点环为 ``FOCUS_RING_WIDTH_PX``=1px 的 ``text_faint`` 浅灰（Tab 下划线线宽仍为 ``FOCUS_RING_PX``=2）。
 - ``apply_theme`` / ``set_variant`` / ``set_role`` 行为契约。
 """
 
@@ -162,9 +162,16 @@ def test_qss_radius_hits_radius_md() -> None:
 
 
 def test_qss_focus_ring_uses_focus_px_and_primary() -> None:
-    """焦点环为 ``2px solid #1F2328``（期望值用**字面量**，避免自引用假绿）。"""
+    """焦点环为 ``1px solid #98A2AD``（text_faint 浅灰轻量环；期望值用**字面量**避免自引用假绿）。
 
-    assert "border: 2px solid #1F2328" in theme.build_qss(), "焦点环未按契约（2px + primary）拼装"
+    Tab 选中下划线线宽不受影响（``FOCUS_RING_PX``=2 继续用于 ``border-bottom``）。
+    """
+
+    qss = theme.build_qss()
+    assert "border: 1px solid #98A2AD" in qss, "焦点环未按契约（1px + text_faint 浅灰）拼装"
+    assert "border: 2px solid #1F2328" not in qss, "旧 2px 近黑焦点环残留"
+    assert "border: 1px solid #4C8DDA" not in qss, "淡蓝焦点环残留（已改浅灰）"
+    assert "border-bottom: 2px solid transparent" in qss, "Tab 下划线线宽被误改"
 
 
 # --------------------------------------------------------------------------- #

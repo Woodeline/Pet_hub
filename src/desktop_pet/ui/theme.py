@@ -11,9 +11,20 @@
 
 设计约束（对应计划 §3 / §0 红线）：
 - 尺寸（内边距 / 圆角 / 字号）只能来自 ``SPACING`` / ``FONT_SIZE`` / ``RADIUS``。
-- 统一圆角取 ``RADIUS["md"]``；焦点环取 ``FOCUS_RING_PX`` px 的 ``primary`` 描边。
+- 统一圆角取 ``RADIUS["md"]``；焦点环取 ``FOCUS_RING_WIDTH_PX`` px 的 ``text_faint``
+  浅灰描边（1px 轻量环；Tab 下划线线宽仍用 ``FOCUS_RING_PX``）。
 - 组件通过动态属性 ``variant`` / ``role`` 选择样式块，由 :func:`set_variant` /
   :func:`set_role` 设置并触发重新抛光（unpolish/polish）。
+
+圆角四档语义（收敛后不得再漂移）：
+- **面板档** ``RADIUS["md"]`` = 8px：窗口内一切面板 / 卡片 / 按钮 / 输入框 / 对话框；
+- **小元素档** ``RADIUS["sm"]`` = 6px：菜单条目 / chip / 滚动条手柄；
+- **胶囊档** ``JP_BUTTON_RADIUS`` = 16px：**仅**气泡按钮条（浮层胶囊语义，唯一例外）；
+- **笔直档** ``0``：文字 Tab 下划线选中态（刻意笔直，不圆角）。
+
+token 扩展红线：``COLORS`` / ``SEMANTIC_COLORS`` / ``SPACING`` / ``FONT_SIZE`` / ``RADIUS``
+五张表的**键集合**均被 ``test_design_tokens`` / ``test_static_constraints`` 全等断言守护；
+新增色值或尺寸一律走**独立标量常量**（并同步 ``constants.__all__``），**禁止新增上述字典的键**。
 """
 
 from __future__ import annotations
@@ -26,9 +37,16 @@ if TYPE_CHECKING:  # pragma: no cover —— 仅为类型注解，运行时不�
     from PySide6.QtWidgets import QWidget
 
 #: 按钮变体（与 QSS 中的 ``QPushButton[variant="…"]`` 选择器一一对应）。
-BUTTON_VARIANTS: Final[tuple[str, ...]] = ("primary", "secondary", "ghost", "destructive")
+#: ``success``：正向操作专用（「记住了」），三态渐变色值取自 ``SEMANTIC_COLORS``
+#: 的 success 族，与学习泡泡按钮条的绿色渐变同源同款。
+BUTTON_VARIANTS: Final[tuple[str, ...]] = (
+    "primary", "success", "secondary", "ghost", "destructive"
+)
 
-#: 焦点环宽度（px），参与 QSS 中 ``:focus`` 描边的拼装。
+#: 焦点环宽度（px）：1px 轻量浅灰环（``text_faint``），替代旧 2px 近黑粗框。
+FOCUS_RING_WIDTH_PX: Final[int] = 1
+
+#: Tab 选中下划线线宽（px）（历史常量名沿用；自焦点环改细后仅 Tab 下划线使用）。
 FOCUS_RING_PX: Final[int] = 2
 
 
@@ -100,13 +118,28 @@ QPushButton:disabled {{
     border: 1px solid {c['border']};
 }}
 QPushButton:focus {{
-    border: {FOCUS_RING_PX}px solid {c['primary']};
+    border: {FOCUS_RING_WIDTH_PX}px solid {c['text_faint']};
 }}"""
     )
 
     # 每项：(常态底, 悬停底, 按下底, 文字色, 描边色)；``None`` → transparent。
+    # 底色项既可以是纯色，也可以是 ``qlineargradient(…)`` 表达式（QSS 的 ``background``
+    # 两者通吃）。``success``（「记住了」）取与气泡按钮条**完全同款**的三态渐变：
+    # 端点 token（success_hover / success / success_pressed）与气泡的
+    # jp_button_primary_hover/bg/pressed 一一映射同值（test_design_tokens 钉死），
+    # 使窗口内按钮与浮层胶囊呈现同一抹绿、同一悬停/按下明暗走向。
     button_defs: dict[str, tuple[str | None, str, str, str, str | None]] = {
         "primary": (c["primary"], c["primary_hover"], c["primary_pressed"], c["surface"], c["primary"]),
+        "success": (
+            f"qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+            f" stop:0 {c['success_hover']}, stop:0.5 {c['success']}, stop:1 {c['success_pressed']})",
+            f"qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+            f" stop:0 {c['success_hover']}, stop:1 {c['success']})",
+            f"qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+            f" stop:0 {c['success']}, stop:1 {c['success_pressed']})",
+            c["surface"],
+            None,
+        ),
         "secondary": (c["surface"], c["surface_alt"], c["border"], c["text_primary"], c["border"]),
         "ghost": (None, c["surface_alt"], c["border"], c["text_primary"], None),
         "destructive": (c["destructive"], c["destructive_hover"], c["destructive"], c["surface"], c["destructive"]),
@@ -136,7 +169,7 @@ QPushButton[variant="{variant}"]:disabled {{
     border: 1px solid {c['border']};
 }}
 QPushButton[variant="{variant}"]:focus {{
-    border: {FOCUS_RING_PX}px solid {c['primary']};
+    border: {FOCUS_RING_WIDTH_PX}px solid {c['text_faint']};
 }}"""
         )
 
@@ -164,7 +197,7 @@ QLabel[role="caption"] {{
 QFrame[role="card"] {{
     background: {c['surface']};
     border: 1px solid {c['border']};
-    border-radius: {r['lg']}px;
+    border-radius: {r['md']}px;
 }}
 QFrame[role="card"]:hover {{
     background: {c['surface_alt']};
@@ -252,11 +285,80 @@ QComboBox:hover, QLineEdit:hover {{
     border: 1px solid {c['text_secondary']};
 }}
 QComboBox:focus, QLineEdit:focus {{
-    border: {FOCUS_RING_PX}px solid {c['primary']};
+    border: {FOCUS_RING_WIDTH_PX}px solid {c['text_faint']};
 }}
 QComboBox::drop-down {{
     border: none;
     width: {sp['lg']}px;
+}}"""
+    )
+
+    # —— 分组框（台词设置对话框的 QGroupBox）：面板档圆角 + 标题让位 ——
+    # 此前 QGroupBox 零 QSS → 系统默认方形边框 + 标题压线；此处对齐面板档（圆角 8 + 描边 + surface 底）。
+    blocks.append(
+        f"""
+QGroupBox {{
+    background: {c['surface']};
+    border: 1px solid {c['border']};
+    border-radius: {r['md']}px;
+    margin-top: {fs['caption']}px;
+    padding-top: {sp['sm']}px;
+}}
+QGroupBox::title {{
+    subcontrol-origin: margin;
+    left: {sp['sm']}px;
+    padding: 0 {sp['xs']}px;
+    color: {c['text_secondary']};
+    font-weight: bold;
+    font-size: {fs['caption']}px;
+}}"""
+    )
+
+    # —— 多行文本编辑（台词设置对话框的 QPlainTextEdit）：对齐 QComboBox/QLineEdit 四态 ——
+    # 此前零 QSS → 直角系统边框，与单行输入（圆角 8 + token 色）不同族。
+    blocks.append(
+        f"""
+QPlainTextEdit, QTextEdit {{
+    background: {c['surface']};
+    color: {c['text_primary']};
+    border: 1px solid {c['border']};
+    border-radius: {r['md']}px;
+    padding: {sp['xs']}px {sp['sm']}px;
+}}
+QPlainTextEdit:hover, QTextEdit:hover {{
+    border: 1px solid {c['text_secondary']};
+}}
+QPlainTextEdit:focus, QTextEdit:focus {{
+    border: {FOCUS_RING_WIDTH_PX}px solid {c['text_faint']};
+}}
+QPlainTextEdit:disabled, QTextEdit:disabled {{
+    background: {c['surface_alt']};
+    color: {c['text_faint']};
+}}"""
+    )
+
+    # —— 对话框面板：surface 底 + 正文色（QMessageBox 保底见下）——
+    blocks.append(
+        f"""
+QDialog {{
+    background: {c['surface']};
+    color: {c['text_primary']};
+}}"""
+    )
+
+    # —— QMessageBox 保底（防御性兜底）：当前仓库已无 QMessageBox 调用方 ——
+    # 本批次起业务确认弹窗统一走 ui.confirm_dialog.ConfirmDialog（清空生词本已切换）；
+    # 此块仅为「防未来回归系统方角 + 系统色外观」的兜底，无现存使用方。
+    blocks.append(
+        f"""
+QMessageBox {{
+    background: {c['surface']};
+}}
+QMessageBox QLabel {{
+    color: {c['text_primary']};
+}}
+QMessageBox QPushButton {{
+    border-radius: {r['md']}px;
 }}"""
     )
 
@@ -365,6 +467,7 @@ def set_card_selected(widget: "QWidget", selected: bool) -> None:
 __all__ = [
     "BUTTON_VARIANTS",
     "FOCUS_RING_PX",
+    "FOCUS_RING_WIDTH_PX",
     "build_qss",
     "build_menu_qss",
     "apply_theme",

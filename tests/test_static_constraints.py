@@ -243,12 +243,24 @@ def test_no_image_assets(project_root: Path) -> None:
         ("JP_BUBBLE_MAX_DURATION_S", 300.0),
         ("JP_DAILY_LIMIT", 15),
         ("JP_VOCAB_WEIGHT", 3.0),
-        ("MASTERED_VERSION", 1),
+        # 记忆曲线（间隔重复）：阶梯 7 轮、超时顺延 1 小时；mastered.json 升 v2
+        ("REVIEW_INTERVALS_DAYS", (1, 3, 7, 14, 30, 60, 120)),
+        ("REVIEW_TIMEOUT_POSTPONE_HOURS", 1),
+        ("JP_REVIEW_DAILY_LIMIT", 20),
+        ("MASTERED_VERSION", 2),
         ("DAILY_LOG_VERSION", 1),
     ],
 )
 def test_constants_match_prd(attr: str, expected) -> None:
     assert getattr(C, attr) == expected, f"{attr} 与 PRD 不一致"
+
+
+def test_jp_review_limit_option_tiers_match_prd() -> None:
+    """复习上限档位收敛：{10,20,30,50}，默认值命中档位，标签全覆盖。"""
+
+    assert C.JP_REVIEW_DAILY_LIMIT_OPTIONS == (10, 20, 30, 50)
+    assert C.JP_REVIEW_DAILY_LIMIT in C.JP_REVIEW_DAILY_LIMIT_OPTIONS
+    assert set(C.JP_REVIEW_DAILY_LIMIT_LABELS) == set(C.JP_REVIEW_DAILY_LIMIT_OPTIONS)
 
 
 def test_scales_match_prd() -> None:

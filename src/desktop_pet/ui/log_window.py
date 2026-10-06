@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 
 from desktop_pet.core import constants as C
 from desktop_pet.core.daily_log_store import DailyLogEntry
-from desktop_pet.ui import motion_ui, theme
+from desktop_pet.ui import icon_factory, motion_ui, theme
 
 logger = logging.getLogger(__name__)
 
@@ -37,14 +37,21 @@ _STATUS_LABELS: dict[str, str] = {
     C.DAILY_LOG_STATUS_MASTERED: C.JP_LOG_STATUS_MASTERED,
     C.DAILY_LOG_STATUS_VOCAB: C.JP_LOG_STATUS_VOCAB,
     C.DAILY_LOG_STATUS_UNPROCESSED: C.JP_LOG_STATUS_UNPROCESSED,
+    C.DAILY_LOG_STATUS_REVIEW_OK: C.JP_LOG_STATUS_REVIEW_OK,
+    C.DAILY_LOG_STATUS_REVIEW_LAPSED: C.JP_LOG_STATUS_REVIEW_LAPSED,
 }
 #: 状态 → 语义色 key（指向 ``SEMANTIC_COLORS``）。
 # P1 三态映射依据（计划 §3）：已掌握=信息色 ``info``；生词从「蓝」改为琥珀 ``warning``
-# 以与信息色解耦；未处理=辅助灰 ``muted``。
+# 以与信息色解耦；未处理=次级灰 ``text_secondary``——原用 ``muted`` 与 ``text_faint`` 同值
+# ``#98A2AD``，在 ``surface`` ``#FFFFFF`` 上对比度仅 2.59（偏低、不易辨认），
+# 提升为 ``text_secondary`` ``#5A626C``（对比度 6.18）以改善可读性。
+# 复习两态（记忆曲线）：记得=正向绿 ``success``；忘了=警示红 ``destructive``。
 _STATUS_COLOR_KEYS: dict[str, str] = {
     C.DAILY_LOG_STATUS_MASTERED: "info",
     C.DAILY_LOG_STATUS_VOCAB: "warning",
-    C.DAILY_LOG_STATUS_UNPROCESSED: "muted",
+    C.DAILY_LOG_STATUS_UNPROCESSED: "text_secondary",
+    C.DAILY_LOG_STATUS_REVIEW_OK: "success",
+    C.DAILY_LOG_STATUS_REVIEW_LAPSED: "destructive",
 }
 
 
@@ -84,17 +91,18 @@ class _LogCard(QFrame):
         )
         top.addWidget(kana_label)
         top.addStretch(1)
-        if entry.status != C.DAILY_LOG_STATUS_UNPROCESSED:
-            color_key = _STATUS_COLOR_KEYS.get(entry.status)
-            status_text = _STATUS_LABELS.get(entry.status, entry.status)
-            if color_key:
-                status_label = QLabel(status_text, self)
-                status_label.setStyleSheet(
-                    f"color: {C.SEMANTIC_COLORS[color_key]};"
-                    f" font-size: {C.FONT_SIZE['caption']}px; font-weight: bold;"
-                    " background: transparent;"
-                )
-                top.addWidget(status_label)
+        # 三态齐平：三种状态都渲染状态标签（此前把「未处理」排除在外，导致
+        # 未处理卡片无状态提示、且未处理文字对比度提升改动无使用路径）。
+        color_key = _STATUS_COLOR_KEYS.get(entry.status)
+        status_text = _STATUS_LABELS.get(entry.status, entry.status)
+        if color_key:
+            status_label = QLabel(status_text, self)
+            status_label.setStyleSheet(
+                f"color: {C.SEMANTIC_COLORS[color_key]};"
+                f" font-size: {C.FONT_SIZE['caption']}px; font-weight: bold;"
+                " background: transparent;"
+            )
+            top.addWidget(status_label)
         shown_at = QLabel(str(entry.shown_at), self)
         shown_at.setStyleSheet(
             f"color: {C.SEMANTIC_COLORS['text_faint']};"
@@ -253,11 +261,19 @@ class LogWindow(QWidget):
         self._stack.addWidget(self._empty_label)
         root.addWidget(self._stack, 1)
 
-        # 底部：统计栏
+        # 底部：统计栏 + 关闭（与生词本底栏结构对齐）
         bottom = QHBoxLayout()
         self._status_label = QLabel("", self)
         bottom.addWidget(self._status_label)
         bottom.addStretch(1)
+        self._btn_close = QPushButton(C.JP_LOG_BTN_CLOSE, self)
+        theme.set_variant(self._btn_close, "ghost")
+        self._btn_close.setIcon(
+            icon_factory.make_icon("close", color=C.SEMANTIC_COLORS["text_primary"])
+        )
+        self._btn_close.setIconSize(QSize(C.SPACING["lg"], C.SPACING["lg"]))
+        self._btn_close.clicked.connect(self.close)
+        bottom.addWidget(self._btn_close)
         root.addLayout(bottom)
 
         self._apply_filter()
@@ -313,6 +329,12 @@ class LogWindow(QWidget):
         unprocessed = sum(
             1 for e in day_entries if e.status == C.DAILY_LOG_STATUS_UNPROCESSED
         )
+        review_ok = sum(
+            1 for e in day_entries if e.status == C.DAILY_LOG_STATUS_REVIEW_OK
+        )
+        review_lapsed = sum(
+            1 for e in day_entries if e.status == C.DAILY_LOG_STATUS_REVIEW_LAPSED
+        )
         self._status_label.setText(
             C.JP_LOG_STATUS_TEMPLATE.format(
                 shown=len(day_entries),
@@ -320,6 +342,8 @@ class LogWindow(QWidget):
                 mastered=mastered,
                 vocab=vocab,
                 unprocessed=unprocessed,
+                review_ok=review_ok,
+                review_lapsed=review_lapsed,
             )
         )
 
