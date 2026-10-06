@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from datetime import date
 
-from PySide6.QtCore import QPointF, QRectF, QSize, Qt
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import (
     QFrame,
@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 
 from desktop_pet.core import constants as C
 from desktop_pet.core.stats_aggregator import StatsSummary
+from desktop_pet.core.weak_words import WeakWord
 from desktop_pet.ui import icon_factory, motion_ui, theme
 
 logger = logging.getLogger(__name__)
@@ -273,8 +274,57 @@ class _StatBlock(QWidget):
         self._value_label.setText(str(text))
 
 
+class _WeakRow(QFrame):
+    """易错词列表中的一行：双击发出详情信号（仅转发 id，无业务逻辑）。"""
+
+    double_clicked = Signal(str)  # 携带 word id
+
+    def __init__(self, weak: WeakWord, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._id = str(weak.id)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+
+        row = QHBoxLayout(self)
+        row.setContentsMargins(C.SPACING["sm"], C.SPACING["xs"], C.SPACING["sm"], C.SPACING["xs"])
+        row.setSpacing(C.SPACING["sm"])
+        word_label = QLabel(weak.word, self)
+        word_label.setStyleSheet(
+            f"font-size: {C.FONT_SIZE['body']}px; font-weight: bold;"
+            f" color: {C.SEMANTIC_COLORS['text_primary']}; background: transparent;"
+        )
+        row.addWidget(word_label)
+        kana_label = QLabel(f"｜{weak.kana}", self)
+        kana_label.setStyleSheet(
+            f"font-size: {C.FONT_SIZE['small']}px;"
+            f" color: {C.SEMANTIC_COLORS['text_secondary']}; background: transparent;"
+        )
+        row.addWidget(kana_label)
+        row.addStretch(1)
+        # 遗忘次数 + 最近遗忘日（YYYY-MM-DD 取自 ISO 快照前 10 位）
+        count_text = C.JP_STATS_WEAK_COUNT_TEMPLATE.format(
+            count=weak.lapsed_count, day=weak.last_lapsed_at[:10]
+        )
+        count_label = QLabel(count_text, self)
+        count_label.setStyleSheet(
+            f"color: {C.SEMANTIC_COLORS['warning']};"
+            f" font-size: {C.FONT_SIZE['caption']}px; background: transparent;"
+        )
+        row.addWidget(count_label)
+
+    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802 —— Qt 命名约定
+        """双击 → 发详情信号（controller 打开词条详情窗口）。"""
+
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.double_clicked.emit(self._id)
+        super().mouseDoubleClickEvent(event)
+
+
 class StatsWindow(QWidget):
     """学习统计窗口（普通顶层窗口，纯展示）。"""
+
+    #: 双击易错词行 → 打开词条详情（controller 复用既有详情通道）
+    weak_word_double_clicked = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         """构造学习统计窗口。"""
@@ -310,6 +360,22 @@ class StatsWindow(QWidget):
             or any(value > 0 for value in summary.review_lapsed.values())
         )
         self._empty_hint.setVisible(not has_any)
+
+    def set_weak_words(self, words: tuple[WeakWord, ...]) -> None:
+        """喂入易错词 TopN（controller 打开窗口时调用，重建行列表）。"""
+
+        while self._weak_rows.count() > 1:  # 末尾 stretch 保留
+            item = self._weak_rows.takeAt(0)
+            widget = item.widget() if item is not None else None
+            if widget is not None:
+                widget.deleteLater()
+        for weak in words:
+            row = _WeakRow(weak, self._weak_host)
+            row.double_clicked.connect(self.weak_word_double_clicked)
+            self._weak_rows.insertWidget(self._weak_rows.count() - 1, row)
+        has_weak = bool(words)
+        self._weak_empty.setVisible(not has_weak)
+        self._weak_hint.setVisible(has_weak)
 
     def set_reduce_motion(self, flag: bool) -> None:
         """注入「减少动效」开关（由 controller 在窗口显示前调用）。"""
@@ -396,6 +462,40 @@ class StatsWindow(QWidget):
         self._curve = _Curve(curve_card)
         curve_layout.addWidget(self._curve)
         root.addWidget(curve_card, 1)
+
+        # 中部：易错词卡片（错题本 TopN，双击行打开详情）
+        weak_card = QFrame(self)
+        theme.set_role(weak_card, "card")
+        weak_layout = QVBoxLayout(weak_card)
+        weak_layout.setContentsMargins(
+            C.SPACING["md"], C.SPACING["sm"], C.SPACING["md"], C.SPACING["sm"]
+        )
+        weak_layout.setSpacing(C.SPACING["xs"])
+        weak_title_row = QHBoxLayout()
+        weak_title_row.addWidget(self._section_label(C.JP_STATS_WEAK_TITLE))
+        weak_title_row.addStretch(1)
+        self._weak_hint = QLabel(C.JP_STATS_WEAK_HINT, weak_card)
+        self._weak_hint.setStyleSheet(
+            f"color: {C.SEMANTIC_COLORS['text_faint']};"
+            f" font-size: {C.FONT_SIZE['small']}px; background: transparent;"
+        )
+        weak_title_row.addWidget(self._weak_hint)
+        weak_layout.addLayout(weak_title_row)
+        self._weak_host = QWidget(weak_card)
+        self._weak_rows = QVBoxLayout(self._weak_host)
+        self._weak_rows.setContentsMargins(0, 0, 0, 0)
+        self._weak_rows.setSpacing(C.SPACING["xs"])
+        self._weak_rows.addStretch(1)
+        weak_layout.addWidget(self._weak_host)
+        self._weak_empty = QLabel(C.JP_STATS_WEAK_EMPTY, weak_card)
+        self._weak_empty.setStyleSheet(
+            f"color: {C.SEMANTIC_COLORS['text_faint']};"
+            f" font-size: {C.FONT_SIZE['caption']}px; background: transparent;"
+        )
+        self._weak_empty.setWordWrap(True)
+        weak_layout.addWidget(self._weak_empty)
+        root.addWidget(weak_card)
+        self._weak_hint.setVisible(False)
 
         # 底栏：关闭（与学习记录窗口底栏结构对齐）
         bottom = QHBoxLayout()

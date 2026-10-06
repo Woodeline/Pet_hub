@@ -188,6 +188,8 @@ def test_load_after_save_is_json_readable(config_store: ConfigStore, config_path
         "jp_enabled", "jp_level",
         "jp_bubble_duration_s", "jp_daily_limit",
         "jp_review_daily_limit",
+        # 增量改造：错题本每日一次提醒开关（CONFIG_VERSION 保持 1）
+        "weak_review_enabled",
         # 增量改造：DeepSeek 联网 / 中文详情配置（CONFIG_VERSION 保持 1）
         "deepseek_api_key", "deepseek_base_url", "deepseek_model",
         "word_detail_llm_timeout_s", "word_detail_llm_retries",
@@ -602,3 +604,22 @@ def test_legacy_config_without_keyboard_pool_loads_empty() -> None:
     assert cfg.bubble_texts_custom == ["旧的自动组"]
     assert cfg.bubble_texts_custom_keyboard == []
     assert cfg.bubble_text_pack == "gentle"
+
+
+def test_weak_review_enabled_default_and_missing_field() -> None:
+    """错题提醒开关默认开；旧配置缺该字段时同样回落默认（向后兼容）。"""
+
+    assert AppConfig().weak_review_enabled is True
+    assert AppConfig.from_dict({}).weak_review_enabled is True
+    assert AppConfig.from_dict({"weak_review_enabled": "no"}).weak_review_enabled is False
+    # 非法值回落默认
+    assert AppConfig.from_dict({"weak_review_enabled": "随便"}).weak_review_enabled is True
+
+
+def test_weak_review_enabled_roundtrip(config_store: ConfigStore) -> None:
+    """错题提醒开关落盘可读回。"""
+
+    config_store.save(AppConfig(weak_review_enabled=False))
+    loaded = config_store.load()
+    assert loaded.weak_review_enabled is False
+    assert loaded.to_dict()["weak_review_enabled"] is False

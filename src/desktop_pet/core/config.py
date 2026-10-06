@@ -260,6 +260,8 @@ class AppConfig:
     jp_daily_limit: int = C.JP_DAILY_LIMIT
     #: 每日复习上限（默认 20，取值 10/20/30/50）——复习作答数达上限后今日不再自动弹
     jp_review_daily_limit: int = C.JP_REVIEW_DAILY_LIMIT
+    #: 错题本每日一次提醒开关（默认开；提醒经托盘通知引导到学习统计窗口）
+    weak_review_enabled: bool = True
     deepseek_api_key: str = ""
     deepseek_base_url: str = C.LLM_ENDPOINT
     deepseek_model: str = C.LLM_MODEL
@@ -294,6 +296,7 @@ class AppConfig:
             "jp_bubble_duration_s": int(self.jp_bubble_duration_s),
             "jp_daily_limit": int(self.jp_daily_limit),
             "jp_review_daily_limit": int(self.jp_review_daily_limit),
+            "weak_review_enabled": bool(self.weak_review_enabled),
             "deepseek_api_key": str(self.deepseek_api_key),
             "deepseek_base_url": str(self.deepseek_base_url),
             "deepseek_model": str(self.deepseek_model),
@@ -351,6 +354,9 @@ class AppConfig:
             jp_daily_limit=_coerce_daily_limit(get("jp_daily_limit"), defaults.jp_daily_limit),
             jp_review_daily_limit=_coerce_review_limit(
                 get("jp_review_daily_limit"), defaults.jp_review_daily_limit
+            ),
+            weak_review_enabled=_coerce_bool(
+                get("weak_review_enabled"), defaults.weak_review_enabled
             ),
             deepseek_api_key=_coerce_str(
                 get("deepseek_api_key"), defaults.deepseek_api_key, allow_empty=True

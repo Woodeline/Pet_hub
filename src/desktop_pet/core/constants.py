@@ -1269,6 +1269,24 @@ JP_CELEBRATION_TEXTS: Final[tuple[str, ...]] = (
     "今天的进度条满了，你真棒！",
 )
 
+# —— 错题本（易错词）：从每日记录 review_lapsed 派生，无独立存储 ——
+#: 遗忘次数达到该值才算「易错」（1 次遗忘是正常记忆波动，不进错题本）
+WEAK_WORD_MIN_LAPSES: Final[int] = 2
+#: 易错词在加权抽取中的额外权重倍率（叠加在既有权重上：生词 3.0 → 6.0）
+WEAK_WORD_BOOST: Final[float] = 2.0
+#: 参与加权 / 展示的易错词上限（TopN）
+WEAK_WORD_TOP_N: Final[int] = 10
+#: 每日一次易错提醒的随机延迟（秒）：启动 / 跨日后 5~15 分钟内随机弹出
+WEAK_REMIND_MIN_DELAY_S: Final[float] = 300.0
+WEAK_REMIND_MAX_DELAY_S: Final[float] = 900.0
+JP_NOTIFY_WEAK_REMINDER: Final[str] = "有 {count} 个易错词待巩固，打开「学习统计」看看吧～"
+
+# —— 学习统计窗口：易错词区块文案 ——
+JP_STATS_WEAK_TITLE: Final[str] = "易错词 · 反复忘记"
+JP_STATS_WEAK_EMPTY: Final[str] = "暂时没有反复忘记的词，继续保持～"
+JP_STATS_WEAK_COUNT_TEMPLATE: Final[str] = "忘了 {count} 次 · 最近 {day}"
+JP_STATS_WEAK_HINT: Final[str] = "双击查看详情"
+
 # --------------------------------------------------------------------------- #
 # 12. 单词详情（B 版 JC-*）—— 窗口
 # --------------------------------------------------------------------------- #

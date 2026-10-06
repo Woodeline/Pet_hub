@@ -252,6 +252,10 @@ def test_no_image_assets(project_root: Path) -> None:
         # 学习统计面板：热力图窗口 15 周；每日目标庆祝 EXCITED 时长
         ("STATS_HEATMAP_DAYS", 105),
         ("CELEBRATION_DURATION_S", 3.0),
+        # 错题本（易错词）：阈值 / 加权倍率 / TopN
+        ("WEAK_WORD_MIN_LAPSES", 2),
+        ("WEAK_WORD_BOOST", 2.0),
+        ("WEAK_WORD_TOP_N", 10),
     ],
 )
 def test_constants_match_prd(attr: str, expected) -> None:

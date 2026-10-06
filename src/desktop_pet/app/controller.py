@@ -42,6 +42,7 @@ from desktop_pet.core.daily_log_store import DailyLogEntry, DailyLogStore
 from desktop_pet.core.mastered_store import MasteredItem, MasteredStore
 from desktop_pet.core.pet_model import PetModel
 from desktop_pet.core.stats_aggregator import StatsSummary, build_summary
+from desktop_pet.core.weak_words import WeakWord, collect_weak_words
 from desktop_pet.core.vocab_store import VocabStore
 from desktop_pet.core.vocabulary import (
     VocabEntry,
@@ -184,6 +185,14 @@ class PetAppController(QObject):
         self._log_window: LogWindow | None = None
         # 学习统计窗口（懒加载单例，数据每次打开时经 build_summary 现聚合）
         self._stats_window: StatsWindow | None = None
+
+        # —— 错题本（易错词）运行时状态：无独立存储，从每日记录 review_lapsed
+        #    惰性派生（脏标记缓存）；每日一次提醒（托盘通知）走排期制 ——
+        self._weak_dirty: bool = True
+        self._weak_cache: tuple[WeakWord, ...] = ()
+        # 当日是否已提醒（跨日复位）；下一次提醒时刻（启动 / 跨日后随机延迟）
+        self._weak_reminded: bool = False
+        self._next_weak_remind_ts: float = float("inf")
         # 气泡文案设置对话框（单例，重开则前置）
         self._bubble_text_dialog: BubbleTextDialog | None = None
         self._word_deadline: float = float("inf")
@@ -441,6 +450,12 @@ class PetAppController(QObject):
                 self._manual_shown_ids_today.clear()
                 # 跨日：当日已展示排除集随新日期 key 自然清空，池耗尽可能解除
                 self._pool_exhausted = False
+                # 跨日：错题本缓存与「每日一次提醒」复位，提醒重排当日随机延迟
+                self._weak_dirty = True
+                self._weak_reminded = False
+                self._next_weak_remind_ts = now + motion.random_interval(
+                    C.WEAK_REMIND_MIN_DELAY_S, C.WEAK_REMIND_MAX_DELAY_S, self._rng
+                )
                 self._next_word_ts = now
                 # 跨日 → 顺带重估主题（保证跨月零点自动换肤，而非最多等一天）
                 self._recheck_theme()
@@ -456,6 +471,9 @@ class PetAppController(QObject):
                     self._postpone_review(now)
                 else:
                     self._dispose_word(C.DAILY_LOG_STATUS_UNPROCESSED, now)
+
+            # ②.5 错题本每日一次提醒（排期制：当日随机延迟到点才检查一次）
+            self._maybe_remind_weak_words(now)
 
             transition = self._sm.update(now)
             if transition.changed:
@@ -890,7 +908,11 @@ class PetAppController(QObject):
             | self._manual_shown_ids_today
         )
         vocab_ids = {item.id for item in self._vocab.items()}
-        entry = self._picker.pick(self._cfg.jp_level, excluded, vocab_ids)
+        # 错题本加权：易错词 TopN 叠乘额外权重，让反复忘记的词更常自然重现
+        boost_ids = {weak.id for weak in self._weak_words_top()}
+        entry = self._picker.pick(
+            self._cfg.jp_level, excluded, vocab_ids, boost_ids=boost_ids
+        )
         if entry is None:
             # 池耗尽：置排期停转标志（手动/自动路径状态一致，恢复由等级切换 /
             # 导入词库 / 跨日驱动）；手动路径给专用反馈，自动路径保持既有
@@ -1097,11 +1119,17 @@ class PetAppController(QObject):
             if self._stats_window is None:
                 self._stats_window = StatsWindow()
                 self._stats_window.set_accent(ui_accent_for_theme(self._current_theme))
+                # 双击易错词行 → 打开词条详情（与生词本双击同一通道：词库优先、
+                # 生词本字段兜底——易错词通常刚退回生词本，兜底路径是常态）
+                self._stats_window.weak_word_double_clicked.connect(
+                    self._on_vocab_word_double_clicked
+                )
             self._stats_window.refresh(
                 self._build_stats_summary(),
                 self._cfg.jp_daily_limit,
                 self._cfg.jp_review_daily_limit,
             )
+            self._stats_window.set_weak_words(self._weak_words_top())
             self._stats_window.set_reduce_motion(self._cfg.reduce_motion)
             show_window_animated(self._stats_window, self._cfg.reduce_motion)
             self._stats_window.raise_()
@@ -1546,6 +1574,47 @@ class PetAppController(QObject):
         except Exception:  # noqa: BLE001
             logger.exception("目标庆祝异常（已忽略）")
 
+    # ------------------------------------------------------------------ #
+    # 内部：错题本（易错词派生 / 抽取加权 / 每日一次提醒）
+    # ------------------------------------------------------------------ #
+    def _weak_words_top(self) -> tuple[WeakWord, ...]:
+        """当前易错词 TopN（脏标记惰性缓存；每日记录变化 / 跨日后重算）。"""
+
+        if self._weak_dirty:
+            try:
+                self._weak_cache = collect_weak_words(self._daily_log)
+            except Exception:  # noqa: BLE001 —— 派生失败不影响学习主流程
+                logger.exception("易错词聚合失败（已忽略）")
+                self._weak_cache = ()
+            self._weak_dirty = False
+        return self._weak_cache
+
+    def _maybe_remind_weak_words(self, now: float) -> None:
+        """错题本每日一次提醒（帧循环每帧调用，排期制：到点才检查一次）。
+
+        - 开关链：日语学习开 + ``weak_review_enabled`` 开 + 当日未提醒过；
+        - 到点（``_next_weak_remind_ts``）后检查一次：无易错词则当日不再排
+          （避免每帧空转，跨日复位），有则托盘通知引导到「学习统计」窗口。
+        """
+
+        if self._weak_reminded:
+            return
+        if not self._cfg.jp_enabled or not self._cfg.weak_review_enabled:
+            return
+        if now < self._next_weak_remind_ts:
+            return
+        self._weak_reminded = True
+        weak = self._weak_words_top()
+        if not weak:
+            return
+        try:
+            self._tray.notify(
+                C.APP_DISPLAY_NAME,
+                C.JP_NOTIFY_WEAK_REMINDER.format(count=len(weak)),
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("易错词提醒通知失败（已忽略）")
+
     def _refresh_review_schedule(self) -> None:
         """重估最早到期复习的墙钟时刻（mastered 集合变化 / 学习开关切换后调用）。"""
 
@@ -1686,6 +1755,8 @@ class PetAppController(QObject):
                 C.APP_DISPLAY_NAME,
                 C.JP_NOTIFY_REVIEW_LAPSED.format(word=entry.word),
             )
+            # 遗忘事实落库 → 易错词集合可能变化（脏标记惰性重算）
+            self._weak_dirty = True
             if self._vocab_window is not None:
                 self._vocab_window.refresh(self._vocab.items())
 

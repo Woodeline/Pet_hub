@@ -11,9 +11,11 @@
 from __future__ import annotations
 
 import pytest
+from PySide6.QtCore import Qt
 
 from desktop_pet.core import constants as C
 from desktop_pet.core.stats_aggregator import StatsSummary
+from desktop_pet.core.weak_words import WeakWord
 from desktop_pet.ui.stats_window import StatsWindow, _level_for
 
 
@@ -128,3 +130,64 @@ def test_paint_smoke_heatmap_and_curve(qtbot) -> None:
     )
     window.refresh(summary, 15, 20)
     assert not window.grab().isNull()
+
+
+# --------------------------------------------------------------------------- #
+# 易错词区块（批次 2）
+# --------------------------------------------------------------------------- #
+def _weak(word_id: str, count: int) -> WeakWord:
+    return WeakWord(
+        id=word_id,
+        level="N5",
+        word=f"語{word_id}",
+        kana="かな",
+        translation="译",
+        lapsed_count=count,
+        last_lapsed_at="2025-01-01T00:00:00Z",
+    )
+
+
+def _weak_row_widgets(window: StatsWindow) -> list:
+    return [
+        window._weak_rows.itemAt(i).widget()
+        for i in range(window._weak_rows.count())
+        if window._weak_rows.itemAt(i).widget() is not None
+    ]
+
+
+def test_weak_section_empty_shows_hint(qtbot) -> None:
+    """无易错词：空态提示可见、无双击提示。"""
+
+    window = StatsWindow()
+    qtbot.addWidget(window)
+    window.set_weak_words(())
+    assert window._weak_empty.isVisibleTo(window)
+    assert not window._weak_hint.isVisibleTo(window)
+    assert _weak_row_widgets(window) == []
+
+
+def test_weak_section_rows_and_double_click(qtbot) -> None:
+    """有易错词：行按序重建；双击行发出携带 id 的详情信号。"""
+
+    window = StatsWindow()
+    qtbot.addWidget(window)
+    window.set_weak_words((_weak("n5-0001", 2), _weak("n5-0002", 3)))
+    assert not window._weak_empty.isVisibleTo(window)
+    assert window._weak_hint.isVisibleTo(window)
+    rows = _weak_row_widgets(window)
+    assert len(rows) == 2
+
+    with qtbot.waitSignal(window.weak_word_double_clicked, timeout=2000) as blocker:
+        qtbot.mouseDClick(rows[1], Qt.MouseButton.LeftButton)
+    assert blocker.args == ["n5-0002"]
+
+
+def test_weak_section_rebuild_replaces_rows(qtbot) -> None:
+    """再次喂数：旧行被清除，不残留。"""
+
+    window = StatsWindow()
+    qtbot.addWidget(window)
+    window.set_weak_words((_weak("n5-0001", 2), _weak("n5-0002", 3)))
+    window.set_weak_words((_weak("n5-0009", 5),))
+    rows = _weak_row_widgets(window)
+    assert len(rows) == 1

@@ -28,7 +28,11 @@ class WeightedWordPicker:
         self._rng: random.Random = rng if rng is not None else random.Random()
 
     def pick(
-        self, level: str, excluded_ids: set[str], vocab_ids: set[str]
+        self,
+        level: str,
+        excluded_ids: set[str],
+        vocab_ids: set[str],
+        boost_ids: set[str] | None = None,
     ) -> VocabEntry | None:
         """抽取一条词条。
 
@@ -36,6 +40,9 @@ class WeightedWordPicker:
             level: JLPT 等级（``N5..N1``）。
             excluded_ids: 需排除的词条 id 集合（已掌握 ∪ 当日已展示）。
             vocab_ids: 生词 id 集合（权重 ``C.JP_VOCAB_WEIGHT``，普通词条权重 1.0）。
+            boost_ids: 易错词 id 集合（错题本 TopN；命中则权重再乘
+                ``C.WEAK_WORD_BOOST``——与生词加权**叠乘**，让反复忘记的词
+                更常出现，同时复用完整既有处置流，不新增展示流程）。
 
         Returns:
             抽中的词条；候选池为空返回 ``None``。
@@ -44,7 +51,12 @@ class WeightedWordPicker:
         pool = [entry for entry in self._bank.entries_for(level) if entry.id not in excluded_ids]
         if not pool:
             return None
-        weights = [C.JP_VOCAB_WEIGHT if entry.id in vocab_ids else 1.0 for entry in pool]
+        boost = boost_ids or set()
+        weights = [
+            (C.JP_VOCAB_WEIGHT if entry.id in vocab_ids else 1.0)
+            * (C.WEAK_WORD_BOOST if entry.id in boost else 1.0)
+            for entry in pool
+        ]
         return self._rng.choices(pool, weights=weights, k=1)[0]
 
 
