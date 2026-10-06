@@ -249,6 +249,9 @@ def test_no_image_assets(project_root: Path) -> None:
         ("JP_REVIEW_DAILY_LIMIT", 20),
         ("MASTERED_VERSION", 2),
         ("DAILY_LOG_VERSION", 1),
+        # 学习统计面板：热力图窗口 15 周；每日目标庆祝 EXCITED 时长
+        ("STATS_HEATMAP_DAYS", 105),
+        ("CELEBRATION_DURATION_S", 3.0),
     ],
 )
 def test_constants_match_prd(attr: str, expected) -> None:

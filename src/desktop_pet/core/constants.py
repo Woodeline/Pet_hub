@@ -1236,6 +1236,39 @@ JP_LOG_STATUS_TEMPLATE: Final[str] = (
 #: 底栏「关闭」按钮文案（与生词本底栏结构对齐；独立标量，不进任何 token 字典）。
 JP_LOG_BTN_CLOSE: Final[str] = "关闭"
 
+# —— 学习统计窗口（统计面板：打卡 / 热力图 / 掌握曲线）——
+JP_MENU_STATS: Final[str] = "学习统计…"
+JP_STATS_WINDOW_TITLE: Final[str] = "学习统计"
+JP_STATS_WINDOW_W: Final[int] = 640
+JP_STATS_WINDOW_H: Final[int] = 560
+#: 热力图窗口长度（本地自然日数，含今天；= 15 周）
+STATS_HEATMAP_DAYS: Final[int] = 105
+STATS_HEATMAP_WEEKS: Final[int] = 15
+#: 热力图色阶阈值（当日新词+复习总数）：0 档为空格，1..L1 为浅，..L2 为中，其余为浓
+STATS_HEATMAP_LEVEL1_MAX: Final[int] = 2
+STATS_HEATMAP_LEVEL2_MAX: Final[int] = 5
+STATS_STREAK_LABEL: Final[str] = "连续打卡"
+STATS_MASTERED_LABEL: Final[str] = "累计掌握"
+STATS_STREAK_UNIT: Final[str] = "天"
+STATS_MASTERED_UNIT: Final[str] = "词"
+STATS_TODAY_NEW_LABEL: Final[str] = "今日新词"
+STATS_TODAY_REVIEW_LABEL: Final[str] = "今日复习"
+STATS_HEATMAP_TITLE: Final[str] = "学习热力图 · 近 15 周"
+STATS_CURVE_TITLE: Final[str] = "掌握曲线 · 累计"
+STATS_EMPTY_HINT: Final[str] = "还没有学习记录，等第一只单词泡泡出现吧～"
+#: 热力图行标签（周一 → 周日，与 ``date.isoweekday()-1`` 行序一致）
+STATS_WEEKDAY_LABELS: Final[tuple[str, ...]] = ("一", "二", "三", "四", "五", "六", "日")
+STATS_BTN_CLOSE: Final[str] = "关闭"
+
+# —— 每日目标庆祝（新词 / 复习达标一次性）：EXCITED 临时表情（自带光晕）+ 祝贺气泡 ——
+CELEBRATION_DURATION_S: Final[float] = 3.0
+CELEBRATION_BUBBLE_DURATION_S: Final[float] = 6.0
+JP_CELEBRATION_TEXTS: Final[tuple[str, ...]] = (
+    "今日目标达成，撒花！",
+    "学习任务完成啦，明天见～",
+    "今天的进度条满了，你真棒！",
+)
+
 # --------------------------------------------------------------------------- #
 # 12. 单词详情（B 版 JC-*）—— 窗口
 # --------------------------------------------------------------------------- #

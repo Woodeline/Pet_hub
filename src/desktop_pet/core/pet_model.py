@@ -197,6 +197,18 @@ class PetModel:
         self._temp_remaining = C.CLICK_ANIM_S
         self._click_timer = C.CLICK_ANIM_S
 
+    def celebrate(self, duration: float | None = None) -> None:
+        """目标达成庆祝：插播 EXCITED 临时表情（该模板自带 ``glow_alpha`` 光晕）。
+
+        复用 :meth:`set_expression` 的临时表情倒计时机制（不新增状态、
+        不动被 ``test_expression_count_matches_prd`` 锁死的表情枚举），
+        到期后自动回落基础表情。供 app 层在「每日新词 / 复习目标达成」
+        等一次性庆祝路径调用。
+        """
+
+        seconds = C.CELEBRATION_DURATION_S if duration is None else float(duration)
+        self.set_expression(Expression.EXCITED, seconds)
+
     def set_dragging(self, active: bool) -> None:
         """设置拖拽状态（被拎起姿态，FR-29）。"""
 

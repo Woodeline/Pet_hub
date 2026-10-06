@@ -41,6 +41,7 @@ from desktop_pet.core.mood_state_machine import (
 from desktop_pet.core.daily_log_store import DailyLogEntry, DailyLogStore
 from desktop_pet.core.mastered_store import MasteredItem, MasteredStore
 from desktop_pet.core.pet_model import PetModel
+from desktop_pet.core.stats_aggregator import StatsSummary, build_summary
 from desktop_pet.core.vocab_store import VocabStore
 from desktop_pet.core.vocabulary import (
     VocabEntry,
@@ -62,6 +63,7 @@ from desktop_pet.ui.pet_renderer import PetRenderer
 from desktop_pet.ui.pet_window import PetWindow
 from desktop_pet.ui.skin_renderer import build_skin_renderer
 from desktop_pet.ui.speaker_button import PronunciationController
+from desktop_pet.ui.stats_window import StatsWindow
 from desktop_pet.ui.tray import TrayController
 from desktop_pet.ui.vocab_window import VocabWindow
 from desktop_pet.ui.word_detail_window import WordDetailWindow
@@ -180,6 +182,8 @@ class PetAppController(QObject):
         self._daily_log: DailyLogStore = DailyLogStore(DailyLogStore.default_path())
         self._button_bar: BubbleButtonBar = BubbleButtonBar()
         self._log_window: LogWindow | None = None
+        # 学习统计窗口（懒加载单例，数据每次打开时经 build_summary 现聚合）
+        self._stats_window: StatsWindow | None = None
         # 气泡文案设置对话框（单例，重开则前置）
         self._bubble_text_dialog: BubbleTextDialog | None = None
         self._word_deadline: float = float("inf")
@@ -364,6 +368,7 @@ class PetAppController(QObject):
         self._tray.jp_vocab_requested.connect(self._on_jp_vocab)
         self._tray.jp_mastered_requested.connect(self._on_jp_mastered)
         self._tray.jp_log_requested.connect(self._on_jp_log)
+        self._tray.jp_stats_requested.connect(self._on_jp_stats)
         self._tray.jp_import_bank_requested.connect(self._on_jp_import_bank)
 
         # 日语记忆：气泡按钮条（记住了 / 新单词；复习模式 = 还记得 / 忘了）
@@ -635,7 +640,13 @@ class PetAppController(QObject):
     def _apply_reduce_motion_to_windows(self, enabled: bool) -> None:
         """把「减少动效」同步到已创建的业务窗口（未创建则跳过，show 时会再读配置）。"""
 
-        for window in (self._vocab_window, self._log_window, self._detail_window, self._mastered_window):
+        for window in (
+            self._vocab_window,
+            self._log_window,
+            self._stats_window,
+            self._detail_window,
+            self._mastered_window,
+        ):
             if window is None:
                 continue
             try:
@@ -866,6 +877,9 @@ class PetAppController(QObject):
             if not self._today_done_notified:
                 self._today_done_notified = True
                 self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_TODAY_DONE)
+                self._celebrate(
+                    self._rng.choice(C.JP_CELEBRATION_TEXTS), now
+                )
             return
 
         today = self._today_str
@@ -1075,6 +1089,45 @@ class PetAppController(QObject):
             self._log_window.activateWindow()
         except Exception:  # noqa: BLE001
             logger.exception("打开学习记录窗口异常（已忽略）")
+
+    def _on_jp_stats(self) -> None:
+        """打开学习统计窗口（单例，重开则前置；数据每次打开时现聚合）。"""
+
+        try:
+            if self._stats_window is None:
+                self._stats_window = StatsWindow()
+                self._stats_window.set_accent(ui_accent_for_theme(self._current_theme))
+            self._stats_window.refresh(
+                self._build_stats_summary(),
+                self._cfg.jp_daily_limit,
+                self._cfg.jp_review_daily_limit,
+            )
+            self._stats_window.set_reduce_motion(self._cfg.reduce_motion)
+            show_window_animated(self._stats_window, self._cfg.reduce_motion)
+            self._stats_window.raise_()
+            self._stats_window.activateWindow()
+        except Exception:  # noqa: BLE001
+            logger.exception("打开学习统计窗口异常（已忽略）")
+
+    def _recent_day_keys(self, days: int = C.STATS_HEATMAP_DAYS) -> list[str]:
+        """生成最近 ``days`` 个本地自然日 key（升序，末位 = 今天）。
+
+        仅 app 层使用 ``datetime``（core 零时钟约定）；窗口外的历史日期
+        不参与统计窗口（累计曲线会含窗口前的掌握存量）。
+        """
+
+        today = datetime.strptime(self._local_date_str(), "%Y-%m-%d").date()
+        return [
+            (today - timedelta(days=offset)).strftime("%Y-%m-%d")
+            for offset in range(int(days) - 1, -1, -1)
+        ]
+
+    def _build_stats_summary(self) -> StatsSummary:
+        """聚合同版统计快照：近 ``STATS_HEATMAP_DAYS`` 天窗口 + 已掌握全量曲线。"""
+
+        return build_summary(
+            self._daily_log, self._mastered.items(), self._recent_day_keys()
+        )
 
     def _on_jp_import_bank(self) -> None:
         """托盘「导入词库…」：校验 → 拷贝到 %APPDATA% → 合并进当前词库 → 通知。
@@ -1461,12 +1514,37 @@ class PetAppController(QObject):
         return self._daily_log.review_count_for(today) >= self._cfg.jp_review_daily_limit
 
     def _maybe_notify_review_done(self) -> None:
-        """复习额度用完的一次性托盘通知（跨日复位；手动复习不经过此路径）。"""
+        """复习额度用完的一次性托盘通知 + 庆祝（跨日复位；手动复习不经过此路径）。"""
 
         if self._review_done_notified or not self._review_quota_reached():
             return
         self._review_done_notified = True
         self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_REVIEW_TODAY_DONE)
+        self._celebrate(self._rng.choice(C.JP_CELEBRATION_TEXTS), time.monotonic())
+
+    def _celebrate(self, message: str, now: float) -> None:
+        """每日目标达成的庆祝表达（新词 / 复习两条一次性通知路径共用）。
+
+        - 猫：插播 EXCITED 临时表情（该模板自带 ``glow_alpha`` 光晕），
+          复用临时表情倒计时机制，到期自动回落基础表情；
+        - 气泡：一条祝贺文案（受气泡开关 / 正在展示单词 / 睡觉守卫约束，
+          且顺延 ``_last_bubble_ts``，避免紧跟着被自动闲聊顶掉）。
+
+        庆祝是**装饰性**反馈：任何一步失败都不影响既有的托盘通知语义。
+        """
+
+        try:
+            self._model.celebrate()
+            if (
+                self._cfg.bubble_enabled
+                and self._current_word is None
+                and self._sm.mood != Mood.SLEEP
+            ):
+                self._bubble.set_anchor(self._bubble_anchor())
+                self._bubble.show_message(message, C.CELEBRATION_BUBBLE_DURATION_S)
+                self._last_bubble_ts = float(now)
+        except Exception:  # noqa: BLE001
+            logger.exception("目标庆祝异常（已忽略）")
 
     def _refresh_review_schedule(self) -> None:
         """重估最早到期复习的墙钟时刻（mastered 集合变化 / 学习开关切换后调用）。"""
@@ -2028,7 +2106,13 @@ class PetAppController(QObject):
 
         try:
             accent = ui_accent_for_theme(self._current_theme)
-            for window in (self._vocab_window, self._log_window, self._detail_window, self._mastered_window):
+            for window in (
+                self._vocab_window,
+                self._log_window,
+                self._stats_window,
+                self._detail_window,
+                self._mastered_window,
+            ):
                 if window is not None:
                     window.set_accent(accent)
         except Exception:  # noqa: BLE001
