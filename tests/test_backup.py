@@ -60,15 +60,58 @@ def test_create_backup_skips_nonexistent_sources(tmp_path: Path) -> None:
     assert read_manifest(out)["files"] == []
 
 
-def test_create_backup_ignores_keys_outside_whitelist(tmp_path: Path) -> None:
-    """白名单之外的键不入包（防御：调用方误传也不打包敏感/未知文件）。"""
+def test_create_backup_rejects_keys_outside_whitelist(tmp_path: Path) -> None:
+    """白名单之外的键：快速失败（调用方 bug 早暴露），绝不打包未知/敏感文件。"""
 
     src = tmp_path / "secret.txt"
     src.write_text("secret", encoding="utf-8")
     out = tmp_path / "w.zip"
-    create_backup({"secret.txt": src, C.CONFIG_FILE_NAME: tmp_path / "missing.json"}, out, app_version="x", created_at="")
-    with zipfile.ZipFile(out) as archive:
-        assert "secret.txt" not in archive.namelist()
+    with pytest.raises(BackupError):
+        create_backup({"secret.txt": src}, out, app_version="x", created_at="")
+
+
+def test_backup_roundtrip_bank_files(tmp_path: Path) -> None:
+    """多词库条目（``banks/<id>.json``）：打包与还原写回子目录。"""
+
+    registry = tmp_path / "bank_registry.json"
+    registry.write_text('{"version": 1, "banks": []}', encoding="utf-8")
+    bank_file = tmp_path / "banks" / "bk-abc.json"
+    bank_file.parent.mkdir()
+    bank_file.write_text('{"version": 1, "words": []}', encoding="utf-8")
+
+    out = tmp_path / "b.zip"
+    create_backup(
+        {
+            C.BANK_REGISTRY_FILENAME: registry,
+            f"{C.BANKS_DIR_NAME}/bk-abc.json": bank_file,
+        },
+        out,
+        app_version="v",
+        created_at="",
+    )
+    manifest = read_manifest(out)
+    assert manifest["files"] == sorted([C.BANK_REGISTRY_FILENAME, f"{C.BANKS_DIR_NAME}/bk-abc.json"])
+
+    dest = tmp_path / "dest"
+    restore_backup(out, dest)
+    assert (dest / C.BANK_REGISTRY_FILENAME).is_file()
+    assert (dest / C.BANKS_DIR_NAME / "bk-abc.json").read_text(encoding="utf-8") == '{"version": 1, "words": []}'
+
+
+def test_backup_rejects_bank_path_escape(tmp_path: Path) -> None:
+    """banks 条目带二级路径 / 穿越：拒绝。"""
+
+    out = tmp_path / "evil.zip"
+    with zipfile.ZipFile(out, "w") as archive:
+        manifest = {
+            "version": C.BACKUP_MANIFEST_VERSION,
+            "app_version": "v",
+            "created_at": "",
+            "files": [f"{C.BANKS_DIR_NAME}/../evil.json"],
+        }
+        archive.writestr("manifest.json", json.dumps(manifest))
+    with pytest.raises(BackupError):
+        restore_backup(out, tmp_path / "dest")
 
 
 # --------------------------------------------------------------------------- #

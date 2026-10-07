@@ -1017,6 +1017,10 @@ WORD_BANK_FILE_NAME: Final[str] = "jlpt_words.json"
 WORD_BANK_VERSION: Final[int] = 1
 #: 外置词库（用户经托盘导入的扩充包，存于 %APPDATA%\desktop-pet，启动时按 id 合并覆盖）
 EXTRA_WORD_BANK_FILE_NAME: Final[str] = "jlpt_words_extra.json"
+# —— 多词库管理（banks/ 逐库文件 + registry 登记；批次 7）——
+BANKS_DIR_NAME: Final[str] = "banks"
+BANK_REGISTRY_FILENAME: Final[str] = "bank_registry.json"
+BANK_REGISTRY_VERSION: Final[int] = 1
 VOCAB_FILE_NAME: Final[str] = "vocabulary.json"
 VOCAB_VERSION: Final[int] = 1
 
@@ -1173,18 +1177,39 @@ JP_MENU_DURATION: Final[str] = "显示时长"
 JP_MENU_DAILY_LIMIT: Final[str] = "每日数量"
 JP_MENU_REVIEW_LIMIT: Final[str] = "复习上限"
 JP_MENU_SHOW_NOW: Final[str] = "立即显示一个新单词"
-JP_MENU_IMPORT_BANK: Final[str] = "导入词库…"
+JP_MENU_IMPORT_BANK: Final[str] = "词库管理…"
 
-# —— 外置词库导入（托盘「导入词库…」：校验 → 拷贝到 %APPDATA% → 合并重载 → 通知）——
+# —— 词库管理窗口（多词库）——
+BANK_WINDOW_TITLE: Final[str] = "词库管理"
+BANK_WINDOW_W: Final[int] = 480
+BANK_WINDOW_H: Final[int] = 440
+BANK_BTN_IMPORT: Final[str] = "导入词库…"
+BANK_BTN_CLOSE: Final[str] = "关闭"
+BANK_EMPTY_TEXT: Final[str] = (
+    "还没有导入的词库～ 把词库 JSON 拖进本窗口，或点下方「导入词库…」选择文件"
+)
+BANK_BUILTIN_LABEL: Final[str] = "内置 JLPT 词库"
+BANK_BUILTIN_TIP: Final[str] = "随程序分发的内置词库，不可停用或删除"
+BANK_ENABLE_TIP: Final[str] = "停用后该词库的词不再出现在学习中（文件保留）"
+BANK_WORDS_TEMPLATE: Final[str] = "{count} 词"
+BANK_DELETE_CONFIRM_TITLE: Final[str] = "删除词库"
+BANK_DELETE_CONFIRM_TEXT: Final[str] = (
+    "确定删除词库「{name}」吗？该词库文件将从数据目录移除，此操作不可撤销。"
+)
+BANK_DELETE_CONFIRM_BUTTON: Final[str] = "删除"
+BANK_STATUS_TEMPLATE: Final[str] = "共 {total} 个词 · {enabled}/{banks} 个词库启用"
+BANK_NOTIFY_IMPORTED: Final[str] = "词库「{name}」导入完成：{count} 个词"
+BANK_NOTIFY_ENABLED: Final[str] = "已启用词库「{name}」"
+BANK_NOTIFY_DISABLED: Final[str] = "已停用词库「{name}」（文件保留）"
+BANK_NOTIFY_DELETED: Final[str] = "已删除词库「{name}」"
+BANK_NOTIFY_LOAD_FAILED: Final[str] = "词库「{name}」加载失败：{reason}"
+BANK_NOTIFY_MIGRATED: Final[str] = "已把旧外置词库迁移到「词库管理」，原文件保留为备份"
+
+# —— 词库导入（词库管理窗口：校验 → 复制入 banks/ → 登记 → 合并重建）——
 JP_IMPORT_DIALOG_TITLE: Final[str] = "选择词库 JSON 文件"
 JP_IMPORT_DIALOG_FILTER: Final[str] = "词库 JSON (*.json);;所有文件 (*)"
-#: 导入成功通知（str.format(added=..., updated=..., skipped=...)）
-JP_NOTIFY_BANK_IMPORTED: Final[str] = (
-    "词库导入完成：新增 {added} 个词，更新 {updated} 个词，无效 {skipped} 条"
-)
 #: 导入失败通知（str.format(reason=...)）
 JP_NOTIFY_BANK_IMPORT_FAILED: Final[str] = "词库导入失败：{reason}"
-JP_NOTIFY_BANK_IMPORT_CANCELLED: Final[str] = "已取消导入词库"
 
 # —— 记忆闭环通知文案（str.format(word=..., kana=...)）——
 JP_NOTIFY_MASTERED_ADDED: Final[str] = "已标记为掌握：{word}（{kana}）"
@@ -1391,7 +1416,8 @@ DATA_RESTORE_CONFIRM_TEXT: Final[str] = (
 DATA_RESTORE_CONFIRM_BUTTON: Final[str] = "还原"
 #: 备份清单格式版本（manifest.json 的 version 字段）
 BACKUP_MANIFEST_VERSION: Final[int] = 1
-#: 备份包收录的用户数据文件（数据目录下；app.log / audio_cache 可再生，不入包）
+#: 备份包收录的用户数据文件（数据目录下；app.log / audio_cache 可再生，不入包；
+#: 多词库文件以 ``banks/<file>`` 条目动态收录，见 controller._backup_sources）
 BACKUP_FILES: Final[tuple[str, ...]] = (
     CONFIG_FILE_NAME,
     VOCAB_FILE_NAME,
@@ -1399,6 +1425,7 @@ BACKUP_FILES: Final[tuple[str, ...]] = (
     DAILY_LOG_FILE_NAME,
     WORD_DETAILS_CACHE_FILENAME,
     EXTRA_WORD_BANK_FILE_NAME,
+    BANK_REGISTRY_FILENAME,
 )
 #: 还原前对既有文件的留档后缀（同目录、不覆盖旧留档）
 BACKUP_PRE_RESTORE_SUFFIX: Final[str] = ".pre-restore"

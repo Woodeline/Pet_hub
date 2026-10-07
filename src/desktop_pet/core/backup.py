@@ -41,21 +41,29 @@ class BackupError(Exception):
 
 
 def _validate_entry_name(name: str) -> str:
-    """校验备份包内条目名：仅允许白名单文件名，返回规范化后的名字。"""
+    """校验备份包内条目名：白名单文件或 ``banks/<文件名>``，返回规范化后的名字。
+
+    多词库（批次 7）的词库文件以 ``banks/<bank_id>.json`` 形式收录与还原；
+    子目录内同样只允许**一级纯文件名**（防路径穿越）。
+    """
 
     normalized = str(name).strip().replace("\\", "/")
     if (
         not normalized
-        or "/" in normalized
         or normalized.startswith(".")
         or ".." in normalized
     ):
         raise BackupError(f"备份包含非法条目：{name!r}")
     if normalized == _MANIFEST_NAME:
         return normalized
-    if normalized not in C.BACKUP_FILES:
-        raise BackupError(f"备份包含未知文件：{normalized!r}")
-    return normalized
+    if normalized in C.BACKUP_FILES:
+        return normalized
+    banks_prefix = f"{C.BANKS_DIR_NAME}/"
+    if normalized.startswith(banks_prefix):
+        inner = normalized[len(banks_prefix):]
+        if inner and "/" not in inner and not inner.startswith("."):
+            return normalized
+    raise BackupError(f"备份包含未知文件：{normalized!r}")
 
 
 def create_backup(
@@ -75,12 +83,11 @@ def create_backup(
 
     out_path = Path(out_path)
     included: list[str] = []
-    for name in C.BACKUP_FILES:
-        if name not in files:
-            continue
+    for name in sorted(files):
+        normalized = _validate_entry_name(name)
         src = Path(files[name])
         if src.is_file():
-            included.append(name)
+            included.append(normalized)
 
     try:
         out_path.parent.mkdir(parents=True, exist_ok=True)

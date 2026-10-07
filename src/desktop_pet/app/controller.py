@@ -31,6 +31,7 @@ from desktop_pet.app.keyboard_listener import KeystrokeBridge, KeyboardListener
 from desktop_pet.core import constants as C
 from desktop_pet.core import motion, paths
 from desktop_pet.core.backup import BackupError, create_backup, restore_backup
+from desktop_pet.core.bank_registry import BankInfo, BankRegistryStore
 from desktop_pet.core.config import AppConfig, ConfigStore
 from desktop_pet.core.constants import Expression, Gesture, Mood
 from desktop_pet.core.exporter import daily_log_to_csv, to_anki_tsv
@@ -60,6 +61,7 @@ from desktop_pet.core.word_detail_bank import WordDetailBank
 from desktop_pet.core.word_details_cache_store import WordDetailsCacheStore
 from desktop_pet.ui.bubble import BubbleWindow
 from desktop_pet.ui.bubble_button_bar import BubbleButtonBar
+from desktop_pet.ui.bank_window import BankWindow
 from desktop_pet.ui.bubble_text_dialog import BubbleTextDialog
 from desktop_pet.ui.confirm_dialog import ConfirmDialog
 from desktop_pet.ui.data_window import DataWindow
@@ -179,9 +181,14 @@ class PetAppController(QObject):
         # —— 日语学习运行时状态（词库 / 加权抽取器 / 生词本 / 单词定时 / 生词本窗口单例）——
         self._bank: WordBank = WordBank.empty()
         self._picker: WeightedWordPicker = WeightedWordPicker(self._bank, self._rng)
+        # 多词库登记表（批次 7）：外置词库逐库存 banks/、由 registry 登记启停
+        self._bank_registry: BankRegistryStore = BankRegistryStore(
+            BankRegistryStore.default_path()
+        )
         self._vocab: VocabStore = VocabStore(VocabStore.default_path())
         self._current_word: VocabEntry | None = None
         self._vocab_window: VocabWindow | None = None
+        self._bank_window: BankWindow | None = None
         self._next_word_ts: float = float("inf")
         self._bank_warned: bool = False
 
@@ -394,7 +401,7 @@ class PetAppController(QObject):
         self._tray.jp_mastered_requested.connect(self._on_jp_mastered)
         self._tray.jp_log_requested.connect(self._on_jp_log)
         self._tray.jp_stats_requested.connect(self._on_jp_stats)
-        self._tray.jp_import_bank_requested.connect(self._on_jp_import_bank)
+        self._tray.jp_import_bank_requested.connect(self._on_bank_manager)
         self._tray.data_manager_requested.connect(self._on_data_manager)
         self._tray.update_check_requested.connect(self._on_update_check)
         self._tray.update_auto_toggled.connect(self._on_update_auto_toggled)
@@ -679,6 +686,7 @@ class PetAppController(QObject):
 
         for window in (
             self._vocab_window,
+            self._bank_window,
             self._log_window,
             self._stats_window,
             self._data_window,
@@ -777,7 +785,12 @@ class PetAppController(QObject):
     # 内部：日语学习（词库 / 单词定时 / 生词本 / 4 槽）
     # ------------------------------------------------------------------ #
     def _load_japanese(self) -> None:
-        """启动时加载内置词库、生词本、已掌握集合与每日记录（损坏均优雅降级，绝不崩溃）。"""
+        """启动时加载词库（内置 + 多词库合并）、生词本、已掌握集合与每日记录。
+
+        词库链路（批次 7 多词库）：内置词库为**合并底座** → 旧版单一外置词库
+        幂等迁移进 ``banks/`` → 按 registry（added_at 升序）合并**启用**的词库 →
+        重建加权抽取器。任何一步损坏均优雅降级，绝不崩溃。
+        """
 
         try:
             self._bank = WordBank.load(paths.word_bank_path())
@@ -785,23 +798,19 @@ class PetAppController(QObject):
             logger.exception("加载词库失败（已忽略，使用空词库）")
             self._bank = WordBank.empty()
 
-        # 外置词库（用户导入，%APPDATA%\desktop-pet\jlpt_words_extra.json）：
-        # 存在则按 id 合并覆盖进内置词库；损坏 / 结构不符仅告警，不影响启动。
         try:
-            extra_path = paths.extra_word_bank_path()
-            if extra_path.exists():
-                extra_entries, extra_skipped = parse_bank_file(extra_path)
-                self._bank.merge(extra_entries)
-                logger.info(
-                    "外置词库已合并：%s（有效 %d 条，跳过 %d 条）",
-                    extra_path, len(extra_entries), extra_skipped,
-                )
-        except WordBankParseError as exc:
-            logger.warning("外置词库不可用（%s）：%s", exc, paths.extra_word_bank_path())
+            self._bank_registry = BankRegistryStore(BankRegistryStore.default_path())
+            self._bank_registry.load()
         except Exception:  # noqa: BLE001
-            logger.exception("合并外置词库失败（已忽略内置词库继续可用）")
+            logger.exception("加载词库登记表失败（已忽略，仅用内置词库）")
+            self._bank_registry = BankRegistryStore(BankRegistryStore.default_path())
+        self._migrate_legacy_extra_bank()
+        self._reload_banks()
 
-        self._picker = WeightedWordPicker(self._bank, self._rng)
+        self._load_vocab_mastered_and_log()
+
+    def _load_vocab_mastered_and_log(self) -> None:
+        """加载生词本 / 已掌握集合 / 每日记录（原 ``_load_japanese`` 后半段）。"""
 
         try:
             self._vocab = VocabStore(VocabStore.default_path())
@@ -825,6 +834,65 @@ class PetAppController(QObject):
         except Exception:  # noqa: BLE001
             logger.exception("加载每日记录失败（已忽略，使用空表）")
             self._daily_log = DailyLogStore(DailyLogStore.default_path())
+
+    def _migrate_legacy_extra_bank(self) -> None:
+        """旧版单一外置词库 → 多词库迁移（幂等；原文件保留作备份）。
+
+        仅当「旧文件存在且非空 + 登记表为空」时迁移一次：parse 校验通过后
+        复制进 ``banks/`` 并登记。登记表已有记录则视为已迁移过，绝不动旧文件。
+        """
+
+        try:
+            legacy = paths.extra_word_bank_path()
+            if not legacy.is_file() or legacy.stat().st_size == 0:
+                return
+            if self._bank_registry.records():
+                return
+            entries, _skipped = parse_bank_file(legacy)
+            if not entries:
+                return
+            record = self._bank_registry.add("导入词库", self._now_iso())
+            dest = self._bank_registry.banks_dir() / record.file
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(legacy, dest)
+            logger.info(
+                "旧外置词库已迁移：%s → %s（%d 条）", legacy, dest, len(entries)
+            )
+            self._tray.notify(C.APP_DISPLAY_NAME, C.BANK_NOTIFY_MIGRATED)
+        except WordBankParseError as exc:
+            logger.warning("旧外置词库不可迁移（解析失败 %s）：%s", exc, paths.extra_word_bank_path())
+        except Exception:  # noqa: BLE001 —— 迁移失败不阻断启动
+            logger.exception("旧外置词库迁移异常（已忽略）")
+
+    def _reload_banks(self) -> None:
+        """按 registry 顺序（added_at 升序）合并**启用**的词库并重建抽取器。
+
+        内置词库为底座；单库解析失败仅告警（托盘一次通知）并跳过，不拖垮
+        其它词库。同 id 词条按合并顺序**后来者覆盖**。
+        """
+
+        bank = WordBank.load(paths.word_bank_path())
+        for record in self._bank_registry.records():
+            if not record.enabled:
+                continue
+            bank_file = self._bank_registry.banks_dir() / record.file
+            try:
+                entries, _skipped = parse_bank_file(bank_file)
+                bank.merge(entries)
+            except WordBankParseError as exc:
+                logger.warning("词库 %s 不可用：%s", bank_file, exc)
+                self._tray.notify(
+                    C.APP_DISPLAY_NAME,
+                    C.BANK_NOTIFY_LOAD_FAILED.format(name=record.name, reason=exc),
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception("合并词库 %s 失败（已跳过）", bank_file)
+                self._tray.notify(
+                    C.APP_DISPLAY_NAME,
+                    C.BANK_NOTIFY_LOAD_FAILED.format(name=record.name, reason="读取失败"),
+                )
+        self._bank = bank
+        self._picker = WeightedWordPicker(self._bank, self._rng)
 
     def _load_word_details(self) -> None:
         """启动时加载打包详情库（只读）与用户缓存；损坏均优雅降级，绝不崩溃。"""
@@ -1178,61 +1246,170 @@ class PetAppController(QObject):
             self._daily_log, self._mastered.items(), self._recent_day_keys()
         )
 
-    def _on_jp_import_bank(self) -> None:
-        """托盘「导入词库…」：校验 → 拷贝到 %APPDATA% → 合并进当前词库 → 通知。
-
-        导入词库同时是「等级学完」的官方解法：合并产生新增/更新后复位池耗尽与
-        一次性通知标志并恢复排期。每次点击都必须给出可见反馈，严禁静默返回。
-        """
+    def _on_bank_manager(self) -> None:
+        """打开词库管理窗口（单例，重开则前置；数据每次打开时现聚合）。"""
 
         try:
-            src_name, _filter = QFileDialog.getOpenFileName(
-                None,
-                C.JP_IMPORT_DIALOG_TITLE,
-                "",
-                C.JP_IMPORT_DIALOG_FILTER,
-            )
-            if not src_name:
-                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_BANK_IMPORT_CANCELLED)
-                return
-
-            entries, skipped = parse_bank_file(Path(src_name))
-
-            # 先落盘为外置词库（下次启动自动合并），再合并进运行中的词库。
-            dest = paths.extra_word_bank_path()
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(src_name, dest)
-            added, updated = self._bank.merge(entries)
-            self._picker = WeightedWordPicker(self._bank, self._rng)
-
-            if added or updated:
-                self._pool_exhausted = False
-                self._level_done_notified = False
-                if self._cfg.jp_enabled:
-                    self._next_word_ts = time.monotonic()
-
-            logger.info(
-                "导入词库：%s（新增 %d，更新 %d，跳过 %d）→ %s",
-                src_name, added, updated, skipped, dest,
-            )
-            self._tray.notify(
-                C.APP_DISPLAY_NAME,
-                C.JP_NOTIFY_BANK_IMPORTED.format(
-                    added=added, updated=updated, skipped=skipped
-                ),
-            )
-        except WordBankParseError as exc:
-            logger.warning("导入词库被拒绝：%s", exc)
-            self._tray.notify(
-                C.APP_DISPLAY_NAME,
-                C.JP_NOTIFY_BANK_IMPORT_FAILED.format(reason=exc),
-            )
+            if self._bank_window is None:
+                self._bank_window = BankWindow()
+                self._bank_window.set_accent(ui_accent_for_theme(self._current_theme))
+                self._bank_window.import_files_requested.connect(self._on_banks_import)
+                self._bank_window.toggle_requested.connect(self._on_bank_toggle)
+                self._bank_window.delete_requested.connect(self._on_bank_delete)
+            self._refresh_bank_window()
+            self._bank_window.set_reduce_motion(self._cfg.reduce_motion)
+            show_window_animated(self._bank_window, self._cfg.reduce_motion)
+            self._bank_window.raise_()
+            self._bank_window.activateWindow()
         except Exception:  # noqa: BLE001
-            logger.exception("导入词库异常")
+            logger.exception("打开词库管理窗口异常（已忽略）")
+
+    def _refresh_bank_window(self) -> None:
+        """词库管理窗口若已打开则即时刷新（聚合信息 + 合并后总词数）。"""
+
+        if self._bank_window is not None:
+            self._bank_window.refresh(self._collect_bank_infos(), self._bank.size())
+
+    def _collect_bank_infos(self) -> list[BankInfo]:
+        """聚合词库展示信息：内置库固定首行 + registry 各库（逐库现统计）。"""
+
+        infos: list[BankInfo] = []
+        infos.append(
+            BankInfo(
+                id="",
+                name=C.BANK_BUILTIN_LABEL,
+                enabled=True,
+                builtin=True,
+                word_count=self._bank_size_of(
+                    WordBank.load(paths.word_bank_path())
+                ),
+                level_counts=self._bank_level_counts_of_builtin(),
+            )
+        )
+        for record in self._bank_registry.records():
+            level_counts: dict[str, int] = {}
+            count = 0
+            bank_file = self._bank_registry.banks_dir() / record.file
+            try:
+                entries, _skipped = parse_bank_file(bank_file)
+                count = len(entries)
+                for entry in entries:
+                    level_counts[entry.level] = level_counts.get(entry.level, 0) + 1
+            except Exception:  # noqa: BLE001 —— 损坏库展示 0 词，不影响窗口
+                logger.warning("统计词库 %s 失败（展示为 0 词）", bank_file, exc_info=True)
+            infos.append(
+                BankInfo(
+                    id=record.id,
+                    name=record.name,
+                    enabled=record.enabled,
+                    builtin=False,
+                    word_count=count,
+                    level_counts=level_counts,
+                )
+            )
+        return infos
+
+    @staticmethod
+    def _bank_size_of(bank: WordBank) -> int:
+        """词库总词条数（容错：空库返回 0）。"""
+
+        try:
+            return int(bank.size())
+        except Exception:  # noqa: BLE001
+            return 0
+
+    def _bank_level_counts_of_builtin(self) -> dict[str, int]:
+        """内置词库的等级分布（容错：异常返回空表）。"""
+
+        counts: dict[str, int] = {}
+        try:
+            bank = WordBank.load(paths.word_bank_path())
+            for level in bank.levels():
+                counts[level] = len(bank.entries_for(level))
+        except Exception:  # noqa: BLE001
+            logger.exception("统计内置词库等级分布失败（已忽略）")
+        return counts
+
+    def _on_banks_import(self, file_paths: list[str]) -> None:
+        """导入词库（对话框或拖拽）：逐文件校验 → 复制入 banks/ → 登记 → 合并。"""
+
+        imported_any = False
+        for src in file_paths or []:
+            try:
+                entries, _skipped = parse_bank_file(Path(src))
+            except WordBankParseError as exc:
+                logger.warning("导入词库被拒绝：%s（%s）", src, exc)
+                self._tray.notify(
+                    C.APP_DISPLAY_NAME,
+                    C.JP_NOTIFY_BANK_IMPORT_FAILED.format(reason=exc),
+                )
+                continue
+            except Exception:  # noqa: BLE001
+                logger.exception("导入词库异常：%s", src)
+                self._tray.notify(
+                    C.APP_DISPLAY_NAME,
+                    C.JP_NOTIFY_BANK_IMPORT_FAILED.format(reason="读取失败"),
+                )
+                continue
+            record = self._bank_registry.add(Path(src).stem, self._now_iso())
+            dest = self._bank_registry.banks_dir() / record.file
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src, dest)
+            logger.info("导入词库：%s → %s（%d 条）", src, dest, len(entries))
             self._tray.notify(
                 C.APP_DISPLAY_NAME,
-                C.JP_NOTIFY_BANK_IMPORT_FAILED.format(reason="未知错误，请稍后重试"),
+                C.BANK_NOTIFY_IMPORTED.format(name=record.name, count=len(entries)),
             )
+            imported_any = True
+        if imported_any:
+            self._after_bank_change()
+
+    def _on_bank_toggle(self, bank_id: str, enabled: bool) -> None:
+        """启用 / 停用词库（文件保留；停用的词退出学习池）。"""
+
+        try:
+            if not self._bank_registry.set_enabled(str(bank_id), bool(enabled)):
+                return
+            record = self._bank_registry.get(str(bank_id))
+            message = (
+                C.BANK_NOTIFY_ENABLED.format(name=record.name)
+                if enabled
+                else C.BANK_NOTIFY_DISABLED.format(name=record.name)
+            )
+            self._tray.notify(C.APP_DISPLAY_NAME, message)
+            self._after_bank_change()
+        except Exception:  # noqa: BLE001
+            logger.exception("切换词库启停异常（已忽略）")
+
+    def _on_bank_delete(self, bank_id: str) -> None:
+        """删除词库（窗口内已二次确认）：移除登记 + 删除文件 + 重建。"""
+
+        try:
+            record = self._bank_registry.remove(str(bank_id))
+            if record is None:
+                return
+            bank_file = self._bank_registry.banks_dir() / record.file
+            try:
+                bank_file.unlink(missing_ok=True)
+            except OSError:
+                logger.exception("删除词库文件失败（登记已移除）：%s", bank_file)
+            self._tray.notify(
+                C.APP_DISPLAY_NAME, C.BANK_NOTIFY_DELETED.format(name=record.name)
+            )
+            self._after_bank_change()
+        except Exception:  # noqa: BLE001
+            logger.exception("删除词库异常（已忽略）")
+
+    def _after_bank_change(self) -> None:
+        """词库集合变化后的公共收尾：重建合并、复位池状态、刷新窗口与排期。"""
+
+        self._reload_banks()
+        # 合并结果变化 → 池耗尽 / 等级学完的停转解除（与旧导入语义一致）
+        self._pool_exhausted = False
+        self._level_done_notified = False
+        if self._cfg.jp_enabled:
+            self._next_word_ts = time.monotonic()
+        self._refresh_bank_window()
 
     # ------------------------------------------------------------------ #
     # 内部：数据管理（导出 Anki/CSV、一键备份与还原）
@@ -1325,16 +1502,29 @@ class PetAppController(QObject):
             )
 
     def _backup_sources(self) -> dict[str, Path]:
-        """备份收录文件 → 实际路径映射（缺失的文件由 create_backup 自行跳过）。"""
+        """备份收录文件 → 实际路径映射（缺失的文件由 create_backup 自行跳过）。
 
-        return {
+        除固定用户数据文件外，还收录多词库：登记表 + ``banks/`` 下各库文件
+        （条目名 ``banks/<file>``，还原时写回子目录，见 ``core.backup`` 白名单）。
+        """
+
+        sources: dict[str, Path] = {
             C.CONFIG_FILE_NAME: ConfigStore.default_path(),
             C.VOCAB_FILE_NAME: VocabStore.default_path(),
             C.MASTERED_FILE_NAME: MasteredStore.default_path(),
             C.DAILY_LOG_FILE_NAME: DailyLogStore.default_path(),
             C.WORD_DETAILS_CACHE_FILENAME: WordDetailsCacheStore.default_path(),
             C.EXTRA_WORD_BANK_FILE_NAME: paths.extra_word_bank_path(),
+            C.BANK_REGISTRY_FILENAME: self._bank_registry.path,
         }
+        try:
+            for record in self._bank_registry.records():
+                bank_file = self._bank_registry.banks_dir() / record.file
+                if bank_file.is_file():
+                    sources[f"{C.BANKS_DIR_NAME}/{record.file}"] = bank_file
+        except Exception:  # noqa: BLE001 —— 备份尽力而为，单库失败不中断
+            logger.exception("收集词库备份文件失败（已跳过词库部分）")
+        return sources
 
     def _export_backup(self) -> None:
         """一键备份：数据目录内全部用户数据打包为 zip（清单含版本与创建时间）。"""
@@ -2458,6 +2648,7 @@ class PetAppController(QObject):
             accent = ui_accent_for_theme(self._current_theme)
             for window in (
                 self._vocab_window,
+                self._bank_window,
                 self._log_window,
                 self._stats_window,
                 self._data_window,

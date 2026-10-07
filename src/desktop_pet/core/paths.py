@@ -54,12 +54,25 @@ def extra_word_bank_path() -> Path:
 
     位置与用户数据一致：``%APPDATA%\\desktop-pet\\jlpt_words_extra.json``
     （``APPDATA`` 不可用回落到用户主目录，与 ``VocabStore.default_path`` 同口径）。
-    启动时由 :meth:`WordBank` 合并进内置词库（按 id 去重、外置覆盖）。
+    多词库管理（批次 7）后该文件仅作为**旧版迁移源**保留：首次启动时迁移进
+    ``banks/`` 目录登记（原文件保留作备份）。
     """
 
     appdata = os.environ.get("APPDATA")
     base = Path(appdata) if appdata else Path.home()
     return base / C.CONFIG_DIR_NAME / C.EXTRA_WORD_BANK_FILE_NAME
+
+
+def banks_dir() -> Path:
+    """返回多词库存储根目录意图路径 ``%APPDATA%\\desktop-pet\\banks\\``。
+
+    每个导入的词库独立存为 ``<bank_id>.json``，由 ``bank_registry.json``
+    登记元数据（启用态 / 名称 / 添加时间）。目录由 registry 写入时创建。
+    """
+
+    appdata = os.environ.get("APPDATA")
+    base = Path(appdata) if appdata else Path.home()
+    return base / C.CONFIG_DIR_NAME / C.BANKS_DIR_NAME
 
 
 def word_details_path() -> Path:
@@ -105,6 +118,7 @@ __all__ = [
     "package_data_dir",
     "word_bank_path",
     "extra_word_bank_path",
+    "banks_dir",
     "word_details_path",
     "audio_cache_dir",
     "skins_dir",
