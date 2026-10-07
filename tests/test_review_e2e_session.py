@@ -53,7 +53,13 @@ class _SimClock:
     """
 
     def __init__(self) -> None:
-        self.wall: float = datetime.now(timezone.utc).timestamp()
+        # 锚定当日 UTC 06:00（而非真实 now）：测试步进最多快进数小时，
+        # 距午夜余量 >6h，「day 在测试中途跨日」的抖动不再随机出现
+        # （真实 now 若落在 23:xx，6×700s 的步进会恰好滚过午夜，day 变化
+        # 而测试前置捕获的 day 不变 → 偶发失败）。
+        now_dt = datetime.now(timezone.utc)
+        anchored = now_dt.replace(hour=6, minute=0, second=0, microsecond=0)
+        self.wall: float = anchored.timestamp()
         self.t: float = 1000.0
 
     @property

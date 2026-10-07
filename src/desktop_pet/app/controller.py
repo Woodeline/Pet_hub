@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
-from PySide6.QtCore import QObject, QPoint, QTimer
+from PySide6.QtCore import QObject, QPoint, QThreadPool, QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication, QFileDialog
 
@@ -45,6 +45,7 @@ from desktop_pet.core.daily_log_store import DailyLogEntry, DailyLogStore
 from desktop_pet.core.mastered_store import MasteredItem, MasteredStore
 from desktop_pet.core.pet_model import PetModel
 from desktop_pet.core.stats_aggregator import StatsSummary, build_summary
+from desktop_pet.core.update_client import ReleaseInfo, is_newer
 from desktop_pet.core.weak_words import WeakWord, collect_weak_words
 from desktop_pet.core.vocab_store import VocabStore
 from desktop_pet.core.vocabulary import (
@@ -71,6 +72,7 @@ from desktop_pet.ui.skin_renderer import build_skin_renderer
 from desktop_pet.ui.speaker_button import PronunciationController
 from desktop_pet.ui.stats_window import StatsWindow
 from desktop_pet.ui.tray import TrayController
+from desktop_pet.ui.update_worker import UpdateCheckWorker
 from desktop_pet.ui.vocab_window import VocabWindow
 from desktop_pet.ui.word_detail_window import WordDetailWindow
 from desktop_pet.ui.word_detail_worker import WordDetailNetConfig
@@ -193,6 +195,11 @@ class PetAppController(QObject):
         # 数据管理窗口（懒加载单例；导出 / 备份的业务全在 controller）
         self._data_window: DataWindow | None = None
 
+        # —— 检查更新运行时状态：QThreadPool 单线程池 + 在途标志（防连点重复查询）——
+        self._update_pool: QThreadPool = QThreadPool(self)
+        self._update_pool.setMaxThreadCount(1)
+        self._update_checking: bool = False
+
         # —— 错题本（易错词）运行时状态：无独立存储，从每日记录 review_lapsed
         #    惰性派生（脏标记缓存）；每日一次提醒（托盘通知）走排期制 ——
         self._weak_dirty: bool = True
@@ -285,6 +292,8 @@ class PetAppController(QObject):
         self._tray.set_jp_enabled(self._cfg.jp_enabled)
         self._tray.show()
         self._notify_jp_startup_state()
+        # 可选自动检查更新（静默后台，不阻塞启动流程）
+        self._maybe_auto_update_check()
 
         self._window.show()
         self._window.raise_()
@@ -387,6 +396,8 @@ class PetAppController(QObject):
         self._tray.jp_stats_requested.connect(self._on_jp_stats)
         self._tray.jp_import_bank_requested.connect(self._on_jp_import_bank)
         self._tray.data_manager_requested.connect(self._on_data_manager)
+        self._tray.update_check_requested.connect(self._on_update_check)
+        self._tray.update_auto_toggled.connect(self._on_update_auto_toggled)
 
         # 日语记忆：气泡按钮条（记住了 / 新单词；复习模式 = 还记得 / 忘了）
         self._button_bar.mastered_clicked.connect(self._on_word_mastered)
@@ -1390,6 +1401,95 @@ class PetAppController(QObject):
             self._tray.notify(
                 C.APP_DISPLAY_NAME, C.DATA_NOTIFY_RESTORE_FAILED.format(reason=exc)
             )
+
+    # ------------------------------------------------------------------ #
+    # 内部：检查更新（手动 + 可选自动；后台线程，结果一律通知/记日志）
+    # ------------------------------------------------------------------ #
+    def _on_update_auto_toggled(self, checked: bool) -> None:
+        """切换「自动检查更新」开关（默认关；仅控制启动时是否静默查询）。"""
+
+        checked = bool(checked)
+        self._cfg.update_check_enabled = checked
+        self._tray.set_update_auto_checked(checked)
+        self._persist()
+
+    def _on_update_check(self) -> None:
+        """托盘「检查更新」→ 手动检查（结果无论好坏都通知；在途时忽略连点）。"""
+
+        if self._update_checking:
+            return
+        self._update_checking = True
+        self._tray.notify(C.APP_DISPLAY_NAME, C.UPDATE_NOTIFY_CHECKING)
+        self._start_update_check(manual=True)
+
+    def _maybe_auto_update_check(self) -> None:
+        """启动时的静默自动检查：开关开启且距上次检查 ≥ ``UPDATE_AUTO_INTERVAL_DAYS`` 天。"""
+
+        if not self._cfg.update_check_enabled or self._update_checking:
+            return
+        last = self._cfg.update_check_last_at
+        if last:
+            last_wall = _iso_to_wall(last)
+            if last_wall != float("inf"):
+                elapsed_days = (self._wall_now() - last_wall) / 86400.0
+                if elapsed_days < C.UPDATE_AUTO_INTERVAL_DAYS:
+                    return
+        self._update_checking = True
+        self._start_update_check(manual=False)
+
+    def _start_update_check(self, *, manual: bool) -> None:
+        """投递一次后台查询（QRunnable；信号携带 manual 供差异化反馈）。"""
+
+        worker = UpdateCheckWorker(timeout_s=C.UPDATE_CHECK_TIMEOUT_S)
+        worker.signals.succeeded.connect(
+            lambda release, m=manual: self._on_update_check_succeeded(release, m)
+        )
+        worker.signals.failed.connect(
+            lambda message, m=manual: self._on_update_check_failed(message, m)
+        )
+        self._update_pool.start(worker)
+
+    def _on_update_check_succeeded(self, release: ReleaseInfo, manual: bool) -> None:
+        """查询成功：记录检查时刻；有新版才通知（自动路径其余完全静默）。"""
+
+        self._update_checking = False
+        self._record_update_check()
+        try:
+            if is_newer(release.tag_name, __version__):
+                self._tray.notify(
+                    C.APP_DISPLAY_NAME,
+                    C.UPDATE_NOTIFY_NEW.format(tag=release.tag_name, url=release.html_url),
+                )
+            elif manual:
+                self._tray.notify(
+                    C.APP_DISPLAY_NAME,
+                    C.UPDATE_NOTIFY_LATEST.format(version=__version__),
+                )
+            else:
+                logger.info("自动检查更新：当前已是最新（远端 %s）", release.tag_name)
+        except Exception:  # noqa: BLE001
+            logger.exception("处理更新检查结果异常（已忽略）")
+
+    def _on_update_check_failed(self, message: str, manual: bool) -> None:
+        """查询失败：同样记录检查时刻（防离线时每次启动都联网重试）。"""
+
+        self._update_checking = False
+        self._record_update_check()
+        if manual:
+            self._tray.notify(
+                C.APP_DISPLAY_NAME, C.UPDATE_NOTIFY_FAILED.format(reason=message)
+            )
+        else:
+            logger.info("自动检查更新失败（静默）：%s", message)
+
+    def _record_update_check(self) -> None:
+        """把本次检查时刻写回配置（ISO8601 UTC，app 层注入）。"""
+
+        try:
+            self._cfg.update_check_last_at = self._now_iso()
+            self._persist()
+        except Exception:  # noqa: BLE001
+            logger.exception("记录更新检查时刻失败（已忽略）")
 
     def _on_jp_vocab(self) -> None:
         """打开生词本窗口（单例，重开则前置）。"""

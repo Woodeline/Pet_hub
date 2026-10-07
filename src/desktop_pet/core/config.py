@@ -262,6 +262,10 @@ class AppConfig:
     jp_review_daily_limit: int = C.JP_REVIEW_DAILY_LIMIT
     #: 错题本每日一次提醒开关（默认开；提醒经托盘通知引导到学习统计窗口）
     weak_review_enabled: bool = True
+    #: 自动检查更新开关（默认关；开启后启动时距上次检查 ≥ ``UPDATE_AUTO_INTERVAL_DAYS`` 天才联网）
+    update_check_enabled: bool = False
+    #: 上次更新检查时刻（ISO8601 UTC 字符串；空 = 从未检查过）
+    update_check_last_at: str = ""
     deepseek_api_key: str = ""
     deepseek_base_url: str = C.LLM_ENDPOINT
     deepseek_model: str = C.LLM_MODEL
@@ -297,6 +301,8 @@ class AppConfig:
             "jp_daily_limit": int(self.jp_daily_limit),
             "jp_review_daily_limit": int(self.jp_review_daily_limit),
             "weak_review_enabled": bool(self.weak_review_enabled),
+            "update_check_enabled": bool(self.update_check_enabled),
+            "update_check_last_at": str(self.update_check_last_at),
             "deepseek_api_key": str(self.deepseek_api_key),
             "deepseek_base_url": str(self.deepseek_base_url),
             "deepseek_model": str(self.deepseek_model),
@@ -357,6 +363,12 @@ class AppConfig:
             ),
             weak_review_enabled=_coerce_bool(
                 get("weak_review_enabled"), defaults.weak_review_enabled
+            ),
+            update_check_enabled=_coerce_bool(
+                get("update_check_enabled"), defaults.update_check_enabled
+            ),
+            update_check_last_at=_coerce_str(
+                get("update_check_last_at"), defaults.update_check_last_at, allow_empty=True
             ),
             deepseek_api_key=_coerce_str(
                 get("deepseek_api_key"), defaults.deepseek_api_key, allow_empty=True

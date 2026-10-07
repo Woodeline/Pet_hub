@@ -190,6 +190,8 @@ def test_load_after_save_is_json_readable(config_store: ConfigStore, config_path
         "jp_review_daily_limit",
         # 增量改造：错题本每日一次提醒开关（CONFIG_VERSION 保持 1）
         "weak_review_enabled",
+        # 增量改造：检查更新（手动 + 可选自动；CONFIG_VERSION 保持 1）
+        "update_check_enabled", "update_check_last_at",
         # 增量改造：DeepSeek 联网 / 中文详情配置（CONFIG_VERSION 保持 1）
         "deepseek_api_key", "deepseek_base_url", "deepseek_model",
         "word_detail_llm_timeout_s", "word_detail_llm_retries",
@@ -623,3 +625,19 @@ def test_weak_review_enabled_roundtrip(config_store: ConfigStore) -> None:
     loaded = config_store.load()
     assert loaded.weak_review_enabled is False
     assert loaded.to_dict()["weak_review_enabled"] is False
+
+
+def test_update_check_fields_default_and_roundtrip(config_store: ConfigStore) -> None:
+    """更新检查：默认关 / 从未检查过；开关与检查时刻落盘可读回。"""
+
+    assert AppConfig().update_check_enabled is False
+    assert AppConfig().update_check_last_at == ""
+    assert AppConfig.from_dict({}).update_check_enabled is False
+    assert AppConfig.from_dict({"update_check_enabled": "on"}).update_check_enabled is True
+
+    config_store.save(
+        AppConfig(update_check_enabled=True, update_check_last_at="2025-01-01T00:00:00Z")
+    )
+    loaded = config_store.load()
+    assert loaded.update_check_enabled is True
+    assert loaded.update_check_last_at == "2025-01-01T00:00:00Z"

@@ -1383,6 +1383,23 @@ BACKUP_FILES: Final[tuple[str, ...]] = (
 #: 还原前对既有文件的留档后缀（同目录、不覆盖旧留档）
 BACKUP_PRE_RESTORE_SUFFIX: Final[str] = ".pre-restore"
 
+# --------------------------------------------------------------------------- #
+# 12c. 检查更新（GitHub Releases；手动 + 可选自动）
+# --------------------------------------------------------------------------- #
+TRAY_MENU_CHECK_UPDATE: Final[str] = "检查更新"
+TRAY_MENU_UPDATE_AUTO: Final[str] = "自动检查更新（每周）"
+#: 最新 Release 查询端点（``releases/latest`` 不需要硬编码当前 tag）
+UPDATE_GITHUB_RELEASES_URL: Final[str] = (
+    "https://api.github.com/repos/Woodeline/Pet_hub/releases/latest"
+)
+UPDATE_CHECK_TIMEOUT_S: Final[float] = 8.0
+#: 自动检查的最小间隔（天）；上次检查时刻存 ``update_check_last_at``（ISO8601）
+UPDATE_AUTO_INTERVAL_DAYS: Final[int] = 7
+UPDATE_NOTIFY_CHECKING: Final[str] = "正在检查更新…"
+UPDATE_NOTIFY_NEW: Final[str] = "发现新版本 {tag}！下载地址：{url}"
+UPDATE_NOTIFY_LATEST: Final[str] = "已是最新版本（v{version}）"
+UPDATE_NOTIFY_FAILED: Final[str] = "检查更新失败：{reason}"
+
 # —— DeepSeek 联网（OpenAI 兼容接口；仅标准库 urllib，默认超时 10s / 重试 1）——
 LLM_ENDPOINT: Final[str] = "https://api.deepseek.com/v1/chat/completions"
 LLM_MODEL: Final[str] = "deepseek-chat"

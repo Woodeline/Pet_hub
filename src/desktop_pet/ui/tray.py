@@ -58,6 +58,10 @@ class TrayController(QObject):
     jp_import_bank_requested = Signal()
     #: 打开「数据管理」窗口（导出 Anki/CSV、一键备份与还原）
     data_manager_requested = Signal()
+    #: 手动检查更新（GitHub Releases）
+    update_check_requested = Signal()
+    #: 自动检查更新开关
+    update_auto_toggled = Signal(bool)
 
     def __init__(self, icon: QIcon, cfg: AppConfig) -> None:
         """构造托盘控制器。
@@ -171,6 +175,14 @@ class TrayController(QObject):
             self._action_autostart.blockSignals(True)
             self._action_autostart.setChecked(bool(checked))
             self._action_autostart.blockSignals(False)
+
+    def set_update_auto_checked(self, checked: bool) -> None:
+        """同步「自动检查更新」勾选状态（不触发信号）。"""
+
+        if self._action_update_auto is not None:
+            self._action_update_auto.blockSignals(True)
+            self._action_update_auto.setChecked(bool(checked))
+            self._action_update_auto.blockSignals(False)
 
     def set_bubble_checked(self, checked: bool) -> None:
         """同步气泡提示勾选状态（不触发信号）。"""
@@ -432,6 +444,16 @@ class TrayController(QObject):
             lambda _checked=False: self.data_manager_requested.emit()
         )
 
+        self._action_update_check = QAction(C.TRAY_MENU_CHECK_UPDATE, self._menu)
+        self._action_update_check.triggered.connect(
+            lambda _checked=False: self.update_check_requested.emit()
+        )
+
+        self._action_update_auto = QAction(C.TRAY_MENU_UPDATE_AUTO, self._menu)
+        self._action_update_auto.setCheckable(True)
+        self._action_update_auto.setChecked(bool(self._cfg.update_check_enabled))
+        self._action_update_auto.toggled.connect(self.update_auto_toggled.emit)
+
         scale_menu = ShadowMenu("大小", self._menu)
         self._scale_group = QActionGroup(self._menu)
         self._scale_group.setExclusive(True)
@@ -509,6 +531,7 @@ class TrayController(QObject):
         jp.addAction(self._action_jp_import)
         menu.addMenu(jp)
         menu.addAction(self._action_data)
+        menu.addAction(self._action_update_check)
         menu.addSeparator()
         # 「外观」三兄弟：大小 + 主题（配色）+ 皮肤（MOD 包）
         menu.addMenu(scale_menu)
@@ -516,6 +539,7 @@ class TrayController(QObject):
         menu.addMenu(self._skin_menu)
         menu.addSeparator()
         menu.addAction(self._action_autostart)
+        menu.addAction(self._action_update_auto)
         menu.addAction(self._action_reduce_motion)
         menu.addSeparator()
         menu.addAction(self._action_quit)
