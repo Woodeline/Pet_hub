@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +25,7 @@ from desktop_pet.core import constants as C
 __all__ = [
     "SkinPackError",
     "ActionSpec",
+    "SkinPackMeta",
     "SkinPack",
     "load_skin_pack",
     "REQUIRED_SLOTS",
@@ -80,6 +81,20 @@ class ActionSpec:
 
 
 @dataclass(frozen=True)
+class SkinPackMeta:
+    """包级元数据（pet_conf.json 可选 ``meta`` 对象；社区格式 v1.1 增补）。
+
+    全部字段可缺省：``name`` 为空时展示层回落目录名；其余为空时 UI 省略
+    对应部分。**元数据缺失 / 类型非法只记警告、绝不致命**（社区包兼容优先）。
+    """
+
+    name: str = ""      # 显示名（菜单 / 通知用；空 → 回落目录名）
+    author: str = ""
+    version: str = ""
+    credits: str = ""
+
+
+@dataclass(frozen=True)
 class SkinPack:
     """一个通过校验的皮肤包。"""
 
@@ -91,6 +106,7 @@ class SkinPack:
     action_map: dict[str, str]       # 槽位 → 动作名（pet_conf 全局层）
     actions: dict[str, ActionSpec]   # 动作名 → 定义（act_conf 动作层）
     warnings: tuple[str, ...]
+    meta: SkinPackMeta = field(default_factory=SkinPackMeta)
 
     def action_for(self, slot: str) -> ActionSpec | None:
         """返回槽位对应的动作；该槽位未映射时返回 ``None``。"""
@@ -175,12 +191,42 @@ def _parse_scale(pet_raw: dict[str, Any], issues: list[str]) -> float:
     return float(scale)
 
 
+#: ``meta`` 对象允许的键（展示名 / 作者 / 版本 / 版权声明）
+_META_KEYS: tuple[str, ...] = ("name", "author", "version", "credits")
+
+
+def _parse_meta(pet_raw: dict[str, Any], warnings: list[str]) -> SkinPackMeta:
+    """解析可选 ``meta`` 元数据对象；缺失 / 非法只记警告（社区包兼容优先）。"""
+
+    raw = pet_raw.get("meta")
+    if raw is None:
+        return SkinPackMeta()
+    if not isinstance(raw, dict):
+        warnings.append(f"pet_conf.meta 应为对象（已忽略），实际：{type(raw).__name__}")
+        return SkinPackMeta()
+    for key in raw:
+        if key not in _META_KEYS:
+            warnings.append(f"pet_conf.meta 出现未知键 {key!r}（已忽略）")
+    values: dict[str, str] = {}
+    for key in _META_KEYS:
+        value = raw.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            warnings.append(f"pet_conf.meta.{key} 必须是字符串（已忽略）：{value!r}")
+            continue
+        text = value.strip()
+        if text:
+            values[key] = text
+    return SkinPackMeta(**values)
+
+
 def _parse_action_map(
     pet_raw: dict[str, Any], issues: list[str], warnings: list[str]
 ) -> dict[str, str]:
     """提取槽位映射；未知键警告容忍，槽位值必须是非空字符串。"""
 
-    reserved = {"width", "height", "scale"}
+    reserved = {"width", "height", "scale", "meta"}
     for key in pet_raw:
         if key not in KNOWN_SLOTS and key not in reserved:
             warnings.append(f"pet_conf 出现未知键 {key!r}（已忽略）")
@@ -307,6 +353,7 @@ def load_skin_pack(root: Path) -> SkinPack:
     width, height = _parse_canvas(pet_raw, issues, warnings)
     scale = _parse_scale(pet_raw, issues)
     action_map = _parse_action_map(pet_raw, issues, warnings)
+    meta = _parse_meta(pet_raw, warnings)
 
     if not isinstance(act_raw, dict) or not act_raw:
         issues.append(f"{_ACT_CONF_NAME} 必须是至少含一个动作的非空对象")
@@ -335,4 +382,5 @@ def load_skin_pack(root: Path) -> SkinPack:
         action_map=action_map,
         actions=actions,
         warnings=tuple(warnings),
+        meta=meta,
     )

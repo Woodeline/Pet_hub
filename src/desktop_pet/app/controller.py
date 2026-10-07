@@ -718,13 +718,14 @@ class PetAppController(QObject):
         self._cfg.skin_name = value
         new_renderer = build_skin_renderer(value)
         self._skin_renderer = new_renderer
-        self._window.set_skin_renderer(new_renderer)
+        # reduce_motion 开启时直切终态（跳过 cross-fade 过渡）
+        self._window.set_skin_renderer(new_renderer, animate=not self._cfg.reduce_motion)
         self._tray.set_skin_checked(value)
         self._persist()
         if new_renderer is not None:
             self._tray.notify(
                 C.APP_DISPLAY_NAME,
-                C.TRAY_NOTIFY_SKIN_APPLIED.format(name=new_renderer.pack_name),
+                C.TRAY_NOTIFY_SKIN_APPLIED.format(name=new_renderer.display_name),
             )
         elif value not in (C.SKIN_NAME_AUTO, C.SKIN_NAME_VECTOR):
             self._tray.notify(

@@ -94,6 +94,9 @@ class PetWindow(QWidget):
         self._dragging: bool = False
         # 耳尾弹簧激励：上一帧窗口位置（None = 尚无基准，首帧不计位移）
         self._last_pos_for_spring: QPoint | None = None
+        # 皮肤切换 cross-fade 过渡态：(旧渲染器, 开始时刻)；None = 无过渡。
+        # 旧渲染器引用在过渡结束（paintEvent 判定超时）时随元组丢弃释放。
+        self._skin_transition: tuple[SkinPackRenderer | None, float] | None = None
 
         # 悬停抚摸
         self._hover_timer = QTimer(self)
@@ -141,14 +144,28 @@ class PetWindow(QWidget):
         self._apply_size()
         self.update()
 
-    def set_skin_renderer(self, skin_renderer: SkinPackRenderer | None) -> None:
-        """热替换皮肤包渲染器（``None`` = 回落矢量渲染）并整窗重绘。
+    def set_skin_renderer(
+        self, skin_renderer: SkinPackRenderer | None, *, animate: bool = True
+    ) -> None:
+        """热替换皮肤包渲染器（``None`` = 回落矢量渲染），默认带 cross-fade 过渡。
 
-        切换后帧图内容与铺满范围都变，脏区收窄不再适用，故走整窗 ``update()``
-        （与主题切换同理）。
+        过渡：旧渲染器淡出、新渲染器淡入（``SKIN_FADE_S``，由帧循环重绘驱动）；
+        ``animate=False``（reduce_motion）或重复设置同一渲染器时直切终态。
+        过渡期脏区恒整窗（旧包帧图可能铺满画布，见 :meth:`pet_rect`）；过渡结束
+        即释放旧渲染器引用（社区包帧图内存可观，Nahida 级 ~78MB）。
+
+        注：cross-fade 对帧图皮肤（pixmap 绘制）完全生效；矢量猫内部会用
+        ``setOpacity`` 画光晕等半透明元素，过渡中其淡入曲线会被局部覆盖——
+        仅影响 0.6s 内的渐变细腻度，终态一致。
         """
 
+        old = self._skin_renderer
         self._skin_renderer = skin_renderer
+        if not animate or old is skin_renderer:
+            self._skin_transition = None
+            self.update()
+            return
+        self._skin_transition = (old, time.monotonic())
         self.update()
 
     def set_fps(self, fps: int) -> None:
@@ -234,6 +251,9 @@ class PetWindow(QWidget):
         """
 
         pose = self._model.pose()
+        # 皮肤切换过渡期：新旧两渲染器同绘（旧包帧图可能铺满画布）→ 回退整窗。
+        if self._skin_transition is not None:
+            return self.rect()
         # 皮肤包帧图：帧图内容不可预测（可能铺满画布），无法收窄 → 回退整窗。
         if self._skin_renderer is not None and self._skin_renderer.active:
             return self.rect()
@@ -256,21 +276,44 @@ class PetWindow(QWidget):
     # 绘制
     # ------------------------------------------------------------------ #
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
-        """绘制一帧：启用皮肤包时走帧图，否则走矢量团子猫。"""
+        """绘制一帧：启用皮肤包时走帧图，否则走矢量团子猫；过渡期双绘 cross-fade。"""
 
         painter = QPainter(self)
         try:
-            if self._skin_renderer is not None and self._skin_renderer.active:
-                slot = self._current_skin_slot()
-                self._skin_renderer.paint(
-                    painter, slot, time.monotonic(), self._scale
-                )
-            else:
-                self._renderer.paint(
-                    painter, self._model.pose(), self._scale, self.size()
-                )
+            transition = self._skin_transition
+            if transition is None:
+                self._paint_active(painter)
+                return
+            old, start = transition
+            progress = (time.monotonic() - start) / max(1e-6, C.SKIN_FADE_S)
+            if progress >= 1.0:
+                # 过渡结束：清状态即释放旧渲染器（元组丢弃），走终态单绘
+                self._skin_transition = None
+                self._paint_active(painter)
+                return
+            if old is not None and old.active:
+                painter.setOpacity(max(0.0, 1.0 - progress))
+                # 旧渲染器按默认槽位淡出（过渡期不足 0.6s，槽位差异可忽略）
+                old.paint(painter, "default", time.monotonic(), self._scale)
+                painter.setOpacity(1.0)
+            painter.setOpacity(min(1.0, max(0.0, progress)))
+            self._paint_active(painter)
+            painter.setOpacity(1.0)
         finally:
             painter.end()
+
+    def _paint_active(self, painter: QPainter) -> None:
+        """按当前生效渲染通道绘制一帧（皮肤包激活走帧图，否则矢量猫）。"""
+
+        if self._skin_renderer is not None and self._skin_renderer.active:
+            slot = self._current_skin_slot()
+            self._skin_renderer.paint(
+                painter, slot, time.monotonic(), self._scale
+            )
+        else:
+            self._renderer.paint(
+                painter, self._model.pose(), self._scale, self.size()
+            )
 
     def _current_skin_slot(self) -> str:
         """把当前宠物状态映射为皮肤包槽位（default/drag/fall/patpat）。

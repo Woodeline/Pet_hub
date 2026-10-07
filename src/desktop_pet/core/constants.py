@@ -84,6 +84,10 @@ TAIL_MIN_S: Final[float] = 2.0              # 尾巴摆动周期下限          
 TAIL_MAX_S: Final[float] = 4.0              # 尾巴摆动周期上限          FR-13
 EAR_TWITCH_MIN_S: Final[float] = 4.0        # 耳朵抖动间隔下限          FR-13
 
+# —— 皮肤切换 cross-fade 过渡 ——
+#: 过渡时长（秒；reduce_motion 时直切终态；过渡期脏区恒整窗）
+SKIN_FADE_S: Final[float] = 0.6
+
 # —— 耳尾弹簧物理（二阶惯性：拖拽 / 游走位移激励，欠阻尼余韵回摆）——
 #: 弹簧积分固定子步长上限（秒）：保证 30/60fps 下同一物理时长的积分一致（FR-34）
 SPRING_SUB_STEP_S: Final[float] = 1.0 / 120.0

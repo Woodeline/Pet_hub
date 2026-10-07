@@ -66,6 +66,18 @@ class SkinPackRenderer:
 
         return self._pack.name
 
+    @property
+    def display_name(self) -> str:
+        """皮肤展示名（包元数据 ``meta.name`` 优先，缺省回落目录名）。"""
+
+        return self._pack.meta.name or self._pack.name
+
+    @property
+    def author(self) -> str:
+        """皮肤作者（包元数据；缺省空串）。"""
+
+        return self._pack.meta.author
+
     def has_action(self, slot: str) -> bool:
         """指定槽位是否有可用动作。
 
@@ -209,10 +221,13 @@ class SkinPackRenderer:
         )
 
 
-def available_skin_packs() -> list[str]:
-    """列出 ``skins/`` 下**通过校验**的皮肤包名（按目录名排序）。
+def available_skin_pack_entries() -> list[tuple[str, str, str]]:
+    """列出 ``skins/`` 下**通过校验**的皮肤包 ``(目录名, 显示名, 说明)``。
 
-    供托盘「皮肤」子菜单构建；校验失败的包不入列（日志已记明跳过原因）。
+    - 目录名作为菜单值（``cfg.skin_name`` 口径不变），显示名来自包元数据
+      ``meta.name``（缺省回落目录名）；
+    - 说明拼装作者 / 版本（缺失部分省略），供皮肤菜单 action 的 toolTip；
+    - 校验失败的包不入列（日志已记明跳过原因）。
     """
 
     from desktop_pet.core.paths import skins_dir
@@ -220,14 +235,31 @@ def available_skin_packs() -> list[str]:
     root = skins_dir()
     if not root.is_dir():
         return []
-    names: list[str] = []
+    entries: list[tuple[str, str, str]] = []
     for cand in sorted(p for p in root.iterdir() if p.is_dir()):
         try:
-            load_skin_pack(cand)
+            pack = load_skin_pack(cand)
         except Exception:  # noqa: BLE001 —— 损坏包不入菜单
             continue
-        names.append(cand.name)
-    return names
+        label = pack.meta.name or pack.name
+        tips = []
+        if pack.meta.author:
+            tips.append(f"作者：{pack.meta.author}")
+        if pack.meta.version:
+            tips.append(f"版本：{pack.meta.version}")
+        if pack.meta.credits:
+            tips.append(pack.meta.credits)
+        entries.append((cand.name, label, " · ".join(tips)))
+    return entries
+
+
+def available_skin_packs() -> list[str]:
+    """列出 ``skins/`` 下**通过校验**的皮肤包名（按目录名排序）。
+
+    供托盘「皮肤」子菜单构建；校验失败的包不入列（日志已记明跳过原因）。
+    """
+
+    return [name for name, _label, _tip in available_skin_pack_entries()]
 
 
 def build_skin_renderer(preferred: str = "") -> SkinPackRenderer | None:

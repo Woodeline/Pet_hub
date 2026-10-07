@@ -246,17 +246,22 @@ class TrayController(QObject):
         group.setExclusive(True)
         self._skin_group = group
 
-        from desktop_pet.ui.skin_renderer import available_skin_packs
+        from desktop_pet.ui.skin_renderer import available_skin_pack_entries
 
         items: list[tuple[str, str]] = [
             (C.SKIN_NAME_VECTOR, C.TRAY_SKIN_LABELS[C.SKIN_NAME_VECTOR]),
             (C.SKIN_NAME_AUTO, C.TRAY_SKIN_LABELS[C.SKIN_NAME_AUTO]),
         ]
-        items.extend((name, name) for name in available_skin_packs())
+        entries = available_skin_pack_entries()
+        items.extend((name, label) for name, label, _tip in entries)
         for value, label in items:
             action = QAction(label, menu)
             action.setCheckable(True)
             action.setChecked(value == current)
+            if value not in (C.SKIN_NAME_VECTOR, C.SKIN_NAME_AUTO):
+                tip = next((tip for name, _label, tip in entries if name == value), "")
+                if tip:
+                    action.setToolTip(tip)
             action.triggered.connect(
                 lambda _checked=False, v=value: self.skin_selected.emit(v)
             )

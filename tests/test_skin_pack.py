@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from desktop_pet.core import constants as C
-from desktop_pet.core.skin_pack import SkinPack, SkinPackError, load_skin_pack
+from desktop_pet.core.skin_pack import SkinPack, SkinPackError, SkinPackMeta, load_skin_pack
 
 
 # --------------------------------------------------------------------------- #
@@ -299,3 +299,65 @@ def test_noncontiguous_frames_ignored_with_warning(tmp_path: Path) -> None:
     assert idle is not None
     assert idle.frames == ("stand_0.png", "stand_1.png", "stand_2.png", "stand_3.png")
     assert any("stand_5.png" in w for w in pack.warnings)
+
+
+# --------------------------------------------------------------------------- #
+# 元数据 meta（社区格式 v1.1 增补）
+# --------------------------------------------------------------------------- #
+def test_meta_full_parses(tmp_path: Path) -> None:
+    """完整 meta：四字段全部解析，warnings 无 meta 相关条目。"""
+
+    root = _make_pack(
+        tmp_path,
+        pet_conf_mutate={
+            "meta": {
+                "name": "小雪猫",
+                "author": "雪村",
+                "version": "1.2.0",
+                "credits": "素材：自绘 (CC BY 4.0)",
+            }
+        },
+    )
+    pack = load_skin_pack(root)
+    assert pack.meta.name == "小雪猫"
+    assert pack.meta.author == "雪村"
+    assert pack.meta.version == "1.2.0"
+    assert pack.meta.credits.startswith("素材")
+    assert not any("meta" in w for w in pack.warnings)
+
+
+def test_meta_missing_defaults(tmp_path: Path) -> None:
+    """缺 meta：全空元数据、零警告（向后兼容旧包）。"""
+
+    pack = load_skin_pack(_make_pack(tmp_path))
+    assert pack.meta == SkinPackMeta()
+    assert not any("meta" in w for w in pack.warnings)
+
+
+@pytest.mark.parametrize(
+    "meta",
+    [
+        "not-a-dict",                       # 非对象
+        {"name": 42},                       # 字段非字符串
+        {"name": "x", "hobby": "跑"},        # 未知键
+    ],
+)
+def test_meta_invalid_warns_not_fails(tmp_path: Path, meta) -> None:
+    """meta 非法：只记警告、包仍加载（社区包兼容优先）。"""
+
+    root = _make_pack(tmp_path, pet_conf_mutate={"meta": meta})
+    pack = load_skin_pack(root)
+    assert any("meta" in w for w in pack.warnings)
+    # 非对象 / 非字符串字段：回落空元数据；未知键：合法字段照常解析
+    if meta == {"name": "x", "hobby": "跑"}:
+        assert pack.meta.name == "x"
+    else:
+        assert pack.meta.name == ""
+
+
+def test_meta_reserved_key_no_unknown_warning(tmp_path: Path) -> None:
+    """pet_conf 顶层出现 meta 键不被当成「未知槽位键」告警。"""
+
+    root = _make_pack(tmp_path, pet_conf_mutate={"meta": {"name": "x"}})
+    pack = load_skin_pack(root)
+    assert not any("未知键 'meta'" in w for w in pack.warnings)

@@ -349,3 +349,67 @@ def test_build_empty_dir_returns_none(tmp_path: Path, monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(paths, "skins_dir", lambda: tmp_path / "nope")
     assert build_skin_renderer("") is None
+
+
+# --------------------------------------------------------------------------- #
+# 元数据展示名与包发现（社区格式 v1.1 增补）
+# --------------------------------------------------------------------------- #
+def test_display_name_falls_back_to_dir_name(pack: SkinPack) -> None:
+    """无 meta.name：display_name 回落目录名。"""
+
+    renderer = SkinPackRenderer(pack)
+    assert renderer.display_name == pack.name
+    assert renderer.author == ""
+
+
+def test_display_name_prefers_meta(tmp_path: Path) -> None:
+    """meta.name 存在：display_name 用元数据名。"""
+
+    root = tmp_path / "sample_cat"
+    action_dir = root / "action"
+    action_dir.mkdir(parents=True)
+    for i in range(2):
+        (action_dir / f"stand_{i}.png").write_bytes(_png_bytes(32, 32, (10, 20, 30)))
+    (root / "pet_conf.json").write_text(
+        '{"width": 32, "height": 32, "default": "idle", "drag": "idle", "fall": "idle",'
+        ' "meta": {"name": "雪团", "author": "阿雪", "version": "2.0"}}',
+        encoding="utf-8",
+    )
+    (root / "act_conf.json").write_text(
+        '{"idle": {"images": "stand", "frame_refresh": 0.3}}',
+        encoding="utf-8",
+    )
+    renderer = SkinPackRenderer(load_skin_pack(root))
+    assert renderer.display_name == "雪团"
+    assert renderer.author == "阿雪"
+
+
+def test_available_entries_labels_and_tooltips(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """包发现：目录名为值、显示名为标签、说明拼作者/版本；损坏包不入列。"""
+
+    from desktop_pet.core import paths
+    from desktop_pet.ui.skin_renderer import available_skin_pack_entries
+
+    skins_root = tmp_path / "skins"
+    good = skins_root / "good_cat"
+    (good / "action").mkdir(parents=True)
+    for i in range(2):
+        (good / "action" / f"stand_{i}.png").write_bytes(_png_bytes(32, 32, (10, 20, 30)))
+    (good / "pet_conf.json").write_text(
+        '{"width": 32, "height": 32, "default": "idle", "drag": "idle", "fall": "idle",'
+        ' "meta": {"name": "好猫", "author": "作者甲"}}',
+        encoding="utf-8",
+    )
+    (good / "act_conf.json").write_text(
+        '{"idle": {"images": "stand", "frame_refresh": 0.3}}',
+        encoding="utf-8",
+    )
+    bad = skins_root / "bad_cat"
+    bad.mkdir()  # 无配置文件 → 校验失败，不入列
+
+    monkeypatch.setattr(paths, "skins_dir", lambda: skins_root)
+    entries = available_skin_pack_entries()
+
+    assert [name for name, _label, _tip in entries] == ["good_cat"]
+    assert entries[0][1] == "好猫"
+    assert "作者甲" in entries[0][2]

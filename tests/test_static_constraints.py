@@ -265,6 +265,8 @@ def test_no_image_assets(project_root: Path) -> None:
         ("DRAG_IMPULSE_GAIN", 8.0),
         ("SPRING_IMPULSE_CAP_DEG_S", 240.0),
         ("TAIL_IMPULSE_RATIO", 0.6),
+        # 皮肤切换 cross-fade 过渡时长
+        ("SKIN_FADE_S", 0.6),
     ],
 )
 def test_constants_match_prd(attr: str, expected) -> None:
