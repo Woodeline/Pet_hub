@@ -29,6 +29,7 @@ ICON_NAMES: Final[tuple[str, ...]] = (
     "remove",
     "trash",
     "speaker",
+    "pencil",
 )
 
 #: 设计栅格边长（所有路径都在 0.._GRID 的坐标系里定义，绘制时按 size 缩放）。
@@ -117,6 +118,22 @@ def _path_speaker() -> QPainterPath:
     return path
 
 
+def _path_pencil() -> QPainterPath:
+    """``pencil``：斜置铅笔（笔杆 + 笔尖三角 + 笔尾端帽 + 分界线）——纠错入口。"""
+
+    path = QPainterPath()
+    # 闭合轮廓：笔尖（左下）→ 笔杆上边 → 笔尾端帽 → 笔杆下边 → 回到笔尖
+    path.moveTo(4.5, 19.5)   # 笔尖
+    path.lineTo(15.0, 9.0)   # 上边
+    path.lineTo(17.5, 11.5)  # 笔尾端帽（垂直于笔杆方向）
+    path.lineTo(7.0, 22.0)   # 下边
+    path.closeSubpath()      # 笔尖三角自动闭合
+    # 笔尖与笔杆的分界线（沿垂直方向平移出一小段）
+    path.moveTo(13.9, 10.1)
+    path.lineTo(16.4, 12.6)
+    return path
+
+
 #: 图标名 → 路径构造函数（模块级只登记函数，不创建任何 Qt 绘图对象）。
 _PATH_BUILDERS: Final[dict[str, Callable[[], QPainterPath]]] = {
     "close": _path_close,
@@ -124,6 +141,7 @@ _PATH_BUILDERS: Final[dict[str, Callable[[], QPainterPath]]] = {
     "remove": _path_remove,
     "trash": _path_trash,
     "speaker": _path_speaker,
+    "pencil": _path_pencil,
 }
 
 

@@ -269,10 +269,20 @@ def test_no_image_assets(project_root: Path) -> None:
         ("SKIN_FADE_S", 0.6),
         # 多词库登记表版本
         ("BANK_REGISTRY_VERSION", 1),
+        # 词库纠错覆盖层：格式版本 v1
+        ("CORRECTIONS_VERSION", 1),
     ],
 )
 def test_constants_match_prd(attr: str, expected) -> None:
     assert getattr(C, attr) == expected, f"{attr} 与 PRD 不一致"
+
+
+def test_correction_fields_pinned() -> None:
+    """词库纠错：允许纠错的字段集合与备份收录钉死（防漂移）。"""
+
+    assert C.CORRECTION_FIELDS == ("word", "kana", "translation", "meaning")
+    assert set(C.CORRECTION_FIELD_LABELS) == set(C.CORRECTION_FIELDS)
+    assert C.CORRECTIONS_FILE_NAME in C.BACKUP_FILES
 
 
 def test_jp_review_limit_option_tiers_match_prd() -> None:

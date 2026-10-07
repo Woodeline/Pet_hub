@@ -23,6 +23,7 @@ from desktop_pet.app.controller import PetAppController
 from desktop_pet.core import paths
 from desktop_pet.core.bank_registry import BankRegistryStore
 from desktop_pet.core.config import ConfigStore
+from desktop_pet.core.corrections_store import CorrectionStore
 
 
 def _word(i: int, word: str | None = None) -> dict:
@@ -65,6 +66,10 @@ def ctrl(qapp: QApplication, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
         BankRegistryStore, "default_path", staticmethod(lambda: appdata / "bank_registry.json")
     )
     monkeypatch.setattr(BankRegistryStore, "banks_dir", staticmethod(lambda: appdata / "banks"))
+    # 纠错覆盖层不落真实用户目录（_load_japanese 会加载它）
+    monkeypatch.setattr(
+        CorrectionStore, "default_path", staticmethod(lambda: appdata / "corrections.json")
+    )
 
     controller = PetAppController(qapp, ConfigStore(tmp_path / "cfg" / "config.json"))
     notifications: list[str] = []

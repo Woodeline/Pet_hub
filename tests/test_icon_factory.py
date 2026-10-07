@@ -46,10 +46,10 @@ def _signature(image) -> str:
 # 1. 图标名清单
 # --------------------------------------------------------------------------- #
 def test_icon_names_complete() -> None:
-    """图标名齐全（卡片化改版新增 speaker 发音占位）。"""
+    """图标名齐全（卡片化改版新增 speaker；词库纠错新增 pencil）。"""
 
     assert icon_factory.ICON_NAMES == (
-        "close", "retry", "remove", "trash", "speaker",
+        "close", "retry", "remove", "trash", "speaker", "pencil",
     )
 
 

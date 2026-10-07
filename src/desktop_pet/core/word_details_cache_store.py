@@ -173,6 +173,19 @@ class WordDetailsCacheStore:
         )
         self.save()
 
+    def discard(self, item_id: str) -> bool:
+        """按词条 ``id`` 删除一条缓存并落盘；``True`` = 已删除，``False`` = 不存在。
+
+        词库纠错生效时使旧详情失效（释义 / 翻译变了，缓存的五要素不再可信），
+        下次打开详情按「打包库 → 缓存 → 联网」重新解析。
+        """
+
+        if not item_id or str(item_id) not in self._items:
+            return False
+        del self._items[str(item_id)]
+        self.save()
+        return True
+
     def save(self) -> None:
         """原子保存缓存（``mkstemp`` + ``fsync`` + ``os.replace``）；失败仅记 warning。"""
 

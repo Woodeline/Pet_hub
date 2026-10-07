@@ -67,11 +67,12 @@ class TTSParseError(TTSError):
 # --------------------------------------------------------------------------- #
 # 纯函数
 # --------------------------------------------------------------------------- #
-def _is_pure_kana(text: str) -> bool:
+def is_pure_kana(text: str) -> bool:
     """判断文本是否只含平假名/片假名（含长音 ``ー``、中点 ``・``）。
 
-    用于发音输入的**数据卫生防线**：假名字段是读音真相，但若混入拉丁字母 /
-    汉字 / 数字等脏数据，喂给 TTS 同样会读错，此时宁可信词头。
+    发音输入与词库纠错的**数据卫生防线**：假名字段是读音真相，但若混入拉丁字母 /
+    汉字 / 数字等脏数据，喂给 TTS 同样会读错，此时宁可信词头；纠错对话框同样
+    以此拒绝把非假名值写进读音字段。
     """
 
     if not text:
@@ -93,7 +94,7 @@ def spoken_text(word: str, kana: str) -> str:
 
     kana_text = str(kana or "").strip()
     word_text = str(word or "").strip()
-    if _is_pure_kana(kana_text):
+    if is_pure_kana(kana_text):
         return kana_text
     return word_text or kana_text
 
@@ -202,4 +203,5 @@ __all__ = [
     "TTSNetworkError",
     "TTSParseError",
     "spoken_text",
+    "is_pure_kana",
 ]

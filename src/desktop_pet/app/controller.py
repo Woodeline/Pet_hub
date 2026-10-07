@@ -18,6 +18,7 @@ import random
 import shutil
 import sys
 import time
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
@@ -34,6 +35,7 @@ from desktop_pet.core.backup import BackupError, create_backup, restore_backup
 from desktop_pet.core.bank_registry import BankInfo, BankRegistryStore
 from desktop_pet.core.config import AppConfig, ConfigStore
 from desktop_pet.core.constants import Expression, Gesture, Mood
+from desktop_pet.core.corrections_store import CorrectionItem, CorrectionStore
 from desktop_pet.core.exporter import daily_log_to_csv, to_anki_tsv
 from desktop_pet.core.theme import resolve_theme, theme_stops, ui_accent_for_theme
 from desktop_pet.core.event_aggregator import KeystrokeAggregator
@@ -64,6 +66,7 @@ from desktop_pet.ui.bubble_button_bar import BubbleButtonBar
 from desktop_pet.ui.bank_window import BankWindow
 from desktop_pet.ui.bubble_text_dialog import BubbleTextDialog
 from desktop_pet.ui.confirm_dialog import ConfirmDialog
+from desktop_pet.ui.correction_dialog import CorrectionDialog
 from desktop_pet.ui.data_window import DataWindow
 from desktop_pet.ui.log_window import LogWindow
 from desktop_pet.ui.mastered_window import MasteredWindow
@@ -185,6 +188,8 @@ class PetAppController(QObject):
         self._bank_registry: BankRegistryStore = BankRegistryStore(
             BankRegistryStore.default_path()
         )
+        # 词库纠错覆盖层：词条字段人工纠错记录（corrections.json），合并词库后统一套用
+        self._corrections: CorrectionStore = CorrectionStore(CorrectionStore.default_path())
         self._vocab: VocabStore = VocabStore(VocabStore.default_path())
         self._current_word: VocabEntry | None = None
         self._vocab_window: VocabWindow | None = None
@@ -216,6 +221,12 @@ class PetAppController(QObject):
         self._next_weak_remind_ts: float = float("inf")
         # 气泡文案设置对话框（单例，重开则前置）
         self._bubble_text_dialog: BubbleTextDialog | None = None
+        # 词条纠错对话框（单例，重开则前置）+ 打开期间对当前词的「冻结」状态：
+        # 超时处置暂停（deadline 备份 / 冻结标志）与纠错生效后的展示刷新标志。
+        self._correction_dialog: CorrectionDialog | None = None
+        self._correction_deadline_frozen: bool = False
+        self._correction_deadline_backup: float = float("inf")
+        self._correction_pending_reshow: bool = False
         self._word_deadline: float = float("inf")
         self._word_disposed: bool = True
         # 当前展示词是否来自手动「立即显示」路径（决定处置时是否计入每日配额）
@@ -411,6 +422,8 @@ class PetAppController(QObject):
         self._button_bar.vocab_clicked.connect(self._on_word_vocab)
         self._button_bar.review_ok_clicked.connect(self._on_review_ok)
         self._button_bar.review_lapsed_clicked.connect(self._on_review_lapsed)
+        # 按钮条「纠错」铅笔 → 打开纠错对话框（无词条 → 用当前展示词）
+        self._button_bar.correction_requested.connect(self._on_correction_requested)
         # 双击单词气泡 → 记生词 + 打开中文详情（情绪气泡穿透收不到，天然无效）
         self._bubble.word_detail_requested.connect(self._on_bubble_word_detail)
 
@@ -804,6 +817,14 @@ class PetAppController(QObject):
         except Exception:  # noqa: BLE001
             logger.exception("加载词库登记表失败（已忽略，仅用内置词库）")
             self._bank_registry = BankRegistryStore(BankRegistryStore.default_path())
+
+        try:
+            self._corrections = CorrectionStore(CorrectionStore.default_path())
+            self._corrections.load()
+        except Exception:  # noqa: BLE001
+            logger.exception("加载词库纠错记录失败（已忽略，使用空记录）")
+            self._corrections = CorrectionStore(CorrectionStore.default_path())
+
         self._migrate_legacy_extra_bank()
         self._reload_banks()
 
@@ -868,7 +889,9 @@ class PetAppController(QObject):
         """按 registry 顺序（added_at 升序）合并**启用**的词库并重建抽取器。
 
         内置词库为底座；单库解析失败仅告警（托盘一次通知）并跳过，不拖垮
-        其它词库。同 id 词条按合并顺序**后来者覆盖**。
+        其它词库。同 id 词条按合并顺序**后来者覆盖**。合并完成后套用纠错
+        覆盖层（:meth:`_apply_corrections`）——词库文件永不改写，覆盖随每次
+        重建重新生效。
         """
 
         bank = WordBank.load(paths.word_bank_path())
@@ -891,8 +914,45 @@ class PetAppController(QObject):
                     C.APP_DISPLAY_NAME,
                     C.BANK_NOTIFY_LOAD_FAILED.format(name=record.name, reason="读取失败"),
                 )
+        self._apply_corrections(bank)
         self._bank = bank
         self._picker = WeightedWordPicker(self._bank, self._rng)
+
+    def _apply_corrections(self, bank: WordBank) -> int:
+        """把纠错覆盖层套用到合并后的词库（同 id 覆盖语义；失败仅告警跳过）。
+
+        逐条定位词条 → ``dataclasses.replace`` 生成纠错后词条 → 一次性
+        :meth:`WordBank.merge`（同 id 覆盖、索引缓存失效）。目标词条已不在
+        当前词库（如 OpenJLPT 上游重建后 id 变化）时告警跳过，不拖垮其它纠错。
+
+        Returns:
+            实际套用（合并写入）的纠错条数。
+        """
+
+        try:
+            items = self._corrections.items()
+            if not items:
+                return 0
+            corrected: list[VocabEntry] = []
+            for rec in items:
+                if rec.field not in C.CORRECTION_FIELDS:
+                    continue
+                entry = bank.entry_by_id(rec.id)
+                if entry is None:
+                    logger.warning(
+                        "纠错目标词条不在当前词库（id=%s, field=%s），已跳过", rec.id, rec.field
+                    )
+                    continue
+                if getattr(entry, rec.field) == rec.new_value:
+                    continue
+                corrected.append(replace(entry, **{rec.field: rec.new_value}))
+            if corrected:
+                bank.merge(corrected)
+                logger.info("词库纠错覆盖已套用：%d 条", len(corrected))
+            return len(corrected)
+        except Exception:  # noqa: BLE001 —— 覆盖失败绝不拖垮词库加载
+            logger.exception("套用词库纠错覆盖失败（已跳过）")
+            return 0
 
     def _load_word_details(self) -> None:
         """启动时加载打包详情库（只读）与用户缓存；损坏均优雅降级，绝不崩溃。"""
@@ -1516,6 +1576,7 @@ class PetAppController(QObject):
             C.WORD_DETAILS_CACHE_FILENAME: WordDetailsCacheStore.default_path(),
             C.EXTRA_WORD_BANK_FILE_NAME: paths.extra_word_bank_path(),
             C.BANK_REGISTRY_FILENAME: self._bank_registry.path,
+            C.CORRECTIONS_FILE_NAME: CorrectionStore.default_path(),
         }
         try:
             for record in self._bank_registry.records():
@@ -1975,6 +2036,175 @@ class PetAppController(QObject):
         self._dispose_word(C.DAILY_LOG_STATUS_VOCAB, time.monotonic())
 
     # ------------------------------------------------------------------ #
+    # 词库纠错（覆盖层）：入口 / 提交 / 撤销 / 快照同步
+    # ------------------------------------------------------------------ #
+    def _on_correction_requested(self, entry: VocabEntry | None = None) -> None:
+        """打开纠错对话框（单例）。
+
+        两个入口共用：学习 / 复习气泡按钮条的「纠错」铅笔（不带词条 → 用当前
+        展示词）与词详情窗口的铅笔（携带词条）。若纠错的正是当前展示词，冻结
+        超时处置并暂停气泡 / 按钮条相位机，保证对话框操作期间展示不被超时回收；
+        对话框关闭时恢复（:meth:`_on_correction_dialog_closed`）。
+        """
+
+        try:
+            target = entry if entry is not None else self._current_word
+            if target is None:
+                return
+            if self._correction_dialog is None:
+                self._correction_dialog = CorrectionDialog(pronunciation=self._pronunciation)
+                self._correction_dialog.applied.connect(self._on_correction_applied)
+                self._correction_dialog.undo_requested.connect(self._on_correction_undo)
+                self._correction_dialog.finished.connect(self._on_correction_dialog_closed)
+            self._correction_dialog.open_for(target, self._corrections.items_for(target.id))
+            if (
+                self._current_word is not None
+                and self._current_word.id == target.id
+                and not self._word_disposed
+            ):
+                self._correction_deadline_backup = self._word_deadline
+                self._word_deadline = float("inf")
+                self._correction_deadline_frozen = True
+            self._bubble.pause()
+            self._button_bar.pause()
+            self._correction_dialog.show()
+            self._correction_dialog.raise_()
+            self._correction_dialog.activateWindow()
+        except Exception:  # noqa: BLE001
+            logger.exception("打开纠错对话框异常（已忽略）")
+
+    def _on_correction_applied(
+        self, item_id: str, word: str, field: str, new_value: str, note: str
+    ) -> None:
+        """纠错提交（对话框已完成系统校验）：落盘覆盖层 → 同步快照 → 失效缓存 → 重建词库。
+
+        学习进度**保持不变**（纠错是数据修正而非遗忘）：mastered 的 stage / due_at
+        与生词本加入时间原样保留，仅同步展示快照；详情缓存按 id 失效（释义变了，
+        打包库 / 联网重新解析）；发音缓存无需处理——发音键随新假名自动变化。
+        """
+
+        try:
+            entry = self._bank.entry_by_id(str(item_id))
+            if entry is None:
+                self._tray.notify(C.APP_DISPLAY_NAME, C.JP_NOTIFY_CORRECTION_FAILED)
+                return
+            # old_value = 最初原值：同字段重复纠错时沿用既有记录的原值（词库当前值
+            # 已被上一轮覆盖层改写，不能作撤销还原的基准）
+            previous = self._corrections.items_for(entry.id)
+            old_value = next(
+                (rec.old_value for rec in previous if rec.field == str(field)),
+                str(getattr(entry, field, "") or ""),
+            )
+            self._corrections.upsert(
+                CorrectionItem(
+                    id=entry.id,
+                    word=entry.word,
+                    field=str(field),
+                    old_value=old_value,
+                    new_value=str(new_value),
+                    note=str(note or ""),
+                    created_at=self._now_iso(),
+                )
+            )
+            self._sync_correction_snapshots(entry.id, {str(field): str(new_value)})
+            self._detail_cache.discard(entry.id)
+            self._reload_banks()
+            corrected = self._bank.entry_by_id(entry.id)
+            if (
+                corrected is not None
+                and self._current_word is not None
+                and self._current_word.id == entry.id
+            ):
+                self._current_word = corrected
+                self._correction_pending_reshow = True
+            field_label = C.CORRECTION_FIELD_LABELS.get(str(field), str(field))
+            self._tray.notify(
+                C.APP_DISPLAY_NAME,
+                C.JP_NOTIFY_CORRECTION_APPLIED.format(
+                    word=corrected.word if corrected else word,
+                    field=field_label,
+                    value=new_value,
+                ),
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("应用词库纠错异常（已忽略）")
+
+    def _on_correction_undo(self, item_id: str, field: str) -> None:
+        """撤销一条纠错：删记录 → 快照按最初原值还原 → 失效缓存 → 重建词库。"""
+
+        try:
+            removed = self._corrections.remove(str(item_id), str(field))
+            if removed is None:
+                return
+            entry = self._bank.entry_by_id(str(item_id))
+            if entry is not None:
+                self._sync_correction_snapshots(entry.id, {str(field): removed.old_value})
+            self._detail_cache.discard(str(item_id))
+            self._reload_banks()
+            restored = self._bank.entry_by_id(str(item_id))
+            if (
+                restored is not None
+                and self._current_word is not None
+                and self._current_word.id == restored.id
+            ):
+                self._current_word = restored
+                self._correction_pending_reshow = True
+            field_label = C.CORRECTION_FIELD_LABELS.get(str(field), str(field))
+            self._tray.notify(
+                C.APP_DISPLAY_NAME,
+                C.JP_NOTIFY_CORRECTION_UNDONE.format(word=removed.word, field=field_label),
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("撤销词库纠错异常（已忽略）")
+
+    def _on_correction_dialog_closed(self, _result: int) -> None:
+        """纠错对话框关闭：恢复气泡 / 按钮条相位机与超时处置。
+
+        纠错生效且当前词仍展示中 → 用纠正后的词条重显（气泡 + 按钮条，重新
+        计时），让用户当场看到纠正后的内容。
+        """
+
+        try:
+            self._bubble.resume()
+            self._button_bar.resume()
+            if self._correction_deadline_frozen:
+                self._correction_deadline_frozen = False
+                if self._current_word is not None and not self._word_disposed:
+                    self._word_deadline = self._correction_deadline_backup
+            if not self._correction_pending_reshow:
+                return
+            self._correction_pending_reshow = False
+            entry = self._current_word
+            if entry is None or self._word_disposed or not self._cfg.bubble_enabled:
+                return
+            now = time.monotonic()
+            self._word_deadline = now + self._cfg.jp_bubble_duration_s
+            anchor = self._bubble_anchor()
+            self._bubble.set_anchor(anchor)
+            self._bubble.show_word(entry, self._cfg.jp_bubble_duration_s, review=self._reviewing)
+            self._button_bar.show_bar(
+                anchor,
+                self._bubble.geometry(),
+                self._bubble.pointing_down(),
+                self._cfg.jp_bubble_duration_s,
+                review=self._reviewing,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("恢复纠错对话框外的展示状态异常（已忽略）")
+
+    def _sync_correction_snapshots(self, item_id: str, updates: dict[str, str]) -> None:
+        """把纠错值同步进生词本 / 已掌握记录的展示快照并刷新窗口（若已打开）。"""
+
+        try:
+            self._vocab.amend_snapshot(item_id, **updates)
+            self._mastered.amend_snapshot(item_id, **updates)
+            if self._vocab_window is not None:
+                self._vocab_window.refresh(self._vocab.items())
+            self._refresh_mastered_window()
+        except Exception:  # noqa: BLE001
+            logger.exception("同步纠错快照异常（已忽略）")
+
+    # ------------------------------------------------------------------ #
     # 记忆曲线（间隔重复）：复习排期 / 复习泡泡 / 三态处置
     # ------------------------------------------------------------------ #
     def _maybe_wake_for_review(self, now: float) -> None:
@@ -2351,6 +2581,8 @@ class PetAppController(QObject):
                 self._detail_window.detail_succeeded.connect(self._on_detail_succeeded)
                 self._detail_window.detail_failed.connect(self._on_detail_failed)
                 self._detail_window.mastered_clicked.connect(self._on_detail_mastered)
+                # 详情窗「纠错」铅笔 → 打开纠错对话框（携带当前词条）
+                self._detail_window.correct_requested.connect(self._on_correction_requested)
             detail, source = self._lookup_word_detail(entry.id)
             net = self._detail_net_config()
             # 动效开关须在 show_entry **之前**注入：show_entry 的加载分支（联网态）会读取

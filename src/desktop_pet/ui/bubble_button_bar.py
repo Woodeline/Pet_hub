@@ -43,6 +43,8 @@ class BubbleButtonBar(QWidget):
     vocab_clicked = Signal()
     review_ok_clicked = Signal()
     review_lapsed_clicked = Signal()
+    #: 点击「纠错」图标按钮（学习 / 复习两模式均可用；词条由 controller 的当前词提供）
+    correction_requested = Signal()
 
     def __init__(self) -> None:
         """构造按钮条窗口。"""
@@ -66,6 +68,14 @@ class BubbleButtonBar(QWidget):
         self._btn_mastered.setObjectName("masteredButton")
         self._btn_vocab.setObjectName("vocabButton")
 
+        # 「纠错」文字胶囊：与「新单词」同款描边样式（三枚胶囊并排，
+        # 用户 2026-10-07 从五方案对比稿中选定 B）
+        self._btn_correction = QPushButton(C.CORRECTION_BUTTON_TEXT, self)
+        self._btn_correction.setObjectName("correctionButton")
+        self._btn_correction.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._btn_correction.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_correction.setToolTip(C.CORRECTION_BUTTON_TIP)
+
         layout = QHBoxLayout(self)
         layout.setContentsMargins(
             C.JP_BUTTON_BAR_PAD, C.JP_BUTTON_BAR_PAD, C.JP_BUTTON_BAR_PAD, C.JP_BUTTON_BAR_PAD
@@ -73,9 +83,11 @@ class BubbleButtonBar(QWidget):
         layout.setSpacing(_BUTTON_SPACING)
         layout.addWidget(self._btn_mastered)
         layout.addWidget(self._btn_vocab)
+        layout.addWidget(self._btn_correction)
 
         self._btn_mastered.clicked.connect(self._emit_primary)
         self._btn_vocab.clicked.connect(self._emit_secondary)
+        self._btn_correction.clicked.connect(self.correction_requested.emit)
 
         # 复习模式标志：True 时主按钮 = 「还记得」(review_ok)、副按钮 = 「忘了」(review_lapsed)
         self._review_mode: bool = False
@@ -148,6 +160,18 @@ class BubbleButtonBar(QWidget):
         self._alpha = 0.0
         self._review_mode = False
         self.hide()
+
+    def pause(self) -> None:
+        """暂停相位机（模态交互期间保持按钮条可见；与 :meth:`resume` 配对）。"""
+
+        if self.isVisible():
+            self._timer.stop()
+
+    def resume(self) -> None:
+        """恢复相位机（与 :meth:`pause` 配对；隐藏态 / 已复位为 no-op）。"""
+
+        if self.isVisible() and self._phase != _PHASE_HIDDEN and not self._timer.isActive():
+            self._timer.start()
 
     # ------------------------------------------------------------------ #
     # 模式与信号路由
@@ -235,7 +259,7 @@ class BubbleButtonBar(QWidget):
             f"}}"
             f"#masteredButton:hover {{ background: {mastered_hover}; }}"
             f"#masteredButton:pressed {{ background: {mastered_pressed}; }}"
-            f"#vocabButton {{"
+            f"#vocabButton, #correctionButton {{"
             f"background-color: transparent;"
             f"color: {C.COLORS['jp_button_secondary_text']};"
             f"border: 1px solid {C.COLORS['jp_button_secondary_border']};"
@@ -243,8 +267,10 @@ class BubbleButtonBar(QWidget):
             f"padding: {pad_y}px {pad_x}px;"
             f"font-size: {font_size}px; font-family: \"{font_family}\";"
             f"}}"
-            f"#vocabButton:hover {{ background-color: {C.COLORS['jp_button_secondary_hover']}; }}"
-            f"#vocabButton:pressed {{ background-color: {C.COLORS['jp_button_secondary_border']}; }}"
+            f"#vocabButton:hover, #correctionButton:hover {{"
+            f" background-color: {C.COLORS['jp_button_secondary_hover']}; }}"
+            f"#vocabButton:pressed, #correctionButton:pressed {{"
+            f" background-color: {C.COLORS['jp_button_secondary_border']}; }}"
         )
 
     def _compute_geometry(

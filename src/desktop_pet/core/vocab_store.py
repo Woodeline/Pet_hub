@@ -37,6 +37,8 @@ _REQUIRED_FIELDS: tuple[str, ...] = (
     "meaning",
     "added_at",
 )
+#: 允许经 :meth:`VocabStore.amend_snapshot` 同步的快照展示字段（词库纠错覆盖层用）
+_AMENDABLE_FIELDS: frozenset[str] = frozenset({"word", "kana", "translation", "meaning"})
 
 
 @dataclass(frozen=True)
@@ -235,6 +237,38 @@ class VocabStore:
                 del self._items[index]
                 self.save()
                 return True
+        return False
+
+    def amend_snapshot(self, item_id: str, **fields: str) -> bool:
+        """同步一条记录的词条快照字段（词库纠错覆盖层生效用）。
+
+        仅接受 ``word`` / ``kana`` / ``translation`` / ``meaning`` 四个展示字段；
+        ``id`` / ``level`` / ``added_at`` 等身份与时间字段不可改。经
+        :meth:`VocabItem.from_dict` 回验后整体落盘。
+
+        Returns:
+            ``True`` = 已更新并落盘；``False`` = 无有效更新 / 记录不存在。
+        """
+
+        updates = {
+            key: str(value)
+            for key, value in fields.items()
+            if key in _AMENDABLE_FIELDS and str(value).strip()
+        }
+        if not updates or not item_id:
+            return False
+        for index, item in enumerate(self._items):
+            if item.id != str(item_id):
+                continue
+            data = item.to_dict()
+            data.update(updates)
+            amended = VocabItem.from_dict(data)
+            if amended is None:
+                logger.warning("生词本快照同步被拒（字段非法）：%s %s", item_id, updates)
+                return False
+            self._items[index] = amended
+            self.save()
+            return True
         return False
 
     def clear(self) -> None:

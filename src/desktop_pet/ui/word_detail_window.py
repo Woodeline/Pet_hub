@@ -55,6 +55,8 @@ class WordDetailWindow(QWidget):
     detail_failed = Signal(str, str)        # (item_id, error_message)
     #: 点击「记住了」：携带当前词条上报 controller（与气泡按钮复用同一处置逻辑）
     mastered_clicked = Signal(object)       # VocabEntry
+    #: 点击「纠错」铅笔：携带当前词条上报 controller（打开纠错对话框）
+    correct_requested = Signal(object)      # VocabEntry
 
     def __init__(
         self,
@@ -301,12 +303,29 @@ class WordDetailWindow(QWidget):
         root.addLayout(header)
 
         # 假名行：假名 + 喇叭（点击发音；联网获取 + 本地缓存，见 speaker_button）
+        #        + 铅笔（词库纠错入口，与学习气泡按钮条的纠错按钮同一处置路径）
         kana_row = QHBoxLayout()
         self._kana_label = self._add_field(root, kana_row, C.WORD_DETAIL_LABEL_KANA)
         kana_row.addStretch(1)
         self._speaker = SpeakerButton(self)
         self._speaker.clicked.connect(self._on_speaker_clicked)
         kana_row.addWidget(self._speaker)
+        self._correct_btn = QPushButton(self)
+        self._correct_btn.setObjectName("detailCorrectButton")
+        self._correct_btn.setFlat(True)
+        self._correct_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._correct_btn.setIcon(
+            icon_factory.make_icon("pencil", color=C.SEMANTIC_COLORS["text_secondary"])
+        )
+        self._correct_btn.setIconSize(QSize(C.SPACING["md"], C.SPACING["md"]))
+        self._correct_btn.setToolTip(C.CORRECTION_BUTTON_TIP)
+        # 透明底声明必须带类选择器：无选择器写法会被 Qt 包装成 ``* {…}`` 泄漏给
+        # tooltip 窗口（QTipLabel），Windows 上渲染成黑色色块（见 speaker_button 注释）
+        self._correct_btn.setStyleSheet(
+            "QPushButton#detailCorrectButton { background: transparent; border: none; padding: 0 2px; }"
+        )
+        self._correct_btn.clicked.connect(self._on_correct_clicked)
+        kana_row.addWidget(self._correct_btn)
         root.addLayout(kana_row)
 
         self._source_label = QLabel("", self)
@@ -551,6 +570,13 @@ class WordDetailWindow(QWidget):
         if self._closed or self._entry is None or self._pronunciation is None:
             return
         self._pronunciation.play(self._entry.word, self._entry.kana)
+
+    def _on_correct_clicked(self) -> None:
+        """点击铅笔 → 携带当前词条上报 controller（打开纠错对话框）。"""
+
+        if self._closed or self._entry is None:
+            return
+        self.correct_requested.emit(self._entry)
 
     def _on_pronunciation_state(self, key: str, state: str, message: str) -> None:
         """发音状态回播（主线程）→ 刷新喇叭三态；失败时补底部状态提示。

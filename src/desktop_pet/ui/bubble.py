@@ -229,6 +229,22 @@ class BubbleWindow(QWidget):
         self._set_input_capture(False)  # 隐藏态恢复穿透，下次情绪气泡零成本
         self.hide()
 
+    def pause(self) -> None:
+        """暂停淡入 / 停留 / 淡出相位机（模态交互期间保持气泡可见）。
+
+        词库纠错对话框为模态：打开期间相位机若继续走，气泡会在对话框背后淡出
+        消失（乃至触发超时处置）。暂停仅停 ``_timer``，相位与已流逝时长原样保留。
+        """
+
+        if self.isVisible():
+            self._timer.stop()
+
+    def resume(self) -> None:
+        """恢复相位机（与 :meth:`pause` 配对；隐藏态 / 已复位为 no-op）。"""
+
+        if self.isVisible() and self._phase != _PHASE_HIDDEN and not self._timer.isActive():
+            self._timer.start()
+
     # ------------------------------------------------------------------ #
     # 鼠标交互（2026-09-29：单词气泡双击查详情）
     # ------------------------------------------------------------------ #

@@ -1416,6 +1416,9 @@ DATA_RESTORE_CONFIRM_TEXT: Final[str] = (
 DATA_RESTORE_CONFIRM_BUTTON: Final[str] = "还原"
 #: 备份清单格式版本（manifest.json 的 version 字段）
 BACKUP_MANIFEST_VERSION: Final[int] = 1
+#: 词库纠错覆盖层文件名与格式版本（纠错记录为用户数据，随备份迁移）
+CORRECTIONS_FILE_NAME: Final[str] = "corrections.json"
+CORRECTIONS_VERSION: Final[int] = 1
 #: 备份包收录的用户数据文件（数据目录下；app.log / audio_cache 可再生，不入包；
 #: 多词库文件以 ``banks/<file>`` 条目动态收录，见 controller._backup_sources）
 BACKUP_FILES: Final[tuple[str, ...]] = (
@@ -1426,9 +1429,46 @@ BACKUP_FILES: Final[tuple[str, ...]] = (
     WORD_DETAILS_CACHE_FILENAME,
     EXTRA_WORD_BANK_FILE_NAME,
     BANK_REGISTRY_FILENAME,
+    CORRECTIONS_FILE_NAME,
 )
 #: 还原前对既有文件的留档后缀（同目录、不覆盖旧留档）
 BACKUP_PRE_RESTORE_SUFFIX: Final[str] = ".pre-restore"
+
+# --------------------------------------------------------------------------- #
+# 12b+. 词库纠错（用户纠错覆盖层 corrections.json；文件名/版本常量在 12b 备份区）
+# --------------------------------------------------------------------------- #
+#: 允许纠错的词条字段（与 :class:`~desktop_pet.core.vocabulary.VocabEntry` 字段名严格一致）
+CORRECTION_FIELDS: Final[tuple[str, ...]] = ("word", "kana", "translation", "meaning")
+#: 字段 → 对话框 / 通知中文标签
+CORRECTION_FIELD_LABELS: Final[dict[str, str]] = {
+    "word": "表记",
+    "kana": "读音",
+    "translation": "翻译",
+    "meaning": "释义",
+}
+#: 气泡按钮条 / 详情窗口纠错入口提示
+CORRECTION_BUTTON_TIP: Final[str] = "这个词有误？点击纠错"
+#: 气泡按钮条「纠错」文字胶囊文案（详情窗口仍用铅笔图标入口）
+CORRECTION_BUTTON_TEXT: Final[str] = "纠错"
+#: 纠错对话框文案
+CORRECTION_DIALOG_TITLE: Final[str] = "词条纠错"
+CORRECTION_DIALOG_CURRENT: Final[str] = "当前"
+CORRECTION_DIALOG_FIELD_LABEL: Final[str] = "纠错字段："
+CORRECTION_DIALOG_VALUE_LABEL: Final[str] = "改为："
+CORRECTION_DIALOG_NOTE_LABEL: Final[str] = "备注"
+CORRECTION_DIALOG_NOTE_HINT: Final[str] = "例如：某词典读音为……（可不填）"
+CORRECTION_DIALOG_EXISTING: Final[str] = "已有纠错"
+CORRECTION_DIALOG_UNDO: Final[str] = "撤销"
+CORRECTION_DIALOG_SUBMIT: Final[str] = "提交纠错"
+CORRECTION_DIALOG_CANCEL: Final[str] = "取消"
+#: 提交校验错误提示（对话框行内展示）
+CORRECTION_ERR_EMPTY: Final[str] = "新值不能为空"
+CORRECTION_ERR_SAME: Final[str] = "新值与当前值相同，无需纠错"
+CORRECTION_ERR_KANA: Final[str] = "读音需为纯假名（平假名 / 片假名 / 长音「ー」）"
+#: 托盘通知文案
+JP_NOTIFY_CORRECTION_APPLIED: Final[str] = "已记录纠错：「{word}」的{field}改为「{value}」"
+JP_NOTIFY_CORRECTION_UNDONE: Final[str] = "已撤销纠错：「{word}」的{field}恢复原值"
+JP_NOTIFY_CORRECTION_FAILED: Final[str] = "纠错失败：该词已不在当前词库中"
 
 # --------------------------------------------------------------------------- #
 # 12c. 检查更新（GitHub Releases；手动 + 可选自动）
@@ -1750,4 +1790,27 @@ __all__ = [
     "WORD_DETAIL_SOURCE_LOCAL",
     "WORD_DETAIL_SOURCE_CACHE",
     "WORD_DETAIL_SOURCE_NET",
+    # 词库纠错（用户纠错覆盖层）
+    "CORRECTIONS_FILE_NAME",
+    "CORRECTIONS_VERSION",
+    "CORRECTION_FIELDS",
+    "CORRECTION_FIELD_LABELS",
+    "CORRECTION_BUTTON_TIP",
+    "CORRECTION_BUTTON_TEXT",
+    "CORRECTION_DIALOG_TITLE",
+    "CORRECTION_DIALOG_CURRENT",
+    "CORRECTION_DIALOG_FIELD_LABEL",
+    "CORRECTION_DIALOG_VALUE_LABEL",
+    "CORRECTION_DIALOG_NOTE_LABEL",
+    "CORRECTION_DIALOG_NOTE_HINT",
+    "CORRECTION_DIALOG_EXISTING",
+    "CORRECTION_DIALOG_UNDO",
+    "CORRECTION_DIALOG_SUBMIT",
+    "CORRECTION_DIALOG_CANCEL",
+    "CORRECTION_ERR_EMPTY",
+    "CORRECTION_ERR_SAME",
+    "CORRECTION_ERR_KANA",
+    "JP_NOTIFY_CORRECTION_APPLIED",
+    "JP_NOTIFY_CORRECTION_UNDONE",
+    "JP_NOTIFY_CORRECTION_FAILED",
 ]
