@@ -1,6 +1,6 @@
 # desktop-pet · 小喵酱桌面宠物
 
-**当前版本：v0.6.2** ｜ Python 3.13 + PySide6 ｜ 1502 项自动化测试全绿
+**当前版本：v0.6.3** ｜ Python 3.13 + PySide6 ｜ 1704 项自动化测试全绿
 
 一只常驻 Windows 桌面、会"陪你敲键盘"的治愈系程序化猫咪。
 监听全局键盘敲击并同步做出"敲键盘"动画，在**空闲 / 专注 / 休息 / 睡觉**四态间
@@ -46,6 +46,14 @@ https://github.com/Woodeline/Pet_hub/releases/latest
 | 释义查询 | 「纯中文五要素」详情窗；查找链 = 打包词库 → 本地缓存 → LLM 联网兜底，**离线可用** | — |
 | 单词发音 | 详情窗 / 生词本卡片点击喇叭听发音：多源回退（有道词典 TTS 为主源，国内可达；Google 翻译 TTS 回退）；**发音输入优先假名**（防熟字训如「明後日」被字面拼读错，词库 7738 条实测 99.9% 走假名），MP3 按词缓存到 `%APPDATA%\desktop-pet\audio_cache`（二次点击秒播、离线可播）；播放走系统 winmm/MCI，**零新增依赖** | — |
 | 记忆曲线复习 | 「记住了」即入已掌握词库，按 1→3→7→14→30→60→120 天间隔阶梯自动安排复习（7 轮毕业）；复习泡泡**主动回忆**（隐藏翻译，还记得 / 忘了自评），忘了自动退回生词本重学；**节奏门控**（两次复习间隔 30~600s）+ **每日复习上限**（10/20/30/50，默认 20）+ 复习不受新词每日配额占用；托盘「已掌握词库…」窗可视阶段 / 到期 / 毕业状态并管理 | JP-M |
+| 学习统计 | 托盘「学习统计…」：概览卡 + 近 15 周打卡热力图（悬停看当日明细）+ 累计掌握曲线；达成每日目标时小猫庆祝 | — |
+| 错题本 | 复习答错的词自动聚合为易错词（**零新增存储**），抽词权重 ×2.0 优先重现；每日一次托盘提醒，无易错词当日不打扰 | — |
+| 数据管理 | 托盘「数据管理…」：**Anki TSV / CSV** 导出；学习数据一键备份 zip 与还原（还原走原子写、既有文件自动留档，版本不符 / 路径穿越显式拒绝） | — |
+| 多词库管理 | 托盘「词库管理…」：多套外置词库逐库启停 / 删除 / 拖拽导入，按导入顺序合并（同 id 后来者覆盖）；旧 `jlpt_words_extra.json` 启动自动迁移 | — |
+| 词库纠错 | 学习泡泡「纠错」胶囊 / 详情窗铅笔：改**表记 / 读音 / 翻译 / 释义**（读音强制纯假名）；**覆盖层机制**只写记录不改词库文件，可整体撤销、随备份迁移、学习进度原样保持 | — |
+| 检查更新 | 托盘「检查更新」手动查询 + 可选「自动检查更新（每周）」（默认关）；语义化版本比较，**脏 tag 一律不更新** | — |
+| 耳尾弹簧物理 | 拖拽 / 游走的窗口位移激励耳朵尾巴**惯性甩动 + 余韵回摆**（半隐式积分 + 固定子步长，帧率无关）；「减少动效」开启时直通关闭 | — |
+| 皮肤切换 cross-fade | 切换皮肤 0.6s 淡入淡出，不再硬切闪屏；皮肤包支持 `meta` 元数据（名称 / 作者 / 版本 / 致谢），社区包自检工具 `tools/validate_skin_pack.py` | — |
 | 视觉设计系统 | 语义色 / 间距 / 字号 / 圆角四组设计 token + QSS 主题生成器 + 程序化图标工厂 | — |
 | 主题皮肤 | 6 套配色主题（四季自动换肤 + 节日），跨月零点自动重估 | — |
 | 皮肤包（MOD） | 直接投放 DyberPet 社区皮肤包：托盘「皮肤」子菜单切换、多包共存、超大画布自动等比适配 | — |
@@ -63,7 +71,7 @@ https://github.com/Woodeline/Pet_hub/releases/latest
 
 ## 词库与开源数据说明
 
-- 程序内置 500 词（N5~N1 各 100，随包只读）；支持经托盘「日语学习 → 导入词库…」导入**外置扩充词库**（`{"version":1,"words":[...]}` 结构，存于 `%APPDATA%\desktop-pet\jlpt_words_extra.json`，按词条 id 与内置库合并、外置覆盖内置）。
+- 程序内置 500 词（N5~N1 各 100，随包只读）；支持经托盘「日语学习 → 词库管理…」导入**多套外置扩充词库**（`{"version":1,"words":[...]}` 结构，逐库存于 `%APPDATA%\desktop-pet\banks\`，按导入顺序合并、同 id 后来者覆盖；旧版单文件 `jlpt_words_extra.json` 启动时自动迁入）。词库有误可通过**词库纠错**（覆盖层）修正，词库文件本身永不改写。
 - 扩充词库推荐数据源：[evanclan/OpenJLPT](https://github.com/evanclan/OpenJLPT)（N5~N1 共 8300+ 词，含假名读音与英文释义）。转换命令：
 
   ```bash
@@ -222,6 +230,10 @@ pytest -q
 | `jp_level` | str | `"N5"` | 日语等级（JLPT） |
 | `jp_bubble_duration_s` | int | `30` | 单词泡泡显示时长（秒），可选 10/30/60/120 |
 | `jp_daily_limit` | int | `15` | 每日展示单词配额，可选 5/10/15/20/50 |
+| `jp_review_daily_limit` | int | `20` | 每日复习上限，可选 10/20/30/50 |
+| `weak_review_enabled` | bool | `true` | 错题本提醒与易错词加权重现开关 |
+| `update_check_enabled` | bool | `false` | 启动时自动检查更新（7 天节流，仅新版才提示） |
+| `update_check_last_at` | str | `""` | 上次检查更新时间（程序内部维护，勿手改） |
 | `deepseek_api_key` | str | `""` | 释义联网兜底所用的 LLM 密钥；留空则**完全离线**运行 |
 | `deepseek_base_url` | str | `https://api.deepseek.com/v1/chat/completions` | 兜底接口地址 |
 | `deepseek_model` | str | `"deepseek-chat"` | 兜底模型名 |
@@ -273,16 +285,28 @@ desktop-pet/
 │  │  ├─ vocab_store.py        # 生词本持久化
 │  │  ├─ mastered_store.py     # 已掌握词库 + 记忆曲线（SRS 阶段 / 到期）持久化
 │  │  ├─ daily_log_store.py    # 每日学习记录持久化（新词三态 + 复习两态）
-│  │  ├─ weighted_picker.py    # 加权抽样
+│  │  ├─ weighted_picker.py    # 加权抽样（生词 / 易错词加权叠乘）
+│  │  ├─ stats_aggregator.py   # 学习统计聚合（打卡 / 热力图 / 掌握曲线，纯逻辑）
+│  │  ├─ weak_words.py         # 错题本（复习遗忘聚合派生易错词，零新增存储）
+│  │  ├─ bank_registry.py      # 多词库登记表（逐库文件 + 导入顺序合并）
+│  │  ├─ corrections_store.py  # 词库纠错覆盖层持久化（corrections.json）
+│  │  ├─ exporter.py           # Anki TSV / CSV 导出（纯字符串零 IO）
+│  │  ├─ backup.py             # 数据备份 / 还原（白名单 zip + 原子写还原）
+│  │  ├─ update_client.py      # 检查更新（GitHub Releases 语义化版本比较）
 │  │  ├─ word_detail.py        # 释义聚合与降级
 │  │  ├─ word_detail_bank.py   # 打包词库读取
 │  │  ├─ word_details_cache_store.py  # 释义本地缓存
 │  │  ├─ llm_client.py         # 联网兜底客户端
-│  │  ├─ tts_client.py         # 发音联网客户端（Google 翻译 TTS，tl=ja）
+│  │  ├─ tts_client.py         # 发音联网客户端（有道 TTS 主源 + Google 翻译回退）
 │  │  ├─ audio_cache.py        # 发音 MP3 本地缓存
 │  │  └─ paths.py              # 用户数据目录解析
 │  ├─ ui/                      # 渲染层（PySide6）
 │  │  ├─ mastered_window.py    # 已掌握词库窗口（阶段 / 到期 / 毕业卡片化管理）
+│  │  ├─ stats_window.py       # 学习统计窗口（概览 + 热力图 + 掌握曲线 + 易错词）
+│  │  ├─ bank_window.py        # 词库管理窗口（多库启停 / 删除 / 拖拽导入）
+│  │  ├─ data_window.py        # 数据管理窗口（导出 / 备份 / 还原）
+│  │  ├─ correction_dialog.py  # 词条纠错对话框（模态、覆盖层提交 / 撤销）
+│  │  ├─ update_worker.py      # 检查更新后台线程（QRunnable）
 │  │  ├─ pet_renderer.py       # QPainter 矢量猫咪
 │  │  ├─ pet_window.py         # 无边框透明置顶窗口
 │  │  ├─ bubble.py             # 气泡浮层
@@ -307,7 +331,7 @@ desktop-pet/
 │     ├─ keyboard_listener.py  # pynput 守护线程 + 跨线程信号桥
 │     └─ controller.py         # 装配 / 接线 / 生命周期
 ├─ skins/                      # 皮肤包投放区（gitignore，第三方素材不入库）
-├─ tests/                      # 67 个测试文件 / 1502 项用例 + 人工验收清单
+├─ tests/                      # 85 个测试文件 / 1704 项用例 + 人工验收清单
 ├─ tools/                      # 词库与审阅页构建脚本
 ├─ scripts/                    # 皮肤包下载 / 发布等辅助脚本
 ├─ docs/                       # PRD / 架构 / 类图 / 时序图 / 参数总表 / 皮肤包规范
