@@ -92,6 +92,8 @@ class PetWindow(QWidget):
         self._drag_origin: QPoint = QPoint(0, 0)   # 按下时的窗口左上角
         self._press_pos: QPoint = QPoint(0, 0)     # 按下时的全局鼠标坐标
         self._dragging: bool = False
+        # 耳尾弹簧激励：上一帧窗口位置（None = 尚无基准，首帧不计位移）
+        self._last_pos_for_spring: QPoint | None = None
 
         # 悬停抚摸
         self._hover_timer = QTimer(self)
@@ -591,11 +593,32 @@ class PetWindow(QWidget):
 
         if not self.isVisible():
             return
+        self._feed_spring_impulse()
         self._update_tail_evade()
         self._update_gaze()
         # 装饰动画相位 = 单调时钟（秒）；粒子位置是相位的纯函数（阶段 D）。
         self._renderer.set_decor_phase(time.monotonic())
         self.frame_tick.emit(time.monotonic())
+
+    def _feed_spring_impulse(self) -> None:
+        """采样窗口逐帧位移 → 耳尾弹簧激励（拖拽 / 空闲游走移动时的惯性摆动）。
+
+        位移量纲是 ``px/帧``，方向语义与折算在 ``PetModel.add_impulse`` 内完成；
+        首帧（无基准）与零位移不激励。采样失败不影响动画主流程。
+        """
+
+        try:
+            pos = self.pos()
+            last = self._last_pos_for_spring
+            self._last_pos_for_spring = QPoint(pos)
+            if last is None:
+                return
+            dx = pos.x() - last.x()
+            dy = pos.y() - last.y()
+            if dx or dy:
+                self._model.add_impulse(float(dx), float(dy))
+        except Exception:  # noqa: BLE001 —— 激励采样失败不影响动画
+            logger.debug("弹簧激励采样失败（已忽略）", exc_info=True)
 
 
 __all__ = ["PetWindow"]

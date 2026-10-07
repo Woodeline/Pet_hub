@@ -68,6 +68,60 @@ def exponential_smoothing_t(k: float, dt: float) -> float:
     return 1.0 - math.exp(-max(0.0, k) * dt)
 
 
+def spring_step(
+    value: float,
+    velocity: float,
+    target: float,
+    dt: float,
+    *,
+    k: float,
+    zeta: float,
+) -> tuple[float, float]:
+    """阻尼弹簧（二阶）单帧推进：半隐式欧拉 + 固定子步进。
+
+    以 ``C.SPRING_SUB_STEP_S`` 为上限把 ``dt`` 切成**等长**子步（子步数
+    ``ceil(dt / sub)``、步长 ``h = dt / 子步数``），子步内半隐式欧拉：
+    ``v += (k*(target - x) - 2*zeta*sqrt(k)*v) * h;  x += v * h``。
+
+    性质（耳尾弹簧物理的基石）：
+
+    - **帧率无关**（FR-34）：推进量只取决于物理时长 ``dt``，30fps 与 60fps
+      推进同一时长得到同一终态（子步长量化误差 O(h²)，可忽略）；
+    - **确定性**：状态转移是 ``(value, velocity, target, dt)`` 的纯函数，
+      不取时钟、不取随机——``now`` 冻结时不推进；
+    - **欠阻尼**（``0 < zeta < 1``）时绕目标振荡衰减——「被拎起甩动后
+      余韵回摆」的观感来源。
+
+    Args:
+        value: 当前位置（如耳倾角、尾摆角的振荡分量）。
+        velocity: 当前速度（角速度）。
+        target: 弹簧静止点（加性振荡方案恒为 0）。
+        dt: 帧间隔（秒）。
+        k: 刚度（``omega = sqrt(k)``）。
+        zeta: 阻尼比（<1 欠阻尼振荡，>=1 过阻尼单调收敛）。
+
+    Returns:
+        ``(新值, 新速度)`` 二元组。
+    """
+
+    x = float(value)
+    v = float(velocity)
+    dt = float(dt)
+    if dt <= 0.0:
+        return x, v
+    stiffness = max(0.0, float(k))
+    damping_ratio = max(0.0, float(zeta))
+    omega = math.sqrt(stiffness)
+    damping = 2.0 * damping_ratio * omega
+    sub = C.SPRING_SUB_STEP_S if C.SPRING_SUB_STEP_S > 0.0 else 1.0 / 120.0
+    steps = max(1, math.ceil(dt / sub))
+    h = dt / steps
+    for _ in range(steps):
+        v += (stiffness * (target - x) - damping * v) * h
+        x += v * h
+    return x, v
+
+
 # --------------------------------------------------------------------------- #
 # 缓动函数（全部归属本模块，ui 层禁止自定义缓动）
 # --------------------------------------------------------------------------- #

@@ -83,6 +83,22 @@ BREATH_JITTER: Final[float] = 0.10
 TAIL_MIN_S: Final[float] = 2.0              # 尾巴摆动周期下限          FR-13
 TAIL_MAX_S: Final[float] = 4.0              # 尾巴摆动周期上限          FR-13
 EAR_TWITCH_MIN_S: Final[float] = 4.0        # 耳朵抖动间隔下限          FR-13
+
+# —— 耳尾弹簧物理（二阶惯性：拖拽 / 游走位移激励，欠阻尼余韵回摆）——
+#: 弹簧积分固定子步长上限（秒）：保证 30/60fps 下同一物理时长的积分一致（FR-34）
+SPRING_SUB_STEP_S: Final[float] = 1.0 / 120.0
+#: 耳朵弹簧刚度 / 阻尼比（欠阻尼：ω≈11 rad/s ≈ 1.75Hz，甩动后有回摆余韵）
+EAR_SPRING_K: Final[float] = 120.0
+EAR_SPRING_ZETA: Final[float] = 0.45
+#: 尾巴弹簧刚度 / 阻尼比（更沉：ω≈7.7 rad/s ≈ 1.2Hz）
+TAIL_SPRING_K: Final[float] = 60.0
+TAIL_SPRING_ZETA: Final[float] = 0.55
+#: 窗口逐帧位移（px/帧）→ 角速度激励（deg/s）的增益与限幅
+DRAG_IMPULSE_GAIN: Final[float] = 8.0
+SPRING_IMPULSE_CAP_DEG_S: Final[float] = 240.0
+#: 尾巴相对耳朵的激励比例（尾巴更重、摆动幅度更收敛）
+TAIL_IMPULSE_RATIO: Final[float] = 0.6
+
 LOOK_AROUND_PERIOD_S: Final[float] = 6.0    # 空闲左右张望周期          FR-06
 YAWN_MIN_S: Final[float] = 15.0             # 呵欠间隔下限              FR-12
 YAWN_MAX_S: Final[float] = 30.0             # 呵欠间隔上限              FR-12

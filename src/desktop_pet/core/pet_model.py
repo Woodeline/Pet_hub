@@ -167,6 +167,17 @@ class PetModel:
         self._last_press_ts: Optional[float] = None
         self._tired_cooldown_until: float = 0.0
 
+        # —— 耳尾弹簧（二阶惯性，2026-10 批次 5）：**加性振荡**状态 ——
+        #   振荡分量独立于 PetPose 通道（不进 31 通道 lerp），每帧在全局平滑
+        #   之后叠加到 ear_l/r_tilt / tail_angle 上；无激励时恒为 0，姿态与
+        #   旧路径逐位一致（零回归）。激励来自 add_impulse（窗口位移采样）。
+        self._ear_l_osc: float = 0.0
+        self._ear_l_vel: float = 0.0
+        self._ear_r_osc: float = 0.0
+        self._ear_r_vel: float = 0.0
+        self._tail_osc: float = 0.0
+        self._tail_vel: float = 0.0
+
     # ------------------------------------------------------------------ #
     # 外部设置接口
     # ------------------------------------------------------------------ #
@@ -319,6 +330,33 @@ class PetModel:
         self._press_timer = C.PRESS_ANIM_S
         self._press_flag = True
 
+    def add_impulse(self, velocity_x: float, velocity_y: float) -> None:
+        """注入窗口运动激励（拖拽 / 空闲游走的逐帧位移），驱动耳尾惯性摆动。
+
+        由 UI 层每帧采样窗口位置增量后调用（``px/帧`` 量纲，经
+        ``C.DRAG_IMPULSE_GAIN`` 折算为角速度激励，限幅
+        ``C.SPRING_IMPULSE_CAP_DEG_S``）：
+
+        - 水平位移 → 双耳**反向错动**（拖右 → 耳尖向左甩）+ 尾巴同源激励
+          （乘 ``C.TAIL_IMPULSE_RATIO``，尾巴更沉）；
+        - 垂直位移 → 双耳**同向弹跳**。
+
+        ``reduce_motion`` 开启时完全忽略（动效敏感用户不弹簧）。
+        """
+
+        if self._reduce_motion:
+            return
+        cap = C.SPRING_IMPULSE_CAP_DEG_S
+        sway = motion.clamp(
+            -float(velocity_x) * C.DRAG_IMPULSE_GAIN, -cap, cap
+        )
+        bounce = motion.clamp(
+            float(velocity_y) * C.DRAG_IMPULSE_GAIN, -cap, cap
+        )
+        self._ear_l_vel += sway - bounce
+        self._ear_r_vel += sway + bounce
+        self._tail_vel += sway * C.TAIL_IMPULSE_RATIO
+
     # ------------------------------------------------------------------ #
     # 帧推进
     # ------------------------------------------------------------------ #
@@ -344,6 +382,9 @@ class PetModel:
 
         t = motion.exponential_smoothing_t(C.POSE_SMOOTH_K, dt)
         self._current = self._current.lerp_to(target, t)
+        # 耳尾弹簧：全局平滑之后的**加性**二阶修正（惯性甩动 + 余韵回摆）。
+        # 无激励时振荡恒为 0，通道值与旧路径逐位一致。
+        self._apply_springs(dt)
         # 敲击属**瞬时反馈**（FR-02：按键→首帧 <100ms），必须在全局平滑之后
         # 直接落到当前姿态上，否则 30fps 下每帧仅靠拢 ~26%，幅度会被吃掉 3/4。
         self._apply_keystroke(self._current)
@@ -726,6 +767,38 @@ class PetModel:
                 for channel, delta in C.SURPRISE_POSES.get(self._surprise_kind.name, {}).items():
                     if hasattr(target, channel):
                         setattr(target, channel, getattr(target, channel) + delta * envelope)
+
+    def _apply_springs(self, dt: float) -> None:
+        """推进耳尾弹簧的**加性振荡**并叠加到当前姿态（全局平滑之后调用）。
+
+        - 振荡状态独立于 :class:`PetPose` 通道：以 0 为静止点做欠阻尼积分，
+          结果**叠加**到 ``ear_l/r_tilt`` / ``tail_angle``——无激励时恒为 0，
+          姿态与旧路径逐位一致（既有像素回归零影响）；
+        - ``reduce_motion`` / 拖拽拎起：直通并清零振荡（拎起姿态由 dangle
+          通道表达，叠加弹簧会互相打架）；
+        - 帧率无关与确定性由 :func:`motion.spring_step` 的固定子步进保证。
+        """
+
+        if self._reduce_motion or self._dragging:
+            self._ear_l_osc = self._ear_l_vel = 0.0
+            self._ear_r_osc = self._ear_r_vel = 0.0
+            self._tail_osc = self._tail_vel = 0.0
+            return
+        self._ear_l_osc, self._ear_l_vel = motion.spring_step(
+            self._ear_l_osc, self._ear_l_vel, 0.0, dt,
+            k=C.EAR_SPRING_K, zeta=C.EAR_SPRING_ZETA,
+        )
+        self._ear_r_osc, self._ear_r_vel = motion.spring_step(
+            self._ear_r_osc, self._ear_r_vel, 0.0, dt,
+            k=C.EAR_SPRING_K, zeta=C.EAR_SPRING_ZETA,
+        )
+        self._tail_osc, self._tail_vel = motion.spring_step(
+            self._tail_osc, self._tail_vel, 0.0, dt,
+            k=C.TAIL_SPRING_K, zeta=C.TAIL_SPRING_ZETA,
+        )
+        self._current.ear_l_tilt += self._ear_l_osc
+        self._current.ear_r_tilt += self._ear_r_osc
+        self._current.tail_angle += self._tail_osc
 
     def keystroke_state(self) -> tuple[float, float, float, bool]:
         """返回当前敲击包络 ``(press, lift, curl, active)``。

@@ -256,6 +256,15 @@ def test_no_image_assets(project_root: Path) -> None:
         ("WEAK_WORD_MIN_LAPSES", 2),
         ("WEAK_WORD_BOOST", 2.0),
         ("WEAK_WORD_TOP_N", 10),
+        # 耳尾弹簧物理（欠阻尼二阶；子步长保证 FR-34 帧率无关）
+        ("SPRING_SUB_STEP_S", 1.0 / 120.0),
+        ("EAR_SPRING_K", 120.0),
+        ("EAR_SPRING_ZETA", 0.45),
+        ("TAIL_SPRING_K", 60.0),
+        ("TAIL_SPRING_ZETA", 0.55),
+        ("DRAG_IMPULSE_GAIN", 8.0),
+        ("SPRING_IMPULSE_CAP_DEG_S", 240.0),
+        ("TAIL_IMPULSE_RATIO", 0.6),
     ],
 )
 def test_constants_match_prd(attr: str, expected) -> None:
