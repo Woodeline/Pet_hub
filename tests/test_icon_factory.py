@@ -156,6 +156,80 @@ def test_icon_rendering_creates_no_image_assets(qapp, project_root) -> None:
         and ".venv" not in path.parts
         and "__pycache__" not in path.parts
         and "skins" not in path.parts  # 用户本地皮肤包投放区（gitignore，含第三方素材）
+        and "whale_girl" not in path.parts  # 鲸鱼娘皮肤源素材（第三方 MIT，README 已致谢）
         and "third_party" not in path.parts  # 用户本地克隆的第三方数据仓库（gitignore）
+        and "build" not in path.parts  # gitignore 构建产物（c-ui-kit 预览截图），不可能入库
     ]
     assert not offenders, f"图标绘制落盘了图片素材：{offenders}"
+
+
+# --------------------------------------------------------------------------- #
+# 7. Retina 高清：DPR 感知出图（2026-11-12 用户反馈菜单图标发糊）
+# --------------------------------------------------------------------------- #
+def test_menu_icon_pixmap_dpr2_renders_physical_2x(qapp) -> None:
+    """dpr=2 时物理像素翻倍且打 DPR 标记——逻辑 16px 采样 32px 位图，边缘锐利。"""
+
+    pm = icon_factory.menu_icon_pixmap("pet", dpr=2.0)
+    assert pm.devicePixelRatio() == 2.0
+    assert (pm.width(), pm.height()) == (2 * 16, 2 * 16)
+    assert pm.deviceIndependentSize().toSize() == pm.size() / 2
+
+
+def test_make_icon_dpr2_physical_2x(qapp) -> None:
+    """make_icon(dpr=2) 内含 48px 物理位图（availableSizes 报物理尺寸）。"""
+
+    sizes = {(s.width(), s.height()) for s in icon_factory.make_icon("close", dpr=2.0).availableSizes()}
+    assert (48, 48) in sizes
+
+
+def test_menu_icon_default_dpr_matches_screen(qapp) -> None:
+    """缺省 DPR 取主屏——离屏为 1，Retina 真机自动 2，无需调用方操心。"""
+
+    pm = icon_factory.menu_icon_pixmap("pet")
+    assert pm.devicePixelRatio() == icon_factory.screen_dpr()
+
+
+# --------------------------------------------------------------------------- #
+# 8. DPR 不改变逻辑几何（2026-11-12「图标显示不全」回归）
+# --------------------------------------------------------------------------- #
+def _opaque_bbox_logical(pm) -> tuple[float, float, float, float]:
+    """不透明像素的逻辑坐标包围盒（物理坐标 / DPR）。"""
+
+    img = pm.toImage()
+    dpr = pm.devicePixelRatio()
+    xs: list[float] = []
+    ys: list[float] = []
+    for y in range(img.height()):
+        for x in range(img.width()):
+            if img.pixelColor(x, y).alpha() > 0:
+                xs.append(x / dpr)
+                ys.append(y / dpr)
+    assert xs, "位图全透明"
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+@pytest.mark.parametrize("name", ["pet", "chart", "quit", "keyboard", "wind"])
+def test_icon_logical_geometry_invariant_across_dpr(qapp, name: str) -> None:
+    """2x 出图只提升密度，不改变逻辑几何——路径不得画出逻辑画布被裁角。"""
+
+    one = _opaque_bbox_logical(icon_factory.menu_icon_pixmap(name, dpr=1.0))
+    two = _opaque_bbox_logical(icon_factory.menu_icon_pixmap(name, dpr=2.0))
+    assert all(abs(a - b) <= 1.0 for a, b in zip(one, two)), (
+        f"{name} 的 2x 位图逻辑几何偏移（显示不全根因）：1x={one} 2x={two}"
+    )
+
+
+def test_tray_icon_dpr2_face_not_clipped(qapp) -> None:
+    """托盘猫脸 2x 出图后逻辑包围盒仍应铺满画布大半（裁角时只剩左上四分之一）。"""
+
+    from desktop_pet.ui.pet_renderer import PetRenderer
+
+    icon = PetRenderer.build_tray_icon(dpr=2.0)
+    pm = icon.pixmap(32, 32)
+    if pm.devicePixelRatio() < 2.0:  # QIcon 取图可能降采样，直接取 2x 表示
+        pm = max(
+            (icon.pixmap(s) for s in icon.availableSizes()),
+            key=lambda p: p.width(),
+        )
+    x0, y0, x1, y1 = _opaque_bbox_logical(pm)
+    assert (x1 - x0) > 24 and (y1 - y0) > 24, f"猫脸被裁：bbox=({x0},{y0},{x1},{y1})"

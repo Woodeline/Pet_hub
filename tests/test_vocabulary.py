@@ -249,6 +249,17 @@ def test_extra_word_bank_path_uses_appdata(monkeypatch: pytest.MonkeyPatch) -> N
 def test_extra_word_bank_path_falls_back_to_home(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """``APPDATA`` 不可用：回落到用户主目录下的平台惯例位置（保证可写）。"""
+
     monkeypatch.delenv("APPDATA", raising=False)
     path = paths.extra_word_bank_path()
-    assert path == Path.home() / C.CONFIG_DIR_NAME / C.EXTRA_WORD_BANK_FILE_NAME
+    # 任何平台都必须落在用户主目录之内（test_config 等 store 同口径）
+    assert Path.home() in path.parents
+    # 平台惯例：Windows → ~/desktop-pet；macOS → ~/Library/Application Support
+    if sys.platform == "win32":
+        assert path == Path.home() / C.CONFIG_DIR_NAME / C.EXTRA_WORD_BANK_FILE_NAME
+    elif sys.platform == "darwin":
+        assert path == (
+            Path.home() / "Library" / "Application Support"
+            / C.CONFIG_DIR_NAME / C.EXTRA_WORD_BANK_FILE_NAME
+        )

@@ -77,6 +77,7 @@ def test_manual_success_new_version_notifies(ctrl: PetAppController) -> None:
     assert "v9.9.9" in spy.joined()
     assert ctrl._cfg.update_check_last_at == "2025-01-01T00:00:00Z"
     assert ctrl._update_checking is False
+    assert ctrl._tray._update_available is True, "有新版未点亮菜单红点"
 
 
 def test_manual_success_same_version_notifies_latest(ctrl: PetAppController) -> None:
@@ -85,6 +86,7 @@ def test_manual_success_same_version_notifies_latest(ctrl: PetAppController) -> 
         ReleaseInfo(tag_name="v0.6.2", name="x", html_url=""), manual=True
     )
     assert "已是最新版本" in spy.joined()
+    assert ctrl._tray._update_available is False, "同版不应点亮菜单红点"
 
 
 def test_auto_success_same_version_silent(ctrl: PetAppController) -> None:
@@ -161,3 +163,33 @@ def test_manual_check_ignored_when_in_flight(ctrl: PetAppController) -> None:
     ctrl._on_update_check()
     assert started == []
     assert spy.calls == []
+
+
+def test_start_wires_live_data_providers_to_tray(
+    qapp: QApplication, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """启动即注入三个只读 provider；生词本变化后徽标实时跟随（无需重开菜单）。"""
+
+    from desktop_pet.core.config import AppConfig
+    from desktop_pet.core.vocabulary import VocabEntry
+
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    store = ConfigStore(tmp_path / "desktop-pet" / "config.json")
+    store.save(AppConfig(listen_enabled=False))
+    controller = PetAppController(qapp, store)
+    try:
+        controller.start()
+        tray = controller._tray
+        assert set(tray._data_providers) == {"vocab_count", "mastered_count", "today_words"}
+        assert tray._vocab_badge() == "0"
+
+        entry = VocabEntry(
+            id="n5-0001", level="N5", word="猫", kana="ねこ",
+            translation="猫", meaning="名词", romaji="neko",
+        )
+        assert controller._vocab.add(entry, "2025-01-01T00:00:00Z") is True
+        assert tray._vocab_badge() == "1", "provider 未实时读取生词本计数"
+        assert tray._mastered_badge() == str(controller._mastered.count())
+    finally:
+        controller.shutdown()
+        qapp.processEvents()

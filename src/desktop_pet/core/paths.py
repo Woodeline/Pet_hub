@@ -19,6 +19,30 @@ from desktop_pet.core import constants as C
 logger = logging.getLogger(__name__)
 
 
+def user_data_dir() -> Path:
+    """返回用户数据根目录（``desktop-pet`` 配置目录本身）。
+
+    平台分流（任何平台都可被 ``APPDATA`` 环境变量覆盖——测试隔离即依赖此机制）：
+
+    - Windows：``%APPDATA%\\desktop-pet``；``APPDATA`` 未设置时回落到用户主目录
+      （保持 Windows 旧行为不变）。
+    - macOS：``~/Library/Application Support/desktop-pet``（AppKit 惯例）。
+    - 其他 Unix：``~/.local/share/desktop-pet``（XDG 惯例）。
+
+    返回**意图路径**，即使目录尚不存在也不抛异常（由调用方按需创建）。
+    """
+
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        return Path(appdata) / C.CONFIG_DIR_NAME
+    home = Path.home()
+    if sys.platform == "darwin":
+        return home / "Library" / "Application Support" / C.CONFIG_DIR_NAME
+    if sys.platform == "win32":
+        return home / C.CONFIG_DIR_NAME
+    return home / ".local" / "share" / C.CONFIG_DIR_NAME
+
+
 def is_frozen() -> bool:
     """返回当前是否运行在 PyInstaller 冻结环境中。
 
@@ -52,27 +76,23 @@ def word_bank_path() -> Path:
 def extra_word_bank_path() -> Path:
     """返回用户导入的外置词库 JSON 意图路径（始终返回，不因文件缺失而抛）。
 
-    位置与用户数据一致：``%APPDATA%\\desktop-pet\\jlpt_words_extra.json``
-    （``APPDATA`` 不可用回落到用户主目录，与 ``VocabStore.default_path`` 同口径）。
+    位置与用户数据一致：macOS 为 ``~/Library/Application Support/desktop-pet``，
+    Windows 为 ``%APPDATA%\\desktop-pet``（见 :func:`user_data_dir`）。
     多词库管理（批次 7）后该文件仅作为**旧版迁移源**保留：首次启动时迁移进
     ``banks/`` 目录登记（原文件保留作备份）。
     """
 
-    appdata = os.environ.get("APPDATA")
-    base = Path(appdata) if appdata else Path.home()
-    return base / C.CONFIG_DIR_NAME / C.EXTRA_WORD_BANK_FILE_NAME
+    return user_data_dir() / C.EXTRA_WORD_BANK_FILE_NAME
 
 
 def banks_dir() -> Path:
-    """返回多词库存储根目录意图路径 ``%APPDATA%\\desktop-pet\\banks\\``。
+    """返回多词库存储根目录意图路径（``banks/``，位于 :func:`user_data_dir` 之下）。
 
     每个导入的词库独立存为 ``<bank_id>.json``，由 ``bank_registry.json``
     登记元数据（启用态 / 名称 / 添加时间）。目录由 registry 写入时创建。
     """
 
-    appdata = os.environ.get("APPDATA")
-    base = Path(appdata) if appdata else Path.home()
-    return base / C.CONFIG_DIR_NAME / C.BANKS_DIR_NAME
+    return user_data_dir() / C.BANKS_DIR_NAME
 
 
 def word_details_path() -> Path:
@@ -88,14 +108,13 @@ def word_details_path() -> Path:
 def audio_cache_dir() -> Path:
     """返回发音 MP3 缓存目录意图路径（始终返回，不因目录缺失而抛）。
 
-    位置与用户数据一致：``%APPDATA%\\desktop-pet\\audio_cache\\``
-    （``APPDATA`` 不可用回落到用户主目录，与 :meth:`extra_word_bank_path` 同口径）。
+    位置与用户数据一致（见 :func:`user_data_dir`）：Windows 为
+    ``%APPDATA%\\desktop-pet\\audio_cache\\``，macOS 为
+    ``~/Library/Application Support/desktop-pet/audio_cache/``。
     目录由 :class:`~desktop_pet.core.audio_cache.AudioCacheStore` 在首次写入时创建。
     """
 
-    appdata = os.environ.get("APPDATA")
-    base = Path(appdata) if appdata else Path.home()
-    return base / C.CONFIG_DIR_NAME / C.AUDIO_CACHE_DIR_NAME
+    return user_data_dir() / C.AUDIO_CACHE_DIR_NAME
 
 
 def skins_dir() -> Path:
@@ -116,6 +135,7 @@ def skins_dir() -> Path:
 __all__ = [
     "is_frozen",
     "package_data_dir",
+    "user_data_dir",
     "word_bank_path",
     "extra_word_bank_path",
     "banks_dir",

@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import sys
 import threading
 import time
 
@@ -163,3 +164,40 @@ def test_bridge_emits_float_signal(qtbot) -> None:
     bridge.emit_keystroke(42)  # 传 int，应被转换为 float
     _wait(100)
     assert seen == [42.0]
+
+
+# --------------------------------------------------------------------------- #
+# 4. macOS TSM 主线程约束（2026-11-12 实机 SIGTRAP 崩溃回归）
+# --------------------------------------------------------------------------- #
+@pytest.mark.skipif(sys.platform != "darwin", reason="TSM 主队列断言仅 macOS")
+def test_tsm_input_source_calls_stay_on_main_thread(qtbot) -> None:
+    """pynput 的 TSM 输入源调用必须全部发生在主线程（预取），监听线程零 TSM。
+
+    macOS 26 对 TSM API 断言主队列；pynput 默认在监听线程进入/退出
+    keycode_context 时调用 → dispatch_assert_queue_fail → SIGTRAP 整进程崩溃。
+    """
+
+    from pynput._util import darwin as darwin_util
+    from pynput.keyboard import _darwin as darwin_backend
+
+    main_tid = threading.get_ident()
+    calls: list[int] = []
+    original_fn = darwin_util.CarbonExtra.TISCopyCurrentKeyboardInputSource
+    original_ctx = darwin_backend.keycode_context
+
+    def spy():
+        calls.append(threading.get_ident())
+        return original_fn()
+
+    darwin_util.CarbonExtra.TISCopyCurrentKeyboardInputSource = spy
+    try:
+        listener = KeyboardListener(KeystrokeBridge())
+        listener.start()
+        _wait(300)
+        listener.stop()
+    finally:
+        darwin_util.CarbonExtra.TISCopyCurrentKeyboardInputSource = original_fn
+
+    assert calls, "主线程未预取键盘布局上下文"
+    assert all(tid == main_tid for tid in calls), f"TSM 在后台线程被调用：{calls}"
+    assert darwin_backend.keycode_context is original_ctx, "stop 后未还原 pynput 原实现"

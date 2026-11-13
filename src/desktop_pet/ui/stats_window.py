@@ -31,6 +31,7 @@ from desktop_pet.core import constants as C
 from desktop_pet.core.stats_aggregator import StatsSummary
 from desktop_pet.core.weak_words import WeakWord
 from desktop_pet.ui import icon_factory, motion_ui, theme
+from desktop_pet.ui.window_chrome import WindowHeader, polish_root
 
 logger = logging.getLogger(__name__)
 
@@ -405,7 +406,8 @@ class StatsWindow(QWidget):
 
         theme.apply_theme(self)
         root = QVBoxLayout(self)
-        root.setSpacing(C.SPACING["sm"])
+        polish_root(root)
+        root.addWidget(WindowHeader(C.JP_STATS_WINDOW_TITLE, "趋势 · 热力 · 薄弱词", "chart"))
 
         # 顶部概览卡：四个统计块
         overview = QFrame(self)

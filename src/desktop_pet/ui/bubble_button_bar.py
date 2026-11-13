@@ -18,6 +18,7 @@ from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPen
 from PySide6.QtWidgets import QGraphicsDropShadowEffect, QHBoxLayout, QPushButton, QWidget
 
 from desktop_pet.core import constants as C
+from desktop_pet.ui import macos_window
 
 #: 淡入淡出刷新间隔（毫秒，与 bubble 一致）
 _FADE_TICK_MS: Final[int] = 16
@@ -116,6 +117,34 @@ class BubbleButtonBar(QWidget):
         # 让 sizeHint 计算到真实尺寸，供几何计算使用
         self.adjustSize()
 
+    def showEvent(self, event) -> None:  # noqa: N802 (Qt 命名)
+        """显示后修正 macOS NSPanel 默认行为（失活不隐藏 / 永不抢 key）。
+
+        按钮条与宠物窗同为 ``Qt.Tool``，macOS 上默认随应用失活被系统移除。
+        **延迟一拍**挂载（Qt 在 showEvent 返回后会重置面板属性）；非 macOS 为 no-op。
+        """
+
+        super().showEvent(event)
+        if macos_window.IS_MACOS:
+            QTimer.singleShot(
+                0, lambda: macos_window.make_nonactivating_panel(int(self.winId()))
+            )
+
+    def _bring_to_front(self) -> None:
+        """把按钮条带到最前，但**不激活应用**（不抢当前应用焦点）。
+
+        理由同 ``BubbleWindow._bring_to_front``：macOS 的 ``raise_()`` 会对失活
+        应用触发激活；改走 ``orderFrontRegardless``（仅调序、不激活）。
+        """
+
+        if macos_window.IS_MACOS:
+            try:
+                macos_window.order_front_no_activate(int(self.winId()))
+            except Exception:  # noqa: BLE001 —— winId 异常时退化为仅显示
+                pass
+            return
+        self.raise_()
+
     # ------------------------------------------------------------------ #
     # 公共 API
     # ------------------------------------------------------------------ #
@@ -149,7 +178,7 @@ class BubbleButtonBar(QWidget):
         self.setGeometry(geometry)
         self.setWindowOpacity(0.0)
         self.show()
-        self.raise_()
+        self._bring_to_front()
         self._timer.start()
 
     def hide_bar(self) -> None:

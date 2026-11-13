@@ -14,7 +14,7 @@ import logging
 
 from PySide6.QtCore import QObject, QRunnable, Signal
 
-from desktop_pet.core.update_client import ReleaseInfo, UpdateCheckError, fetch_latest_release
+from desktop_pet.core.update_client import UpdateCheckError, fetch_latest_release
 
 logger = logging.getLogger(__name__)
 

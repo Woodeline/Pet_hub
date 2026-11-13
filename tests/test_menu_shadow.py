@@ -88,6 +88,72 @@ def test_shadow_menu_popup_aligns_panel_repeatedly(qtbot) -> None:
         qtbot.waitUntil(lambda: not menu.isVisible())
 
 
+def test_submenu_panels_are_flush_on_right(qtbot) -> None:
+    """子菜单面板紧贴父菜单面板右缘（不再隔着一圈阴影留白）。"""
+
+    main = ShadowMenu()
+    qtbot.addWidget(main)
+    main.addAction("条目一")
+    sub = ShadowMenu("子菜单", main)
+    sub.addAction("子项")
+    main.addMenu(sub)
+
+    main.popup(QPoint(200, 150))
+    qtbot.waitUntil(main.isVisible)
+    sub.popup(QPoint(main.x() + main.width(), main.y() + 20))
+    qtbot.waitUntil(sub.isVisible)
+
+    main_panel = main._panel_rect().translated(main.pos())
+    sub_panel = sub._panel_rect().translated(sub.pos())
+    assert sub_panel.left() == main_panel.right() + 1, (
+        f"子菜单未贴齐父菜单：panel gap = {sub_panel.left() - main_panel.right() - 1}px"
+    )
+    # 纵向：面板顶对齐条目顶（整体回移一个留白），子菜单不应往下漂
+    assert sub.pos().y() == main.y() + 20 - C.MENU_SHADOW_BAND_PX
+
+
+def test_submenu_panels_are_flush_on_left(qtbot) -> None:
+    """屏幕右缘翻转（子菜单向左开）时同样紧贴父菜单面板左缘。"""
+
+    main = ShadowMenu()
+    qtbot.addWidget(main)
+    main.addAction("条目一")
+    sub = ShadowMenu("子菜单", main)
+    sub.addAction("子项")
+    main.addMenu(sub)
+
+    main.popup(QPoint(400, 150))
+    qtbot.waitUntil(main.isVisible)
+    sub.popup(QPoint(main.x() - 200, main.y() + 20))
+    qtbot.waitUntil(sub.isVisible)
+
+    main_panel = main._panel_rect().translated(main.pos())
+    sub_panel = sub._panel_rect().translated(sub.pos())
+    assert sub_panel.right() == main_panel.left() - 1, (
+        f"左侧子菜单未贴齐父菜单：panel gap = {main_panel.left() - sub_panel.right() - 1}px"
+    )
+
+
+def test_nested_submenu_resolves_visual_parent_not_constructor_parent(qtbot) -> None:
+    """多级子菜单以主菜单为构造父级时，仍应认 ``addMenu`` 挂载的那一级为上级。
+
+    托盘菜单正是这种写法（子菜单构造时统一 parent=主菜单，再 ``jp.addMenu(lvl)``）；
+    按 ``parent()`` 找上级会把三级菜单错贴到主菜单边上。
+    """
+
+    main = ShadowMenu()
+    qtbot.addWidget(main)
+    jp = ShadowMenu("日语学习", main)
+    level = ShadowMenu("难度", main)
+    main.addMenu(jp)
+    jp.addMenu(level)
+
+    assert level.parent() is main
+    assert level._visual_parent_menu() is jp
+    assert jp._visual_parent_menu() is main
+    assert main._visual_parent_menu() is None
+
+
 # --------------------------------------------------------------------------- #
 # 3. 阴影位图与缓存
 # --------------------------------------------------------------------------- #

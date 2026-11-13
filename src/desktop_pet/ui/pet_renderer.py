@@ -41,6 +41,7 @@ from desktop_pet.core import constants as C
 from desktop_pet.core import motion
 from desktop_pet.core.pet_model import PetPose
 from desktop_pet.core.theme import decor_for_theme, glow_for_theme
+from desktop_pet.ui.icon_factory import screen_dpr
 
 # --------------------------------------------------------------------------- #
 # 几何常量（逻辑画布 160×180）
@@ -1144,22 +1145,28 @@ class PetRenderer:
     @staticmethod
     def build_tray_icon(
         stops: tuple[tuple[float, str], ...] | None = None,
+        dpr: float | None = None,
     ) -> QIcon:
         """用 QPainter 现画猫脸小图标（16/32px），返回 ``QIcon``。
 
         Args:
             stops: 渐变停靠点（跟随主题，P1）；``None`` 时使用默认皮肤
                 （``THEMES[DEFAULT_THEME]``，即品牌彩虹）。
+            dpr: 设备像素比；``None`` 取主屏 DPR（Retina 自动 2x 出图防糊）。
         """
 
         resolved = C.THEMES[C.DEFAULT_THEME] if stops is None else stops
         icon = QIcon()
+        dpr = screen_dpr() if dpr is None else max(1.0, float(dpr))
         for px_size in (16, 32):
-            pixmap = QPixmap(px_size, px_size)
+            physical = max(1, int(round(px_size * dpr)))
+            pixmap = QPixmap(physical, physical)
             pixmap.fill(Qt.GlobalColor.transparent)
+            pixmap.setDevicePixelRatio(dpr)
             painter = QPainter(pixmap)
             try:
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                # 带 DPR 标记的位图 QPainter 以逻辑像素为单位（同 icon_factory）。
                 s = px_size / 32.0
                 painter.scale(s, s)
                 PetRenderer._paint_tray_face(painter, resolved)

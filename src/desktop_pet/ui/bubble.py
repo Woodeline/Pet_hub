@@ -22,6 +22,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QWidget
 
 from desktop_pet.core import constants as C
+from desktop_pet.ui import macos_window
 
 if TYPE_CHECKING:  # 仅类型检查期导入，避免 ui 反向依赖 core 的运行时开销
     from desktop_pet.core.vocabulary import VocabEntry
@@ -117,6 +118,20 @@ class BubbleWindow(QWidget):
         self._reveal_timer.setInterval(int(C.BUBBLE_TYPE_TICK_MS))
         self._reveal_timer.timeout.connect(self._advance_reveal)
 
+    def showEvent(self, event) -> None:  # noqa: N802 (Qt 命名)
+        """显示后修正 macOS NSPanel 默认行为（失活不隐藏 / 永不抢 key）。
+
+        气泡与宠物窗同为 ``Qt.Tool``，macOS 上默认随应用失活被系统移除
+        （hidesOnDeactivate），导致气泡跟着宠物一起消失。**延迟一拍**挂载
+        （Qt 在 showEvent 返回后会重置面板属性）；非 macOS 为 no-op。
+        """
+
+        super().showEvent(event)
+        if macos_window.IS_MACOS:
+            QTimer.singleShot(
+                0, lambda: macos_window.make_nonactivating_panel(int(self.winId()))
+            )
+
     # ------------------------------------------------------------------ #
     # 公共 API
     # ------------------------------------------------------------------ #
@@ -164,7 +179,7 @@ class BubbleWindow(QWidget):
         self.setGeometry(geometry)
         self.setWindowOpacity(0.0)
         self.show()
-        self.raise_()
+        self._bring_to_front()
         self._timer.start()
 
     def show_word(self, entry: "VocabEntry", duration: float, review: bool = False) -> None:
@@ -213,7 +228,7 @@ class BubbleWindow(QWidget):
         # 不落盘（Qt/Windows 平台行为，实测 offscreen 同样如此）；此刻 alpha=0，
         # 内部 hide→set→show 的窗口重建无视觉闪烁。
         self._set_input_capture(True)  # 单词态接收鼠标（双击查详情）
-        self.raise_()
+        self._bring_to_front()
         self._timer.start()
 
     def hide_bubble(self) -> None:
@@ -487,6 +502,22 @@ class BubbleWindow(QWidget):
     # ------------------------------------------------------------------ #
     # 内部
     # ------------------------------------------------------------------ #
+    def _bring_to_front(self) -> None:
+        """把气泡带到最前，但**不激活应用**（不抢当前应用焦点）。
+
+        ``raise_()`` 在 macOS 上映射为 ``orderFront:``，应用处于失活态时会触发
+        应用激活——宠物说话（定时/敲键盘触发）时把用户从正在使用的应用里拽走。
+        macOS 改走 ``orderFrontRegardless``（仅调序、不激活）；其他平台行为不变。
+        """
+
+        if macos_window.IS_MACOS:
+            try:
+                macos_window.order_front_no_activate(int(self.winId()))
+            except Exception:  # noqa: BLE001 —— winId 异常时退化为仅显示
+                pass
+            return
+        self.raise_()
+
     def _revealed_text(self, text: str) -> str:
         """按当前 reveal 进度返回 ``text`` 的**前缀子串**（阶段 B2-3 打字感）。
 

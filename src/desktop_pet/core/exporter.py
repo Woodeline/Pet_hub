@@ -19,7 +19,6 @@ import csv
 import io
 from typing import Sequence
 
-from desktop_pet.core import constants as C
 from desktop_pet.core.daily_log_store import DailyLogStore
 from desktop_pet.core.mastered_store import MasteredItem
 

@@ -1,10 +1,15 @@
 # desktop-pet · 小喵酱桌面宠物
 
-**当前版本：v0.6.3** ｜ Python 3.13 + PySide6 ｜ 1704 项自动化测试全绿
+**当前版本：v0.6.3** ｜ Python 3.13 + PySide6 ｜ 1808 项用例（本机实测 1805 通过 / 3 项平台守卫跳过）
 
 一只常驻 Windows 桌面、会"陪你敲键盘"的治愈系程序化猫咪。
 监听全局键盘敲击并同步做出"敲键盘"动画，在**空闲 / 专注 / 休息 / 睡觉**四态间
 自动切换并给出不同情绪反馈。**程序化矢量绘制，零外部图片素材。**
+
+> **macOS 支持（v0.6.3-mac）**：本仓库同时提供 macOS 适配版——用户数据改存
+> `~/Library/Application Support/desktop-pet`，发音播放改用系统 `afplay`，
+> 开机自启改用 LaunchAgent，并新增 `run.sh` 启动脚本与
+> `scripts/build_macos_app.py`（打包原生 `.app`）。详见下文「macOS 运行」。
 
 ---
 
@@ -66,6 +71,8 @@ https://github.com/Woodeline/Pet_hub/releases/latest
 - 本程序**不包含、不分发任何皮肤素材**：仓库与 Release 资产中均无第三方版权的图片 / 音频文件，`skins/` 目录已被 `.gitignore` 排除。
 - 程序原生支持 **DyberPet 社区皮肤包格式（MOD）**：把获取到的皮肤包放入程序同目录的 `skins/` 文件夹，即可在托盘「外观 → 皮肤」中切换（规范见 `docs/skin-pack.md`）。
 - 本地开发调试时使用的示例皮肤素材来源于开源项目 [ChaozhongLiu/DyberPet_GenshinImpact](https://github.com/ChaozhongLiu/DyberPet_GenshinImpact)，感谢原作者的开源贡献；素材版权归原作者所有，请前往原项目按其开源许可获取使用。
+- **内置鲸鱼娘皮肤（v0.6.3-mac 本地适配）**：`skins/whale_girl/`（鲸鱼娘·大肥鱼 Q 版三视图，正面/侧面/背面），素材来自 [1190fasheqi/dafeiyu-pet](https://github.com/1190fasheqi/dafeiyu-pet)（MIT License）。该包放在 `skins/` 下即被自动启用（`cfg.skin_name` 默认自动取首个可用包）；托盘「外观 → 皮肤」可随时切回「默认猫咪（矢量）」。
+> 注：`skins/`、`assets/` 均为本地素材、不随仓库分发（见 `.gitignore`）；从 GitHub 克隆后需自行投放皮肤包，程序默认回落到内置矢量猫咪。
 
 ---
 
@@ -145,6 +152,52 @@ desktop-pet
 
 > 提示：命令要**一行一条**执行。若粘贴成 `pip install -r requirements.txtset PYTHONPATH=src`
 > 这种连在一起的形式，必然报错。
+
+---
+
+## macOS 运行（v0.6.3-mac 适配版）
+
+macOS 与 Windows 的差异已在代码内按平台分流，**Windows 行为零变化**：
+
+| 能力 | Windows | macOS |
+| --- | --- | --- |
+| 用户数据目录 | `%APPDATA%\desktop-pet` | `~/Library/Application Support/desktop-pet` |
+| 发音播放 | winmm / MCI（零依赖） | 系统 `afplay`（零依赖） |
+| 开机自启 | 注册表 `HKCU\...\Run` | `~/Library/LaunchAgents/desktop-pet.plist` |
+| 全局键盘监听 | pynput win32 钩子 | pynput darwin 事件 tap（**需辅助功能权限**） |
+
+**环境要求**：macOS 11+（Apple Silicon / Intel 均可）+ Python 3.13。
+
+**安装与运行**：
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt     # 慢可加 -i https://mirrors.aliyun.com/pypi/simple/
+./run.sh                                      # 一键启动（自动挑选 .venv → 系统 python3）
+```
+
+**打包为原生 .app**（双击启动、进 Launchpad、可设开机自启）：
+
+```bash
+python3 scripts/build_macos_app.py
+open dist/desktop-pet.app
+```
+
+> `.app` 为「源码 + venv」运行模式：bundle 内启动器按
+> `.venv` → 系统 `python3` → WorkBuddy 运行时 的顺序挑选解释器；
+> 移动 `.app` 位置后会自动回退为相对定位（上溯三级找 `src/`）。
+
+**⚠️ 辅助功能权限（全局键盘监听）**：macOS 要求进程获得「辅助功能」授权后才能
+接收全局按键。首次启动若未授权，程序会弹托盘提示引导：
+
+> 系统设置 → 隐私与安全性 → 辅助功能 → 勾选 `desktop-pet`（或终端 / Python）
+
+授权后**重新勾选一次托盘「监听键盘」**即可生效；未授权时其余功能
+（桌宠渲染 / 气泡 / 日语学习 / 发音）不受影响。
+
+**开机自启**：托盘菜单勾选「开机自启」即写入
+`~/Library/LaunchAgents/desktop-pet.plist`（`RunAtLoad`），取消勾选即删除，
+与 Windows 注册表方案一一对应，均**不需要管理员权限**。
 
 ## 退出程序
 
@@ -331,7 +384,7 @@ desktop-pet/
 │     ├─ keyboard_listener.py  # pynput 守护线程 + 跨线程信号桥
 │     └─ controller.py         # 装配 / 接线 / 生命周期
 ├─ skins/                      # 皮肤包投放区（gitignore，第三方素材不入库）
-├─ tests/                      # 85 个测试文件 / 1704 项用例 + 人工验收清单
+├─ tests/                      # 88 个测试文件 / 1808 项用例 + 人工验收清单
 ├─ tools/                      # 词库与审阅页构建脚本
 ├─ scripts/                    # 皮肤包下载 / 发布等辅助脚本
 ├─ docs/                       # PRD / 架构 / 类图 / 时序图 / 参数总表 / 皮肤包规范

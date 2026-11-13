@@ -21,8 +21,6 @@ import os
 import tempfile
 from pathlib import Path
 
-from desktop_pet.core import constants as C
-
 logger = logging.getLogger(__name__)
 
 _AUDIO_EXT: str = ".mp3"

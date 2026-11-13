@@ -51,6 +51,7 @@ from PySide6.QtWidgets import (
 
 from desktop_pet.core import constants as C
 from desktop_pet.ui import theme
+from desktop_pet.ui.window_chrome import WindowHeader, polish_root
 
 logger = logging.getLogger(__name__)
 
@@ -169,12 +170,19 @@ class BubbleTextDialog(QDialog):
         buttons.addWidget(apply_btn)
 
         root = QVBoxLayout(self)
+        polish_root(root)
+        root.addWidget(WindowHeader("气泡文案", "定制宠物随口说的小台词", "edit"))
         root.addWidget(pack_box)
         root.addWidget(auto_box)
         root.addWidget(hit_box)
         root.addLayout(buttons)
 
         self.resize(460, 620)
+
+    def set_accent(self, accent: str | None) -> None:
+        """应用主题点缀色（controller 在创建与换肤时调用）。"""
+
+        theme.apply_theme(self, accent)
 
     # ------------------------------------------------------------------ #
     # 内部

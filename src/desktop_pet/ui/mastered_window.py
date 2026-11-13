@@ -37,6 +37,7 @@ from desktop_pet.core import constants as C
 from desktop_pet.core.mastered_store import MasteredItem
 from desktop_pet.core.tts_client import spoken_text
 from desktop_pet.ui import icon_factory, motion_ui, theme
+from desktop_pet.ui.window_chrome import WindowHeader, polish_root
 from desktop_pet.ui.confirm_dialog import ConfirmDialog
 from desktop_pet.ui.speaker_button import PronunciationController, SpeakerButton
 
@@ -261,6 +262,7 @@ class MasteredWindow(QWidget):
     def set_accent(self, accent: str | None) -> None:
         """应用主题点缀色（controller 在窗口创建与换肤时调用）。"""
 
+        self._accent = accent
         theme.apply_theme(self, accent)
 
     def closeEvent(self, event) -> None:  # noqa: N802 —— Qt 命名约定
@@ -282,6 +284,10 @@ class MasteredWindow(QWidget):
         theme.apply_theme(self)
 
         root = QVBoxLayout(self)
+        polish_root(root)
+        root.addWidget(WindowHeader(
+            C.JP_MASTERED_WINDOW_TITLE, "间隔重复复习 · 记住的不再打扰", "check"
+        ))
 
         # 顶部：等级 Tab + 操作按钮
         top = QHBoxLayout()

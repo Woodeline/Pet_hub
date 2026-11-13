@@ -51,13 +51,14 @@ class ConfirmDialog(QDialog):
         text: str,
         confirm_text: str,
         parent: QWidget | None = None,
+        accent: str | None = None,
     ) -> None:
         """按 token 配色与四档圆角语义构建对话框，并接线取消 / 确认。"""
 
         super().__init__(parent)
         self.setWindowTitle(title)
         # token 配色随主题 / 点缀色走（与非对话框窗口同源）。
-        theme.apply_theme(self)
+        theme.apply_theme(self, accent)
 
         c = C.SEMANTIC_COLORS
         sp = C.SPACING
@@ -107,10 +108,17 @@ class ConfirmDialog(QDialog):
         title: str,
         text: str,
         confirm_text: str,
+        accent: str | None = None,
     ) -> bool:
-        """便捷入口：弹出模态确认框，返回用户是否确认（``Accepted``）。"""
+        """便捷入口：弹出模态确认框，返回用户是否确认（``Accepted``）。
 
-        dialog = ConfirmDialog(title, text, confirm_text, parent)
+        ``accent`` 缺省时继承父窗口的点缀色（``set_accent`` 注入的 ``_accent``），
+        保证确认框与发起窗口同一主题观感。
+        """
+
+        if accent is None:
+            accent = getattr(parent, "_accent", None)
+        dialog = ConfirmDialog(title, text, confirm_text, parent, accent=accent)
         return dialog.exec() == QDialog.DialogCode.Accepted
 
 

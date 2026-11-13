@@ -9,13 +9,14 @@ from __future__ import annotations
 import hashlib
 
 import pytest
-from PySide6.QtCore import QPoint, QSize, Qt
+from PySide6.QtCore import QPoint, QRect, QSize, Qt
 from PySide6.QtGui import QImage, QPainter
 
 from desktop_pet.core import constants as C
 from desktop_pet.core.constants import Expression
 from desktop_pet.core.pet_model import PetModel
 from desktop_pet.ui.bubble import BubbleWindow
+from desktop_pet.ui.bubble_button_bar import BubbleButtonBar
 from desktop_pet.ui.pet_renderer import PetRenderer
 from desktop_pet.ui.pet_window import PetWindow
 
@@ -88,7 +89,18 @@ def test_topmost_reassert_timer_lifecycle(qtbot) -> None:
 
 
 def test_topmost_reassert_restores_dropped_flag(qtbot) -> None:
-    """置顶标志被系统/他方丢弃后，重申应经窗口句柄补挂，且不隐藏窗口。"""
+    """置顶被系统/他方夺走后，重申应恢复置顶，且不隐藏窗口。
+
+    平台分流（置顶/焦点缺陷根因修复，见 ``ui.macos_window``）：
+
+    * **非 macOS**：``_reassert_topmost`` 经窗口句柄 ``setFlag`` 补挂
+      ``WindowStaysOnTopHint``（Windows 原有行为，零变化）。
+    * **macOS**：刻意**不走** ``setFlag``（QWindow::setFlags 会重建原生
+      NSWindow → 宠物闪烁重现 + 可能抢焦点），改由原生 NSWindow level
+      （``ensure_floating_level``）保底。Qt 标志保持被丢弃状态属预期。
+    """
+
+    import sys
 
     window = PetWindow(PetModel(), PetRenderer(), 1.0)
     qtbot.addWidget(window)
@@ -101,9 +113,14 @@ def test_topmost_reassert_restores_dropped_flag(qtbot) -> None:
     handle.setFlag(Qt.WindowType.WindowStaysOnTopHint, False)
     assert not bool(handle.flags() & Qt.WindowType.WindowStaysOnTopHint)
     window._reassert_topmost()
-    assert bool(handle.flags() & Qt.WindowType.WindowStaysOnTopHint), (
-        "置顶标志丢失后未被重申补挂 (FR-16)"
-    )
+    if sys.platform == "darwin":
+        assert not bool(handle.flags() & Qt.WindowType.WindowStaysOnTopHint), (
+            "macOS 分支不应经 setFlag 补挂（会重建原生窗口）"
+        )
+    else:
+        assert bool(handle.flags() & Qt.WindowType.WindowStaysOnTopHint), (
+            "置顶标志丢失后未被重申补挂 (FR-16)"
+        )
     assert window.isVisible(), "重申置顶不得隐藏窗口"
     window.hide()
 
@@ -116,6 +133,22 @@ def test_topmost_reassert_noop_when_hidden(qtbot) -> None:
     assert not window.isVisible()
     window._reassert_topmost()
     assert not window.isVisible()
+
+
+def test_macos_window_helpers_safe_on_non_cocoa_platform(qtbot) -> None:
+    """macOS 原生修正助手在非 cocoa 平台插件（offscreen 测试）必须安全 no-op。
+
+    回归守卫：offscreen 的 ``winId()`` 是假句柄（小整数），若无平台守卫直接
+    做 ObjC 消息派发会段错误（无法被 try/except 拦截）。
+    """
+
+    from desktop_pet.ui import macos_window
+
+    # 无论真值如何（本测试可能在 macOS 上跑），假指针都不得引发崩溃：
+    # cocoa 平台下 objc 会拒绝无效 isa；非 cocoa 平台下函数体提前返回。
+    macos_window.make_nonactivating_panel(12345)
+    macos_window.ensure_floating_level(12345)
+    macos_window.order_front_no_activate(12345)
 
 
 def test_window_translucent_background(qtbot) -> None:
@@ -279,6 +312,38 @@ def test_bubble_window_flags(qtbot) -> None:
     assert bool(flags & Qt.WindowType.WindowStaysOnTopHint)
     assert bool(flags & Qt.WindowType.Tool)
     assert bubble.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
+
+def test_bubble_brings_to_front_without_activating_on_macos(qtbot, monkeypatch) -> None:
+    """气泡弹出不得抢焦点：macOS 走 ``orderFrontRegardless``，绝不调用 ``raise_()``。"""
+
+    from desktop_pet.ui import bubble as bubble_mod
+
+    fronts: list[int] = []
+    monkeypatch.setattr(bubble_mod.macos_window, "IS_MACOS", True)
+    monkeypatch.setattr(
+        bubble_mod.macos_window, "order_front_no_activate", fronts.append
+    )
+
+    def _forbidden_raise(self) -> None:  # noqa: ANN001
+        raise AssertionError("气泡显示调用了 raise_()（macOS 上会激活应用、抢焦点）")
+
+    monkeypatch.setattr(BubbleWindow, "raise_", _forbidden_raise)
+
+    bubble = BubbleWindow()
+    qtbot.addWidget(bubble)
+    bubble.set_anchor(QPoint(400, 300))
+    bubble.show_message("你好呀~", 2.5)
+    assert fronts, "未调用 order_front_no_activate，气泡可能被其他窗口压住"
+
+    # 学习泡泡的按钮条同属「气泡弹出」链路，也必须非激活置前
+    bar = BubbleButtonBar()
+    qtbot.addWidget(bar)
+    bar.show_bar(QPoint(400, 300), QRect(380, 240, 40, 40), True, 5.0)
+    assert len(fronts) == 2, "按钮条显示仍走了 raise_()/未非激活置前"
+
+    bubble.hide_bubble()
+    bar.hide_bar()
 
 
 # --------------------------------------------------------------------------- #

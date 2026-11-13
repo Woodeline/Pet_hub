@@ -6,7 +6,7 @@
   :class:`KeystrokeAggregator` / :class:`MoodStateMachine`。
 - 信号接线：``bridge.keystroke → 主线程槽 → aggregator → 状态机 → 模型 → 重绘``。
 - 帧循环 ``_on_frame_tick``：推进状态机与模型、切换帧率、脏区重绘。
-- 窗口位置 / 缩放变更持久化（FR-36/37/38）；开机自启（``winreg``，FR-26）。
+- 窗口位置 / 缩放变更持久化（FR-36/37/38）；开机自启（Windows ``winreg`` / macOS LaunchAgent，FR-26）。
 - 优雅退出 ``shutdown()``：确保监听线程停止、无残留（FR-24）。
 """
 
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
+import plistlib
 import random
 import shutil
 import sys
@@ -28,7 +29,11 @@ from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication, QFileDialog
 
 from desktop_pet import __version__
-from desktop_pet.app.keyboard_listener import KeystrokeBridge, KeyboardListener
+from desktop_pet.app.keyboard_listener import (
+    KeystrokeBridge,
+    KeyboardListener,
+    macos_accessibility_trusted,
+)
 from desktop_pet.core import constants as C
 from desktop_pet.core import motion, paths
 from desktop_pet.core.backup import BackupError, create_backup, restore_backup
@@ -302,6 +307,13 @@ class PetAppController(QObject):
         self._tray.set_reduce_motion_checked(self._cfg.reduce_motion)
         self._load_japanese()
         self._load_word_details()
+        self._tray.set_data_providers(
+            vocab_count=lambda: self._vocab.count(),
+            mastered_count=lambda: self._mastered.count(),
+            today_words=lambda: self._daily_log.new_word_count_for(
+                self._today_str or self._local_date_str()
+            ),
+        )
         self._tray.set_jp_checked(self._cfg.jp_enabled)
         self._tray.set_jp_level_checked(self._cfg.jp_level)
         self._tray.set_jp_duration_checked(self._cfg.jp_bubble_duration_s)
@@ -325,6 +337,7 @@ class PetAppController(QObject):
 
         if self._cfg.listen_enabled:
             self._keyboard.start()
+            self._warn_if_macos_not_trusted()
         else:
             logger.info("配置为不启用键盘监听")
 
@@ -613,11 +626,20 @@ class PetAppController(QObject):
         self._cfg.listen_enabled = bool(checked)
         if checked:
             self._keyboard.start()
+            self._warn_if_macos_not_trusted()
             self._tray.notify(C.APP_DISPLAY_NAME, "键盘监听已恢复")
         else:
             self._keyboard.stop()
             self._tray.notify(C.APP_DISPLAY_NAME, "键盘监听已暂停")
         self._persist()
+
+    def _warn_if_macos_not_trusted(self) -> None:
+        """macOS 缺少「辅助功能」权限时给出托盘引导（Windows / 已授权时静默）。"""
+
+        if macos_accessibility_trusted():
+            return
+        logger.warning("macOS 辅助功能权限未授予，全局键盘监听将收不到按键")
+        self._tray.notify(C.APP_DISPLAY_NAME, C.MACOS_ACCESSIBILITY_HINT)
 
     def _on_bubble_toggled(self, checked: bool) -> None:
         """切换气泡提示开关（FR-38 / PRD Q-01）。"""
@@ -634,6 +656,9 @@ class PetAppController(QObject):
             if self._bubble_text_dialog is None:
                 self._bubble_text_dialog = BubbleTextDialog()
                 self._bubble_text_dialog.applied.connect(self._on_bubble_text_applied)
+                self._bubble_text_dialog.set_accent(
+                    ui_accent_for_theme(self._current_theme)
+                )
             dialog = self._bubble_text_dialog
             dialog.load_state(
                 self._cfg.bubble_text_pack,
@@ -1637,6 +1662,7 @@ class PetAppController(QObject):
                 C.DATA_RESTORE_CONFIRM_TITLE,
                 C.DATA_RESTORE_CONFIRM_TEXT,
                 C.DATA_RESTORE_CONFIRM_BUTTON,
+                accent=ui_accent_for_theme(self._current_theme),
             )
             if not confirmed:
                 self._tray.notify(C.APP_DISPLAY_NAME, C.DATA_NOTIFY_RESTORE_CANCELLED)
@@ -1707,7 +1733,9 @@ class PetAppController(QObject):
         self._update_checking = False
         self._record_update_check()
         try:
-            if is_newer(release.tag_name, __version__):
+            newer = is_newer(release.tag_name, __version__)
+            self._tray.set_update_available(newer)
+            if newer:
                 self._tray.notify(
                     C.APP_DISPLAY_NAME,
                     C.UPDATE_NOTIFY_NEW.format(tag=release.tag_name, url=release.html_url),
@@ -2056,6 +2084,9 @@ class PetAppController(QObject):
                 self._correction_dialog.applied.connect(self._on_correction_applied)
                 self._correction_dialog.undo_requested.connect(self._on_correction_undo)
                 self._correction_dialog.finished.connect(self._on_correction_dialog_closed)
+                self._correction_dialog.set_accent(
+                    ui_accent_for_theme(self._current_theme)
+                )
             self._correction_dialog.open_for(target, self._corrections.items_for(target.id))
             if (
                 self._current_word is not None
@@ -2886,6 +2917,8 @@ class PetAppController(QObject):
                 self._data_window,
                 self._detail_window,
                 self._mastered_window,
+                self._bubble_text_dialog,
+                self._correction_dialog,
             ):
                 if window is not None:
                     window.set_accent(accent)
@@ -2932,7 +2965,7 @@ class PetAppController(QObject):
         self._store.save(self._cfg)
 
     # ------------------------------------------------------------------ #
-    # 内部：开机自启（FR-26，winreg，免管理员，非 Windows 跳过）
+    # 内部：开机自启（FR-26：Windows winreg / macOS LaunchAgent，免管理员）
     # ------------------------------------------------------------------ #
     def _set_autostart(self, enabled: bool) -> None:
         """设置开机自启开关。"""
@@ -2944,11 +2977,18 @@ class PetAppController(QObject):
         self._persist()
 
     def _write_autostart(self, enabled: bool) -> None:
+        """写入 / 移除开机自启项（按平台分流）。"""
+
+        if sys.platform == "win32":
+            self._write_autostart_winreg(enabled)
+        elif sys.platform == "darwin":
+            self._write_autostart_launch_agent(enabled)
+        else:
+            logger.info("当前平台不支持开机自启，跳过设置")
+
+    def _write_autostart_winreg(self, enabled: bool) -> None:
         """写入 / 移除 ``HKCU\\...\\Run`` 启动项（仅 Windows）。"""
 
-        if sys.platform != "win32":
-            logger.info("非 Windows 平台，跳过开机自启设置")
-            return
         try:
             import winreg  # 仅 Windows 可用
 
@@ -2971,21 +3011,63 @@ class PetAppController(QObject):
                         pass
             finally:
                 winreg.CloseKey(key)
-            logger.info("开机自启已%s", "启用" if enabled else "禁用")
+            logger.info("开机自启已%s（注册表）", "启用" if enabled else "禁用")
         except Exception:  # noqa: BLE001 —— 注册表操作失败不崩溃
             logger.exception("设置开机自启失败（已忽略）")
 
-    def _autostart_command(self) -> str:
-        """构建开机自启命令行。"""
+    def _write_autostart_launch_agent(self, enabled: bool) -> None:
+        """写入 / 删除 ``~/Library/LaunchAgents/desktop-pet.plist``（仅 macOS）。
+
+        与 Windows 注册表方案的对应关系：
+
+        - 注册表 ``Run`` 值 → LaunchAgent ``ProgramArguments``；
+        - 登录时运行 → plist ``RunAtLoad = true``；
+        - 删除启动项 → 删除 plist 文件本身。
+
+        使用标准库 ``plistlib`` 序列化，无需任何第三方依赖。
+        """
+
+        label = C.AUTOSTART_LAUNCH_AGENT_LABEL
+        plist_path = Path.home() / "Library" / "LaunchAgents" / f"{label}.plist"
+        try:
+            if enabled:
+                plist_path.parent.mkdir(parents=True, exist_ok=True)
+                payload = {
+                    "Label": label,
+                    "ProgramArguments": self._autostart_program_args(),
+                    "RunAtLoad": True,
+                }
+                with plist_path.open("wb") as handle:
+                    plistlib.dump(payload, handle)
+            else:
+                try:
+                    plist_path.unlink()
+                except FileNotFoundError:
+                    pass
+            logger.info(
+                "开机自启已%s（LaunchAgent: %s）", "启用" if enabled else "禁用", plist_path
+            )
+        except Exception:  # noqa: BLE001 —— plist 读写失败不崩溃
+            logger.exception("设置开机自启失败（已忽略）")
+
+    def _autostart_program_args(self) -> list[str]:
+        """构建开机自启的 argv 列表（两平台通用）。"""
 
         if getattr(sys, "frozen", False):
-            return f'"{sys.executable}"'
-        exe = sys.executable
-        if exe.lower().endswith("python.exe"):
+            return [str(sys.executable)]
+        exe = str(sys.executable)
+        if sys.platform == "win32" and exe.lower().endswith("python.exe"):
+            # Windows 源码运行：优先 pythonw.exe，避免开机自启弹出控制台窗口
             pythonw = exe[: -len("python.exe")] + "pythonw.exe"
             if os.path.exists(pythonw):
                 exe = pythonw
-        return f'"{exe}" -m desktop_pet'
+        return [exe, "-m", "desktop_pet.main"]
+
+    def _autostart_command(self) -> str:
+        """构建 Windows 注册表用的启动命令行（引号包裹，路径含空格不炸）。"""
+
+        argv = self._autostart_program_args()
+        return " ".join(f'"{arg}"' if " " in arg else arg for arg in argv)
 
     # ------------------------------------------------------------------ #
     # 内部：屏幕几何 / 初始位置

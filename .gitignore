@@ -56,3 +56,20 @@ app.log
 /pytest*_out*.txt
 # 词库清洗回滚备份（tools/clean_reading_conflicts.py 生成，仅本地保留）
 /jlpt_words_extra.json.bak-*
+
+# ---- 本地外置词库（用户私有数据 + OpenJLPT/CC BY-SA 衍生数据）----
+# 运行时由托盘「词库管理」导入，或由 scripts/build_openjlpt_bank.py 生成；
+# 该文件无署名元数据，再分发不满足 CC BY-SA 要求，且属于本机学习数据，不入库。
+/jlpt_words_extra.json
+
+# ---- 第三方素材原图（与 /skins/ 同源，版权归原作者，禁止随公开仓库分发）----
+# 仓库与 Release 资产中不含任何第三方版权图片；此处仅作本地素材备份。
+/assets/
+
+# ---- macOS 系统文件 ----
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ---- WorkBuddy 工作区数据（本地笔记/缓存，不随公开仓库分发）----
+/.workbuddy/

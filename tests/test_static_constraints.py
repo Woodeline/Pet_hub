@@ -197,9 +197,15 @@ def test_no_image_assets(project_root: Path) -> None:
         and "__pycache__" not in p.parts
         # skins/ 为用户本地皮肤包（gitignore，含第三方版权素材），不属于仓库素材
         and "skins" not in p.parts
+        # assets/whale_girl/ 为鲸鱼娘皮肤源素材（第三方 MIT 素材，README 已致谢），
+        # 同 skins/ 一样是本地内容而非项目自绘素材
+        and "whale_girl" not in p.parts
         # third_party/ 为用户本地克隆的第三方数据仓库（gitignore，如 OpenJLPT
         # 自带的 logo / social-preview），属于外部仓库内容而非本项目素材
         and "third_party" not in p.parts
+        # build/ 为 gitignore 的构建产物（如 c-ui-kit/build/shots 预览截图），
+        # 不可能入库，不属于「仓库图片素材」；扫描须与 .gitignore 口径一致
+        and "build" not in p.parts
     ]
     assert not offenders, f"发现图片素材（违背零外部素材承诺）：{offenders}"
 

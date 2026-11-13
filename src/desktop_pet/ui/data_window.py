@@ -1,7 +1,8 @@
 """ui.data_window —— 「数据管理」窗口（导出 Anki/CSV、一键备份与还原）。
 
 仅负责展示与发信号，**不做文件 IO / 业务判定**（数据目录、对话框、写入、
-确认流程全部在 ``app/controller``）。布局：四张动作卡（2×2 网格）+ 数据目录展示。
+确认流程全部在 ``app/controller``）。布局：标题带 + 2×2 四按钮 + 底栏；
+说明性文字一律收进悬停提示，版面只留四个按钮。
 """
 
 from __future__ import annotations
@@ -10,10 +11,8 @@ import logging
 
 from PySide6.QtCore import QSize, Signal
 from PySide6.QtWidgets import (
-    QFrame,
     QGridLayout,
     QHBoxLayout,
-    QLabel,
     QPushButton,
     QSizePolicy,
     QVBoxLayout,
@@ -22,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from desktop_pet.core import constants as C
 from desktop_pet.ui import icon_factory, motion_ui, theme
+from desktop_pet.ui.window_chrome import WindowHeader, polish_root
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,7 @@ class DataWindow(QWidget):
         super().__init__(parent)
         self.setWindowTitle(C.DATA_WINDOW_TITLE)
         self.resize(C.DATA_WINDOW_W, C.DATA_WINDOW_H)
+        self.setMinimumSize(420, 220)
         self._reduce_motion: bool = False
 
         self._build_ui()
@@ -48,9 +49,9 @@ class DataWindow(QWidget):
     # 公共 API
     # ------------------------------------------------------------------ #
     def set_data_dir(self, path: str) -> None:
-        """展示数据目录路径（controller 打开窗口时喂入）。"""
+        """记录数据目录（controller 打开窗口时喂入）；仅悬停提示，不占版面。"""
 
-        self._path_label.setText(f"{C.DATA_PATH_LABEL}{path}")
+        self.setToolTip(f"{C.DATA_PATH_LABEL}{path}")
 
     def set_reduce_motion(self, flag: bool) -> None:
         """注入「减少动效」开关（由 controller 在窗口显示前调用）。"""
@@ -76,32 +77,25 @@ class DataWindow(QWidget):
     # UI 构建
     # ------------------------------------------------------------------ #
     def _build_ui(self) -> None:
-        """构建界面元素与布局。"""
+        """构建界面：标题带 + 2×2 四按钮 + 底栏（说明文字一律悬停提示）。"""
 
         theme.apply_theme(self)
         root = QVBoxLayout(self)
-        root.setSpacing(C.SPACING["sm"])
+        polish_root(root)
+        root.addWidget(WindowHeader(C.DATA_WINDOW_TITLE, "", "database"))
 
         grid = QGridLayout()
-        grid.setSpacing(C.SPACING["sm"])
+        grid.setSpacing(C.SPACING["md"])
         cards = (
-            ("anki", C.DATA_BTN_ANKI, C.DATA_ANKI_TIP, self.anki_export_requested),
-            ("csv", C.DATA_BTN_CSV, C.DATA_CSV_TIP, self.csv_export_requested),
-            ("backup", C.DATA_BTN_BACKUP, C.DATA_BACKUP_TIP, self.backup_export_requested),
-            ("restore", C.DATA_BTN_RESTORE, C.DATA_RESTORE_TIP, self.backup_import_requested),
+            ("anki", C.DATA_BTN_ANKI, C.DATA_ANKI_TIP, "check", self.anki_export_requested),
+            ("csv", C.DATA_BTN_CSV, C.DATA_CSV_TIP, "log", self.csv_export_requested),
+            ("backup", C.DATA_BTN_BACKUP, C.DATA_BACKUP_TIP, "database", self.backup_export_requested),
+            ("restore", C.DATA_BTN_RESTORE, C.DATA_RESTORE_TIP, "import", self.backup_import_requested),
         )
-        for index, (key, text, tip, signal) in enumerate(cards):
-            card = self._build_action_card(key, text, tip, signal)
-            grid.addWidget(card, index // 2, index % 2)
+        for index, (key, text, tip, icon, signal) in enumerate(cards):
+            button = self._build_action_button(key, text, tip, icon, signal)
+            grid.addWidget(button, index // 2, index % 2)
         root.addLayout(grid, 1)
-
-        self._path_label = QLabel("", self)
-        self._path_label.setStyleSheet(
-            f"color: {C.SEMANTIC_COLORS['text_faint']};"
-            f" font-size: {C.FONT_SIZE['caption']}px; background: transparent;"
-        )
-        self._path_label.setWordWrap(True)
-        root.addWidget(self._path_label)
 
         # 底栏：关闭（与学习记录窗口底栏结构对齐）
         bottom = QHBoxLayout()
@@ -116,31 +110,20 @@ class DataWindow(QWidget):
         bottom.addWidget(self._btn_close)
         root.addLayout(bottom)
 
-    def _build_action_card(
-        self, key: str, text: str, tip: str, signal: Signal
-    ) -> QFrame:
-        """构建一张动作卡：图标 + 主按钮 + 说明文字。"""
+    def _build_action_button(
+        self, key: str, text: str, tip: str, icon: str, signal: Signal
+    ) -> QPushButton:
+        """构建一个动作按钮：语义图标 + 文案；说明收进悬停提示。"""
 
-        card = QFrame(self)
-        card.setToolTip(tip)
-        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        theme.set_role(card, "card")
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(C.SPACING["md"], C.SPACING["sm"], C.SPACING["md"], C.SPACING["sm"])
-        layout.setSpacing(C.SPACING["xs"])
-
-        button = QPushButton(text, card)
-        button.clicked.connect(signal.emit)
-        layout.addWidget(button)
-
-        desc = QLabel(tip, card)
-        desc.setWordWrap(True)
-        desc.setStyleSheet(
-            f"color: {C.SEMANTIC_COLORS['text_secondary']};"
-            f" font-size: {C.FONT_SIZE['caption']}px; background: transparent;"
+        button = QPushButton(text, self)
+        button.setToolTip(tip)
+        button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        button.setIcon(
+            icon_factory.menu_icon(icon, color=C.SEMANTIC_COLORS["text_secondary"])
         )
-        layout.addWidget(desc)
-        return card
+        button.setIconSize(QSize(C.MENU_ICON_PX, C.MENU_ICON_PX))
+        button.clicked.connect(signal.emit)
+        return button
 
 
 __all__ = ["DataWindow"]

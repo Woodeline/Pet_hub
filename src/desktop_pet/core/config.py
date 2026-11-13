@@ -408,22 +408,23 @@ class ConfigStore:
 
     @staticmethod
     def default_path() -> Path:
-        """返回默认配置文件路径 ``%APPDATA%\\desktop-pet\\config.json``。
+        """返回默认配置文件路径（Windows ``%APPDATA%\\desktop-pet\\config.json``；
+        macOS ``~/Library/Application Support/desktop-pet/config.json``）。
 
-        当 ``APPDATA`` 不可用时回落到用户主目录，保证任何环境下都能返回一个可写路径。
+        平台分流见 :func:`desktop_pet.core.paths.user_data_dir`。
         """
 
-        appdata = os.environ.get("APPDATA")
-        base = Path(appdata) if appdata else Path.home()
-        return base / C.CONFIG_DIR_NAME / C.CONFIG_FILE_NAME
+        from desktop_pet.core.paths import user_data_dir
+
+        return user_data_dir() / C.CONFIG_FILE_NAME
 
     @staticmethod
     def log_path() -> Path:
-        """返回默认日志文件路径 ``%APPDATA%\\desktop-pet\\app.log``。"""
+        """返回默认日志文件路径（与 :meth:`default_path` 同目录）。"""
 
-        appdata = os.environ.get("APPDATA")
-        base = Path(appdata) if appdata else Path.home()
-        return base / C.CONFIG_DIR_NAME / C.LOG_FILE_NAME
+        from desktop_pet.core.paths import user_data_dir
+
+        return user_data_dir() / C.LOG_FILE_NAME
 
     def _read_raw(self) -> dict[str, Any]:
         """读取并解析原始 JSON。

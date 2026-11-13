@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 from desktop_pet.core import constants as C
 from desktop_pet.core.bank_registry import BankInfo
 from desktop_pet.ui import icon_factory, motion_ui, theme
+from desktop_pet.ui.window_chrome import WindowHeader, polish_root
 from desktop_pet.ui.confirm_dialog import ConfirmDialog
 
 logger = logging.getLogger(__name__)
@@ -177,6 +178,7 @@ class BankWindow(QWidget):
     def set_accent(self, accent: str | None) -> None:
         """应用主题点缀色（controller 在窗口创建与换肤时调用）。"""
 
+        self._accent = accent
         theme.apply_theme(self, accent)
 
     def closeEvent(self, event) -> None:  # noqa: N802 —— Qt 命名约定
@@ -220,7 +222,8 @@ class BankWindow(QWidget):
 
         theme.apply_theme(self)
         root = QVBoxLayout(self)
-        root.setSpacing(C.SPACING["sm"])
+        polish_root(root)
+        root.addWidget(WindowHeader(C.BANK_WINDOW_TITLE, "多词库启停与导入", "import"))
 
         # 中部：词库卡滚动区 / 空态
         self._stack_host = QWidget(self)

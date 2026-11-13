@@ -16,11 +16,13 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import fields
+from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QEvent, QPointF, Qt
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
+from PySide6.QtGui import QColor, QImage, QMouseEvent
 
 from desktop_pet.core import constants as C
 from desktop_pet.core import motion
@@ -96,12 +98,47 @@ def _drag(window: PetWindow, from_xy: tuple[int, int], delta: tuple[int, int]) -
     )
 
 
+def _walk_to_target(window: PetWindow) -> None:
+    """按当前「锚点 + 偏移」发起滑行并立刻落位（需要确定性地把窗口挪到目标）。"""
+
+    window._start_walk(window._wander_target())
+    window._walk_started -= C.WANDER_GLIDE_S
+    window._advance_walk()
+
+
+def _make_walk_renderer(root: Path):
+    """构造一个含 ``left`` / ``right`` 槽位的最小皮肤包渲染器。"""
+
+    from desktop_pet.core.skin_pack import load_skin_pack
+    from desktop_pet.ui.skin_renderer import SkinPackRenderer
+
+    action = root / "action"
+    action.mkdir(parents=True)
+    prefixes = ("stand", "drag", "fall", "left", "right")
+    for i, prefix in enumerate(prefixes):
+        img = QImage(64, 80, QImage.Format.Format_ARGB32)
+        img.fill(QColor(20 + i * 30, 40, 60, 255))
+        img.save(str(action / f"{prefix}_0.png"), "PNG")
+    (root / "pet_conf.json").write_text(json.dumps({
+        "width": 64, "height": 80,
+        "default": "stand", "drag": "drag", "fall": "fall",
+        "left": "left", "right": "right",
+    }), encoding="utf-8")
+    (root / "act_conf.json").write_text(json.dumps({
+        name: {"images": name} for name in prefixes
+    }), encoding="utf-8")
+    return SkinPackRenderer(load_skin_pack(root))
+
+
 # --------------------------------------------------------------------------- #
 # 1. 常量字面量 + __all__ 登记
 # --------------------------------------------------------------------------- #
 def test_wander_constants_literal_values() -> None:
-    assert C.WANDER_MAX_PX == 20.0
-    assert C.WANDER_STEP_PX == 6.0
+    # 2026-10-31 放大步幅与活动范围（皮肤包有左右行走帧后 6px/步 像"原地跑"），
+    # 同时锁定 WANDER_GLIDE_S：调这三个数必须连同本锚点一起改。
+    assert C.WANDER_MAX_PX == 64.0
+    assert C.WANDER_STEP_PX == 18.0
+    assert C.WANDER_GLIDE_S == 0.7
     assert C.WANDER_TICK_MS == 3000
     assert C.POSTURE_DURATION_S == 6.0
     assert C.SURPRISE_POSTURE_KINDS == frozenset({"LOAF", "LIE_SIDE"})
@@ -109,7 +146,7 @@ def test_wander_constants_literal_values() -> None:
 
 def test_wander_constants_registered_in_all() -> None:
     for name in (
-        "WANDER_MAX_PX", "WANDER_STEP_PX", "WANDER_TICK_MS",
+        "WANDER_MAX_PX", "WANDER_STEP_PX", "WANDER_TICK_MS", "WANDER_GLIDE_S",
         "POSTURE_DURATION_S", "SURPRISE_POSTURE_KINDS",
     ):
         assert name in C.__all__, f"{name} 未登记进 constants.__all__"
@@ -149,16 +186,19 @@ def test_wander_step_within_bound_is_exact_sum() -> None:
 def test_wander_keeps_offset_within_literal_bound(qtbot) -> None:
     window = _make_quiet_window(qtbot)
     window.set_anchor(300, 250)
-    # 从一个已贴近边界的状态出发
-    window._wander_offset_x = 20.0
-    window._wander_offset_y = -20.0
+    # 从一个已贴近边界的状态出发（字面量 ±64）
+    window._wander_offset_x = 64.0
+    window._wander_offset_y = -64.0
     ran = False
     for _ in range(40):
         window._on_wander_tick()
+        # 滑行未结束时下一拍会被跳过；把起点拨回，保证每拍都能推进。
+        window._walk_started -= C.WANDER_GLIDE_S
+        window._on_frame()
         ox, oy = window.wander_offset()
-        assert -20.0 <= ox <= 20.0
-        assert -20.0 <= oy <= 20.0
-        if (ox, oy) != (20.0, -20.0):
+        assert -64.0 <= ox <= 64.0
+        assert -64.0 <= oy <= 64.0
+        if (ox, oy) != (64.0, -64.0):
             ran = True
     assert ran, "游走未实际执行（可见性门控误挡？）"
 
@@ -181,6 +221,10 @@ def test_wander_move_does_not_emit_position_changed(qtbot) -> None:
     positions: set[tuple[int, int]] = set()
     for _ in range(80):
         window._on_wander_tick()
+        # 游走改成缓动滑行后，位移在帧循环里推进；把起点拨回一个完整滑行时长，
+        # 让每拍都能在下一帧落位（否则 0.8s 内窗口几乎不动，本用例会误判为「没走」）。
+        window._walk_started -= C.WANDER_GLIDE_S
+        window._on_frame()
         positions.add((window.x(), window.y()))
     assert len(positions) > 1, "游走未实际移动窗口（门控误挡？）"
     assert received == [], f"游走不应 emit position_changed：{received}"
@@ -225,7 +269,7 @@ def test_persist_saves_anchor_not_window_pos(qtbot, tmp_path) -> None:
         controller._window.set_anchor(300, 250)
         controller._window._wander_offset_x = 15.0
         controller._window._wander_offset_y = 10.0
-        controller._window._apply_wander_position()
+        _walk_to_target(controller._window)
         assert (controller._window.x(), controller._window.y()) != (300, 250)
 
         controller._persist()
@@ -280,9 +324,9 @@ def test_wander_position_is_clamped_to_visible_screen(qtbot) -> None:
     max_y = py + ph - window.height()
     window.set_anchor(max_x, max_y)
     # 偏移钉在 +max（向右下外推）→ 若不经 clamp 必定越界
-    window._wander_offset_x = 20.0
-    window._wander_offset_y = 20.0
-    window._apply_wander_position()
+    window._wander_offset_x = 64.0
+    window._wander_offset_y = 64.0
+    _walk_to_target(window)
     gx, gy = window.x(), window.y()
     assert px <= gx <= max_x
     assert py <= gy <= max_y
@@ -502,3 +546,83 @@ def test_posture_suppressed_when_reduce_motion(monkeypatch: pytest.MonkeyPatch) 
     model._surprise_timer = 0.0
     model.update(0.033, 1.0)
     assert model._surprise_kind is None
+
+
+# --------------------------------------------------------------------------- #
+# 8. 行走滑行 + left / right 槽位（Codex 图集左右跑动行）
+# --------------------------------------------------------------------------- #
+def test_walk_glide_finishes_at_target_and_clears_state(qtbot) -> None:
+    """滑行到目标后必须落位并清态：留在行走槽位会让宠物一直"原地跑"。"""
+
+    window = _make_quiet_window(qtbot)
+    window.set_anchor(300, 250)
+    window._start_walk(QPoint(320, 250))
+    assert window._walk_target == QPoint(320, 250)
+
+    # 未到时长 → 仍在途中（不落位、不清态）
+    window._advance_walk()
+    assert window._walk_target is not None
+    assert 300 <= window.x() < 320
+
+    window._walk_started -= C.WANDER_GLIDE_S
+    window._advance_walk()
+    assert window._walk_target is None
+    assert (window.x(), window.y()) == (320, 250)
+
+
+def test_walk_facing_follows_horizontal_direction(qtbot) -> None:
+    window = _make_quiet_window(qtbot)
+    window.set_anchor(300, 250)
+
+    window._start_walk(QPoint(320, 250))
+    assert window._walk_facing == 1
+    window._start_walk(QPoint(280, 250))
+    assert window._walk_facing == -1
+    # 纯纵向移动不清除上一次水平朝向
+    window._start_walk(QPoint(280, 230))
+    assert window._walk_facing == -1
+
+
+def test_walk_cancelled_on_mouse_press(qtbot) -> None:
+    """按下即接管位置：进行中的滑行必须停下，否则会和拖拽抢窗口。"""
+
+    window = _make_quiet_window(qtbot)
+    window.set_anchor(300, 250)
+    window._start_walk(QPoint(320, 250))
+
+    window.mousePressEvent(_mouse_event(QEvent.Type.MouseButtonPress, (0, 0), (300, 250)))
+    assert window._walk_target is None
+
+
+def test_wander_tick_starts_glide_instead_of_teleport(qtbot) -> None:
+    """游走节拍只发起滑行，不在节拍内瞬移（瞬移会让行走帧来不及播）。"""
+
+    window = _make_quiet_window(qtbot)
+    window.set_anchor(300, 250)
+    before = window.pos()
+    window._on_wander_tick()
+    assert window._walk_target is not None
+    assert window.pos() == before, "节拍内不应瞬移"
+
+
+def test_current_slot_uses_left_right_while_walking(qtbot, tmp_path: Path) -> None:
+    window = _make_quiet_window(qtbot)
+    window.set_anchor(300, 250)
+    window.set_skin_renderer(_make_walk_renderer(tmp_path / "walk_pack"))
+
+    window._start_walk(QPoint(320, 250))
+    assert window._current_skin_slot() == "right"
+    window._start_walk(QPoint(280, 250))
+    assert window._current_skin_slot() == "left"
+
+    window._cancel_walk()
+    assert window._current_skin_slot() == "default"
+
+
+def test_current_slot_falls_back_to_default_without_walk_actions(qtbot) -> None:
+    """矢量渲染（无皮肤包）时行走中仍走 default，不因新分支画出空白。"""
+
+    window = _make_quiet_window(qtbot)
+    window._start_walk(QPoint(320, 250))
+    assert window._current_skin_slot() == "default"
+

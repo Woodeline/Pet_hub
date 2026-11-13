@@ -40,7 +40,7 @@ jobs:
       - name: Run tests (offscreen)
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m pytest tests/ -q -p no:cacheprovider
+        run: python -m pytest tests/ -p no:cacheprovider
 
   build:
     name: PyInstaller smoke (Windows)

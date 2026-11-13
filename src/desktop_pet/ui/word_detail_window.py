@@ -30,10 +30,10 @@ from desktop_pet.core.tts_client import spoken_text
 from desktop_pet.core.vocabulary import VocabEntry
 from desktop_pet.core.word_detail import WordDetail
 from desktop_pet.ui import icon_factory, motion_ui, theme
+from desktop_pet.ui.window_chrome import polish_root
 from desktop_pet.ui.speaker_button import (
     PronunciationController,
     STATE_ERROR,
-    STATE_LOADING,
     STATE_NORMAL,
     SpeakerButton,
 )
@@ -280,6 +280,7 @@ class WordDetailWindow(QWidget):
         theme.apply_theme(self)
 
         root = QVBoxLayout(self)
+        polish_root(root)
 
         # 头部：大号单词 + 等级胶囊 chip（右上）
         header = QHBoxLayout()

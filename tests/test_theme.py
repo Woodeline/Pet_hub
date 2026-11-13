@@ -283,12 +283,21 @@ def test_build_menu_qss_transparent_window_with_band_padding() -> None:
 
 
 def test_build_menu_qss_item_and_separator_styles() -> None:
-    """条目（常态/悬停/禁用）与分隔线选择器齐备。"""
+    """条目（常态/悬停/禁用）与分隔线选择器齐备。
+
+    选中态背景必须为 ``transparent``：``QMenu::item`` 的 ``border-radius`` 被
+    原生样式忽略，选中高亮的圆角/内缩由 ``ShadowMenu`` 自绘（见
+    ``test_menu_shadow``），QSS 若再铺一层底色会盖成贴边方角。
+    """
 
     blocks = _qss_blocks(theme.build_menu_qss())
     for selector in ("QMenu::item", "QMenu::item:selected", "QMenu::item:disabled", "QMenu::separator"):
         assert selector in blocks, f"缺少选择器：{selector}"
-    assert C.SEMANTIC_COLORS["surface_alt"] in blocks["QMenu::item:selected"]
+    # 文字色必须显式来自 token：深色系统主题下 QMenu 调色板文字为白色，
+    # 面板却是自绘白底，未指定就会白底白字不可见。
+    assert C.SEMANTIC_COLORS["text_primary"] in blocks["QMenu::item"], "菜单项未显式指定文字色"
+    assert C.SEMANTIC_COLORS["text_primary"] in blocks["QMenu::item:selected"], "选中态未显式指定文字色"
+    assert "transparent" in blocks["QMenu::item:selected"], "选中态由 ShadowMenu 自绘，QSS 不应再铺底色"
     assert C.SEMANTIC_COLORS["text_faint"] in blocks["QMenu::item:disabled"]
 
 

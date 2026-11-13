@@ -186,6 +186,12 @@ QLabel[role="chip"] {{
 QLabel[role="caption"] {{
     color: {c['text_secondary']};
     font-size: {fs['caption']}px;
+}}
+QLabel[role="window_title"] {{
+    background: transparent;
+    color: {c['text_primary']};
+    font-size: {C.WINDOW_TITLE_PX}px;
+    font-weight: bold;
 }}"""
     )
 
@@ -391,14 +397,22 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
 
 
 def build_menu_qss() -> str:
-    """右键菜单（托盘菜单 + 子菜单）的 Win11 风格 QSS（token 拼装，可无头单测）。
+    """右键菜单（托盘菜单 + 子菜单）的精致化 QSS（token 拼装，可无头单测）。
 
     配合 :class:`ui.menu_shadow.ShadowMenu` 使用：面板（白色圆角矩形 + 1px 描边）
     由 ShadowMenu 自绘，本 QSS 只负责把**窗口**设为透明并留出阴影留白
     （``padding = MENU_SHADOW_BAND_PX + 面板内边距``），再定义条目/分隔线样式。
 
+    行高：上下内边距保持 ``SPACING["xs"]``（4px）紧凑档，行高由 16px 行图标与正文
+    自然撑出（约 29px，较旧版无图标的 ~24px 更挺括但不臃肿——顶层菜单较长，行高
+    过大会在屏幕中部右键时触发滚动）。``min-height`` 取 ``MENU_ROW_MIN_H_PX`` 把
+    不挂图标的勾选行统一到与图标行相同行高，避免行高参差。图标列由原生样式按
+    图标尺寸自动预留。
+
     刻意**不**声明 ``QMenu::indicator`` / ``::right-arrow``：勾选标记与子菜单箭头
     交由底层原生样式绘制，避免样式表接管后勾选消失（托盘的开关/单选项依赖它）。
+    条目选中态背景同样留空：``::item`` 的 ``border-radius`` 会被原生样式忽略
+    （高亮呈贴边方角），圆角高亮由 :class:`ui.menu_shadow.ShadowMenu` 自绘。
     """
 
     c = C.SEMANTIC_COLORS
@@ -406,18 +420,23 @@ def build_menu_qss() -> str:
     r = C.RADIUS
     inset = C.MENU_SHADOW_BAND_PX + sp["xs"]
 
+    # 文字色必须显式给出：深色系统主题下 QMenu 调色板文字为白色，
+    # 而面板固定自绘为白色 —— 不指定则菜单项文字白底白字不可见。
     return f"""
 QMenu {{
     background: transparent;
     border: none;
     padding: {inset}px;
+    color: {c['text_primary']};
 }}
 QMenu::item {{
-    padding: {sp['sm']}px {sp['xl']}px {sp['sm']}px {sp['md']}px;
-    border-radius: {r['sm']}px;
+    color: {c['text_primary']};
+    min-height: {C.MENU_ROW_MIN_H_PX}px;
+    padding: {sp['xs']}px {sp['lg']}px {sp['xs']}px {sp['sm']}px;
 }}
 QMenu::item:selected {{
-    background: {c['surface_alt']};
+    background: transparent;
+    color: {c['text_primary']};
 }}
 QMenu::item:disabled {{
     color: {c['text_faint']};
@@ -425,10 +444,10 @@ QMenu::item:disabled {{
 QMenu::separator {{
     height: 1px;
     background: {c['border']};
-    margin-left: {sp['md']}px;
-    margin-right: {sp['md']}px;
-    margin-top: {sp['xs']}px;
-    margin-bottom: {sp['xs']}px;
+    margin-left: {sp['sm']}px;
+    margin-right: {sp['sm']}px;
+    margin-top: 2px;
+    margin-bottom: 2px;
 }}"""
 
 

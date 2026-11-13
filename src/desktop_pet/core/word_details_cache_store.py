@@ -80,14 +80,11 @@ class WordDetailsCacheStore:
 
     @staticmethod
     def default_path() -> Path:
-        """返回默认缓存路径 ``%APPDATA%\\desktop-pet\\word_details_cache.json``。
+        """返回默认缓存路径（与 :func:`desktop_pet.core.paths.user_data_dir` 同目录）。"""
 
-        ``APPDATA`` 不可用时回落到用户主目录，保证任何环境下都返回一个可写路径。
-        """
+        from desktop_pet.core.paths import user_data_dir
 
-        appdata = os.environ.get("APPDATA")
-        base = Path(appdata) if appdata else Path.home()
-        return base / C.CONFIG_DIR_NAME / C.WORD_DETAILS_CACHE_FILENAME
+        return user_data_dir() / C.WORD_DETAILS_CACHE_FILENAME
 
     # ------------------------------------------------------------------ #
     # 读

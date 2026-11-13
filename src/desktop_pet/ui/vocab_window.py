@@ -32,6 +32,7 @@ from desktop_pet.core import constants as C
 from desktop_pet.core.tts_client import spoken_text
 from desktop_pet.core.vocab_store import VocabItem
 from desktop_pet.ui import icon_factory, motion_ui, theme
+from desktop_pet.ui.window_chrome import WindowHeader, polish_root
 from desktop_pet.ui.confirm_dialog import ConfirmDialog
 from desktop_pet.ui.speaker_button import PronunciationController, SpeakerButton
 
@@ -210,6 +211,7 @@ class VocabWindow(QWidget):
     def set_accent(self, accent: str | None) -> None:
         """应用主题点缀色（controller 在窗口创建与换肤时调用；``None`` 回落中性）。"""
 
+        self._accent = accent
         theme.apply_theme(self, accent)
 
     def closeEvent(self, event) -> None:  # noqa: N802 —— Qt 命名约定
@@ -232,6 +234,10 @@ class VocabWindow(QWidget):
         theme.apply_theme(self)
 
         root = QVBoxLayout(self)
+        polish_root(root)
+        root.addWidget(WindowHeader(
+            C.JP_VOCAB_WINDOW_TITLE, "收藏的单词 · 点击卡片查看详情", "bookmark"
+        ))
 
         # 顶部：等级文字 Tab（单选）+ 操作按钮
         top = QHBoxLayout()

@@ -2,8 +2,11 @@
 
 窗口标志：``FramelessWindowHint | WindowStaysOnTopHint | Qt.Tool``
 + ``WA_TranslucentBackground``（FR-15/16/17）。
-置顶为**运行期保底**：低频定时（``TOPMOST_REASSERT_MS``）重申标志并 ``raise_()``，
-防止其他同样置顶的窗口后来居上把宠物盖住。
+置顶为**运行期保底**：低频定时（``TOPMOST_REASSERT_MS``）重申置顶层。
+macOS 分支走原生 NSWindow API（见 :mod:`desktop_pet.ui.macos_window`）：
+``setLevel:`` + ``orderFrontRegardless``，不经 ``setFlag``（可能重建原生窗口
+导致隐藏→重现闪烁）也不用 ``raise_()``（对失活应用有激活抢焦风险）；
+其他平台维持「补挂标志 + raise_()」不变（Windows 行为零变化）。
 
 手势区分（架构 §1.3）：
 - 位移 < ``DRAG_THRESHOLD_PX``(5) 且松手 → 判定为**点击**（FR-27）。
@@ -36,6 +39,8 @@ from desktop_pet.core import constants as C
 from desktop_pet.core import motion
 from desktop_pet.core.constants import Gesture
 from desktop_pet.core.pet_model import PetModel
+from desktop_pet.ui import macos_window
+from desktop_pet.ui.macos_window import IS_MACOS
 from desktop_pet.ui.pet_renderer import PetRenderer
 from desktop_pet.ui.skin_renderer import SkinPackRenderer
 
@@ -116,6 +121,11 @@ class PetWindow(QWidget):
         self._wander_timer = QTimer(self)
         self._wander_timer.setInterval(C.WANDER_TICK_MS)
         self._wander_timer.timeout.connect(self._on_wander_tick)
+        # 行走滑行：None = 不在移动。滑行期间按朝向选皮肤包 left/right 槽位。
+        self._walk_from: QPoint = QPoint(0, 0)
+        self._walk_target: QPoint | None = None
+        self._walk_started: float = 0.0
+        self._walk_facing: int = 1     # +1 朝右 / -1 朝左
 
         # 右键菜单（由 Controller 注入复用托盘菜单）
         self._context_menu: QMenu | None = None
@@ -191,6 +201,7 @@ class PetWindow(QWidget):
 
         self._timer.stop()
         self.stop_wander()
+        self._cancel_walk()
         self._topmost_timer.stop()
 
     def set_anchor(self, x: int, y: int) -> None:
@@ -204,6 +215,7 @@ class PetWindow(QWidget):
         self._wander_anchor = QPoint(int(x), int(y))
         self._wander_offset_x = 0.0
         self._wander_offset_y = 0.0
+        self._cancel_walk()
         self.move(int(x), int(y))
 
     def anchor(self) -> tuple[int, int]:
@@ -316,9 +328,9 @@ class PetWindow(QWidget):
             )
 
     def _current_skin_slot(self) -> str:
-        """把当前宠物状态映射为皮肤包槽位（default/drag/fall/patpat）。
+        """把当前宠物状态映射为皮肤包槽位（default/drag/patpat/left/right）。
 
-        优先级：拖拽 > 悬停抚摸 > 默认。映射出的槽位若皮肤包未定义动作，
+        优先级：拖拽 > 悬停抚摸 > 行走 > 默认。映射出的槽位若皮肤包未定义动作，
         由 :class:`SkinPackRenderer` 内部回落（``action_for`` 返回 None → 不画，
         调用方再回落 ``default``）。
         """
@@ -329,11 +341,24 @@ class PetWindow(QWidget):
         if self._hover_active:
             if self._skin_renderer is not None and self._skin_renderer.has_action("patpat"):
                 return "patpat"
+        walk = self._walk_slot()
+        if walk:
+            return walk
         return "default"
+
+    def _walk_slot(self) -> str:
+        """行走中的朝向槽位（``left`` / ``right``）；未在行走或包内无该动作时返回空串。"""
+
+        if self._walk_target is None or self._skin_renderer is None:
+            return ""
+        slot = "right" if self._walk_facing > 0 else "left"
+        return slot if self._skin_renderer.has_action(slot) else ""
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         """按下：记录拖拽原点（左键）。"""
 
         if event.button() == Qt.MouseButton.LeftButton:
+            # 用户按下即接管位置：进行中的滑行必须立刻停下，否则会和拖拽抢窗口。
+            self._cancel_walk()
             self._press_pos = event.globalPosition().toPoint()
             self._drag_origin = self.pos()
             self._dragging = False
@@ -433,6 +458,29 @@ class PetWindow(QWidget):
                 pass  # 已断开 / 从未连接 → 目标状态一致
         super().closeEvent(event)
 
+    def showEvent(self, event) -> None:  # noqa: N802
+        """显示后修正 macOS NSPanel 默认行为（失活不隐藏 / 永不抢 key）。
+
+        **延迟一拍**：实测 Qt 在 showEvent 返回后、show 管线收尾时会重置
+        NSPanel 属性（重新 setHidesOnDeactivate:YES），同步调用会被覆盖；
+        故用 ``singleShot(0)`` 排到事件循环下一拍（show 完成后）再挂。
+        另有置顶重申定时器每 ``TOPMOST_REASSERT_MS`` 幂等重挂自愈。
+        非 macOS 平台是 no-op，Windows 行为零变化。
+        """
+
+        super().showEvent(event)
+        if IS_MACOS:
+            QTimer.singleShot(0, self._apply_macos_panel_behavior)
+
+    def _apply_macos_panel_behavior(self) -> None:
+        """把宿主 NSPanel 配置为非激活面板（见 :mod:`desktop_pet.ui.macos_window`）。"""
+
+        try:
+            macos_window.make_nonactivating_panel(int(self.winId()))
+            macos_window.ensure_floating_level(int(self.winId()))
+        except Exception:  # noqa: BLE001 —— winId 异常不影响显示流程
+            logger.debug("macOS 面板修正调用失败（已忽略）", exc_info=True)
+
     def has_active_timers(self) -> bool:
         """是否存在仍活跃的窗口级定时器（只读探针）。
 
@@ -459,13 +507,36 @@ class PetWindow(QWidget):
         self.setFixedSize(QSize(width, height))
 
     def _reassert_topmost(self) -> None:
-        """一次置顶重申：补挂丢失的置顶标志并把窗口拉回最前（FR-16 运行期保底）。
+        """一次置顶重申：把窗口拉回最前（FR-16 运行期保底）。
 
-        ``raise_()`` 不激活窗口（无焦点抢夺），对用户操作零干扰；标志经窗口句柄
-        补挂（``setFlag``）不会触发 Qt 重建原生窗口（``setWindowFlags`` 会隐藏窗口）。
+        **macOS 分支**（根因修复，见 :mod:`desktop_pet.ui.macos_window`）：
+        原有实现 ``setFlag`` + ``raise_()`` 在 macOS 上有两个缺陷 ——
+
+        1. ``handle.setFlag(...)`` 可能触发 Qt 重建原生 NSWindow：窗口销毁后
+           重建，表现为宠物闪烁重现；重建的窗口还可能成为 key window 抢焦点。
+        2. ``raise_()``（``orderFront:``）对**失活的应用**存在激活风险 ——
+           用户在其他应用里工作时，定时器每 4 秒把 macOS 焦点抢回宠物进程。
+
+        修复后 macOS 走原生 API：``setLevel:``（保底置顶层，不重建窗口）+
+        ``orderFrontRegardless``（调序但绝不激活应用）。
+
+        **其他平台**维持原实现：``setFlag`` 补挂丢失的置顶标志 + ``raise_()``
+        （Windows 上不激活窗口、不重建原生窗口，行为零变化）。
         """
 
         if not self.isVisible():
+            return
+        if IS_MACOS:
+            # 原生分支：幂等重挂面板行为（自愈 Qt 可能的属性重置）+ 保底置顶层
+            # + 调序不激活。不走 setFlag（可能重建原生窗口→闪烁）/raise_（可能抢焦）。
+            try:
+                ptr = int(self.winId())
+            except Exception:  # noqa: BLE001 —— winId 异常时跳过本轮重申
+                logger.debug("获取 winId 失败（已忽略）", exc_info=True)
+                return
+            macos_window.make_nonactivating_panel(ptr)
+            macos_window.ensure_floating_level(ptr)
+            macos_window.order_front_no_activate(ptr)
             return
         handle = self.windowHandle()
         if handle is not None and not bool(
@@ -500,6 +571,8 @@ class PetWindow(QWidget):
         try:
             if self._dragging or self._hover_active or not self.isVisible():
                 return
+            if self._walk_target is not None:
+                return
             if not self._model.is_quiet_for_wander():
                 return
             dx = random.uniform(-C.WANDER_STEP_PX, C.WANDER_STEP_PX)
@@ -508,16 +581,12 @@ class PetWindow(QWidget):
             self._wander_offset_x, self._wander_offset_y = motion.wander_step(
                 self._wander_offset_x, self._wander_offset_y, dx, dy, C.WANDER_MAX_PX
             )
-            self._apply_wander_position()
+            self._start_walk(self._wander_target())
         except Exception:  # noqa: BLE001 —— 游走失败不影响动画
             logger.debug("空闲游走采样失败（已忽略）", exc_info=True)
 
-    def _apply_wander_position(self) -> None:
-        """把「锚点 + 瞬态偏移」落到窗口位置，并经 :func:`motion.clamp_to_screens` 钳制。
-
-        硬约束：本方法**绝不** emit ``position_changed`` —— 该信号只服务用户拖拽 →
-        持久化；游走位置是瞬态的，不得污染锚点（v1.1 §2.3 G2 / 风险 6）。
-        """
+    def _wander_target(self) -> QPoint:
+        """「锚点 + 瞬态偏移」经 :func:`motion.clamp_to_screens` 钳制后的目标位置。"""
 
         target_x = self._wander_anchor.x() + int(round(self._wander_offset_x))
         target_y = self._wander_anchor.y() + int(round(self._wander_offset_y))
@@ -529,7 +598,42 @@ class PetWindow(QWidget):
             self._screen_geometries(),
             self._primary_geometry(),
         )
-        self.move(cx, cy)
+        return QPoint(cx, cy)
+
+    def _start_walk(self, target: QPoint) -> None:
+        """从当前窗口位置向 ``target`` 缓动滑行（``WANDER_GLIDE_S``）。"""
+
+        origin = self.pos()
+        if target == origin:
+            return
+        dx = target.x() - origin.x()
+        if dx:
+            self._walk_facing = 1 if dx > 0 else -1
+        self._walk_from = QPoint(origin)
+        self._walk_target = QPoint(target)
+        self._walk_started = time.monotonic()
+
+    def _advance_walk(self) -> None:
+        """按帧推进滑行；到达目标后清态（不清态会让皮肤一直停在行走槽位）。"""
+
+        target = self._walk_target
+        if target is None:
+            return
+        progress = (time.monotonic() - self._walk_started) / C.WANDER_GLIDE_S
+        if progress >= 1.0:
+            self.move(target)
+            self._walk_target = None
+            return
+        eased = motion.ease_in_out(progress)
+        self.move(
+            int(round(self._walk_from.x() + (target.x() - self._walk_from.x()) * eased)),
+            int(round(self._walk_from.y() + (target.y() - self._walk_from.y()) * eased)),
+        )
+
+    def _cancel_walk(self) -> None:
+        """立即结束滑行（拖拽开始 / 重锚 / 停止动画时调用）。"""
+
+        self._walk_target = None
 
     @staticmethod
     def _screen_geometries() -> list[tuple[int, int, int, int]]:
@@ -636,6 +740,7 @@ class PetWindow(QWidget):
 
         if not self.isVisible():
             return
+        self._advance_walk()
         self._feed_spring_impulse()
         self._update_tail_evade()
         self._update_gaze()

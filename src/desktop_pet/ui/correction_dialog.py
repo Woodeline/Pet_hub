@@ -239,6 +239,11 @@ class CorrectionDialog(QDialog):
     # ------------------------------------------------------------------ #
     # 公共 API
     # ------------------------------------------------------------------ #
+    def set_accent(self, accent: str | None) -> None:
+        """应用主题点缀色（controller 在创建与换肤时调用）。"""
+
+        theme.apply_theme(self, accent)
+
     def open_for(self, entry: VocabEntry, corrections: list[CorrectionItem]) -> None:
         """按词条回填 UI（每次打开由 controller 调用，拿到最新值）。
 

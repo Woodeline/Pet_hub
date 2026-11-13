@@ -40,13 +40,13 @@ def test_buttons_emit_signals(qtbot) -> None:
         restore_button.click()
 
 
-def test_set_data_dir_updates_label(qtbot) -> None:
-    """数据目录标签随 set_data_dir 更新。"""
+def test_set_data_dir_updates_tooltip(qtbot) -> None:
+    """数据目录收进窗口悬停提示（版面只留四按钮，不展示说明文字）。"""
 
     window = DataWindow()
     qtbot.addWidget(window)
     window.set_data_dir(r"C:\Users\me\AppData\Roaming\desktop-pet")
-    assert "desktop-pet" in window._path_label.text()
+    assert "desktop-pet" in window.toolTip()
 
 
 def test_paint_smoke(qtbot) -> None:

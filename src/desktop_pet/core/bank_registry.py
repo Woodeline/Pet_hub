@@ -75,19 +75,19 @@ class BankRegistryStore:
 
     @staticmethod
     def default_path() -> Path:
-        """返回默认路径 ``%APPDATA%\\desktop-pet\\bank_registry.json``。"""
+        """返回默认路径（与 :func:`desktop_pet.core.paths.user_data_dir` 同目录）。"""
 
-        appdata = os.environ.get("APPDATA")
-        base = Path(appdata) if appdata else Path.home()
-        return base / C.CONFIG_DIR_NAME / C.BANK_REGISTRY_FILENAME
+        from desktop_pet.core.paths import user_data_dir
+
+        return user_data_dir() / C.BANK_REGISTRY_FILENAME
 
     @staticmethod
     def banks_dir() -> Path:
-        """返回词库文件目录 ``%APPDATA%\\desktop-pet\\banks\\``（意图路径，不抛）。"""
+        """返回词库文件目录（``banks/``，位于 :func:`user_data_dir` 之下；意图路径，不抛）。"""
 
-        appdata = os.environ.get("APPDATA")
-        base = Path(appdata) if appdata else Path.home()
-        return base / C.CONFIG_DIR_NAME / C.BANKS_DIR_NAME
+        from desktop_pet.core.paths import user_data_dir
+
+        return user_data_dir() / C.BANKS_DIR_NAME
 
     # ------------------------------------------------------------------ #
     # 读

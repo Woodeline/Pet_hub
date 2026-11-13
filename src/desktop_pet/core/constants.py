@@ -336,12 +336,46 @@ THEME_ALLOWED: Final[frozenset[str]] = frozenset(THEMES) | {AUTO_THEME}
 #: 托盘「主题」子菜单标题。
 TRAY_MENU_THEME: Final[str] = "主题"
 
-# —— 右键菜单 Win11 风格（ShadowMenu：窗口预留留白，自绘柔和阴影 + 圆角面板，
-#    替代 Windows 上过时的原生方块粗阴影）——
-MENU_SHADOW_BAND_PX: Final[int] = 14   # 窗口边缘 → 面板之间的阴影留白（容纳模糊尾部）
-MENU_SHADOW_BLUR_PX: Final[int] = 16   # 阴影高斯模糊半径：小而收拢
-MENU_SHADOW_ALPHA: Final[int] = 50     # 阴影不透明度（0-255，一圈淡晕）
-MENU_SHADOW_OFFSET_Y: Final[int] = 0   # 垂直下沉（0 = 四周均匀淡晕，Win11 系统菜单观感）
+# —— 右键菜单精致化（ShadowMenu：窗口预留留白，自绘柔和阴影 + 圆角面板 + 富条目，
+#    替代 Windows 上过时的原生方块粗阴影）。阴影取**轻档**（预览参数 shadow≈20）：
+#    低不透明度 + 较大模糊 + 轻微下沉，浮层可感但不抢壁纸。留白 BAND 同步容纳模糊
+#    尾部，避免软阴影被窗口边缘硬裁。
+#    几何自洽：margin = BLUR//2 + 2 = 9；BAND(12) ≥ margin + OFFSET_Y(9+3=12)，
+#    故四周阴影尾部均落在窗口内。——
+MENU_SHADOW_BAND_PX: Final[int] = 12   # 窗口边缘 → 面板之间的阴影留白（容纳模糊尾部）
+MENU_SHADOW_BLUR_PX: Final[int] = 14   # 阴影高斯模糊半径：柔和收拢（轻档双层观感的单层近似）
+MENU_SHADOW_ALPHA: Final[int] = 30     # 阴影不透明度（0-255，轻档：比旧 42 更淡）
+MENU_SHADOW_OFFSET_Y: Final[int] = 3   # 垂直下沉（轻微投影感，光源在上方）
+
+#: 菜单面板圆角半径（px）：独立标量（不动 RADIUS 字典键集合红线）。
+#: 比通用面板档 RADIUS["md"]=8 略大，菜单浮层观感更柔。阴影形状与之贴合。
+MENU_PANEL_RADIUS_PX: Final[int] = 10
+#: 菜单行图标边长（px）：与窗口按钮图标同档（C.SPACING["lg"]=16），线性描边风格。
+MENU_ICON_PX: Final[int] = 16
+#: 菜单条目悬停高亮的横向内缩（px）：高亮不贴面板边，左右各留一道呼吸缝（预览 margin 6）。
+MENU_ITEM_INSET_PX: Final[int] = 6
+#: 菜单条目内容最小高度（px）：QSS min-height 兜底（富条目行高另由 MENU_ROW_H_PX 驱动）。
+MENU_ROW_MIN_H_PX: Final[int] = 21
+#: 富条目舒适行高（px）：预览参数 rowH=30，替代旧 ≈24/29px；QWidgetAction 行 widget 取此高。
+MENU_ROW_H_PX: Final[int] = 30
+#: 条目悬停高亮圆角（px）：预览参数 itemR=5（独立标量，不动 RADIUS 字典）。
+MENU_ITEM_RADIUS_PX: Final[int] = 5
+#: 菜单正文字号（px，浮点）：预览参数 font=12.5。
+MENU_FONT_PX: Final[float] = 12.5
+#: 主面板固定宽（px）：预览 width=264；头部 widget 取此宽撑开菜单最小宽度。
+MENU_WIDTH_PX: Final[int] = 264
+#: 头部身份区高度（px）：头像 + 名称 + 版本 + 状态行（进度条另计）。
+MENU_HEADER_H_PX: Final[int] = 56
+#: 分组小标题行高（px）：互动 / 学习 / 外观 / 偏好。
+MENU_GROUP_LABEL_H_PX: Final[int] = 20
+#: 迷你开关宽 / 高（px）：开关行右置，ON 取当前主题点缀色。
+MENU_SWITCH_W_PX: Final[int] = 28
+MENU_SWITCH_H_PX: Final[int] = 16
+#: 菜单入场动效时长（ms）：预览参数 motionMs=100；reduce_motion 时直通 0。
+MENU_MOTION_MS: Final[int] = 100
+
+#: 业务窗口标题带字号（px）——介于菜单头部 13 与窗口 title 16 之间的独立标量。
+WINDOW_TITLE_PX: Final[int] = 14
 
 #: 主题重估间隔（毫秒）：每日一次（配合 app 层跨日检测，跨月零点自动换肤）。
 THEME_RECHECK_MS: Final[int] = 24 * 60 * 60 * 1000
@@ -492,6 +526,13 @@ DEFAULT_MARGIN_PX: Final[int] = 40  # 默认位置距主屏右下角内缩（A-0
 
 AUTOSTART_REG_PATH: Final[str] = r"Software\Microsoft\Windows\CurrentVersion\Run"
 AUTOSTART_REG_KEY: Final[str] = "DesktopPet"
+#: macOS 开机自启的 LaunchAgent 标签（plist 落点：~/Library/LaunchAgents/<label>.plist）
+AUTOSTART_LAUNCH_AGENT_LABEL: Final[str] = "desktop-pet"
+#: macOS 缺少「辅助功能」权限时的托盘引导（全局键盘监听依赖该权限）
+MACOS_ACCESSIBILITY_HINT: Final[str] = (
+    "macOS 需要「辅助功能」权限才能监听全局键盘："
+    "请到 系统设置 → 隐私与安全性 → 辅助功能 勾选本程序，再重新勾选一次「监听键盘」"
+)
 APP_DISPLAY_NAME: Final[str] = "小喵酱"
 
 #: 单实例守卫的命名管道名（QLocalServer key）。全局唯一，避免与其他程序冲突。
@@ -559,11 +600,16 @@ BUBBLE_TYPE_CHAR_S: Final[float] = 0.12
 #: offset 严格落在 ``[-WANDER_MAX_PX, WANDER_MAX_PX]``（到达边界后不再继续外推）。
 #: 游走的 ``move()`` **绝不** emit ``position_changed`` —— 该信号只服务「用户拖拽 → 持久化」，
 #: 否则随机位置会被存成新锚点、跨会话漂移（v1.1 G2 / 风险 6）。
-WANDER_MAX_PX: Final[float] = 20.0
-#: 单次游走步的最大增量（逻辑像素）——越小越平缓。
-WANDER_STEP_PX: Final[float] = 6.0
+#: 2026-10-31 由 20 放大到 64：皮肤包有了左右行走帧，步幅太小（原来一步 6px，
+#: 不到角色宽度的 5%）时窗口在动、画面却像"原地跑"。±64 约一个身宽，仍严格有界。
+WANDER_MAX_PX: Final[float] = 64.0
+#: 单次游走步的最大增量（逻辑像素）。
+WANDER_STEP_PX: Final[float] = 18.0
 #: 游走节拍间隔（毫秒）。
 WANDER_TICK_MS: Final[int] = 3000
+#: 一次游走的滑行时长（秒）。瞬时 ``move()`` 会让宠物「闪现」到新位置；
+#: 改为在这段时间内缓动滑到目标，皮肤包才有机会播 left/right 行走帧。
+WANDER_GLIDE_S: Final[float] = 0.7
 
 #: 置顶重申间隔（毫秒）：低频定时 ``raise_()`` 把宠物拉回最前，防止其他**同样置顶**
 #: 的窗口后来居上把宠物盖住（FR-16 的运行期保底——``WindowStaysOnTopHint`` 只保证
@@ -1378,7 +1424,7 @@ WORD_DETAILS_CACHE_TTL_DAYS: Final[int] = 0
 TRAY_MENU_DATA: Final[str] = "数据管理…"
 DATA_WINDOW_TITLE: Final[str] = "数据管理"
 DATA_WINDOW_W: Final[int] = 460
-DATA_WINDOW_H: Final[int] = 340
+DATA_WINDOW_H: Final[int] = 260
 DATA_BTN_ANKI: Final[str] = "导出 Anki（已掌握）"
 DATA_BTN_CSV: Final[str] = "导出学习记录 CSV"
 DATA_BTN_BACKUP: Final[str] = "导出全部数据备份"
@@ -1553,6 +1599,20 @@ __all__ = [
     "MENU_SHADOW_BLUR_PX",
     "MENU_SHADOW_ALPHA",
     "MENU_SHADOW_OFFSET_Y",
+    "MENU_PANEL_RADIUS_PX",
+    "MENU_ICON_PX",
+    "MENU_ITEM_INSET_PX",
+    "MENU_ROW_MIN_H_PX",
+    "MENU_ROW_H_PX",
+    "MENU_ITEM_RADIUS_PX",
+    "MENU_FONT_PX",
+    "MENU_WIDTH_PX",
+    "MENU_HEADER_H_PX",
+    "MENU_GROUP_LABEL_H_PX",
+    "MENU_SWITCH_W_PX",
+    "MENU_SWITCH_H_PX",
+    "MENU_MOTION_MS",
+    "WINDOW_TITLE_PX",
     "THEME_RECHECK_MS",
     # 皮肤包（MOD）选择
     "SKIN_NAME_AUTO",
@@ -1615,6 +1675,7 @@ __all__ = [
     "WANDER_MAX_PX",
     "WANDER_STEP_PX",
     "WANDER_TICK_MS",
+    "WANDER_GLIDE_S",
     "TOPMOST_REASSERT_MS",
     "POSTURE_DURATION_S",
     "SURPRISE_POSTURE_KINDS",

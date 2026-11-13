@@ -94,7 +94,7 @@ def test_tray_reduce_motion_action_is_in_menu(qtbot) -> None:
 
     assert C.TRAY_MENU_REDUCE_MOTION in labels, f"菜单顶层未见该条目：{labels}"
     assert labels.index("开机自启") < labels.index(C.TRAY_MENU_REDUCE_MOTION)
-    assert labels.index(C.TRAY_MENU_REDUCE_MOTION) < labels.index("退出")
+    assert labels.index(C.TRAY_MENU_REDUCE_MOTION) < labels.index("退出小喵酱")
 
 
 # --------------------------------------------------------------------------- #

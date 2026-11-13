@@ -334,10 +334,13 @@ def test_mastered_button_uses_success_variant_green(qtbot) -> None:
 
 
 def test_mastered_button_renders_bubble_green_pixel(qtbot) -> None:
-    """离屏实渲染取色：按钮中心像素 ≈ 气泡按钮绿（抓「设了变体却没上色」）。
+    """离屏实渲染取色：按钮背景像素 ≈ 气泡按钮绿（抓「设了变体却没上色」）。
 
-    渐变改版后中心像素落在 0.5 停靠点的哪一侧由按钮尺寸奇偶决定（±1/通道），
-    故取 ±2/通道 容差——未上色（白底）或错色按钮差出几十以上，足以分辨。
+    采样点取**左内沿背景**（x=4，垂直中线）：按钮文字为白色，中心像素在不同
+    平台的字体度量下可能正好落在文字笔画上（白字与绿底反混合产生浅绿），而
+    左内沿在 padding + 圆角作用下恒为纯净渐变背景。渐变改版后落在 0.5 停靠点
+    哪一侧由按钮尺寸奇偶决定（±1/通道），故取 ±2/通道 容差——未上色（白底）
+    或错色按钮差出几十以上，足以分辨。
     """
 
     window = WordDetailWindow(pool=_FakePool())
@@ -348,12 +351,12 @@ def test_mastered_button_renders_bubble_green_pixel(qtbot) -> None:
     QApplication.processEvents()
 
     image = window._mastered_btn.grab().toImage()
-    center = image.pixelColor(image.width() // 2, image.height() // 2)
+    background = image.pixelColor(4, image.height() // 2)
     expected = C.COLORS["jp_button_primary_bg"].upper()
     er, eg, eb = (int(expected[i : i + 2], 16) for i in (1, 3, 5))
-    assert abs(center.red() - er) <= 2
-    assert abs(center.green() - eg) <= 2
-    assert abs(center.blue() - eb) <= 2
+    assert abs(background.red() - er) <= 2
+    assert abs(background.green() - eg) <= 2
+    assert abs(background.blue() - eb) <= 2
 
 
 # --------------------------------------------------------------------------- #

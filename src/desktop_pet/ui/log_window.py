@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 from desktop_pet.core import constants as C
 from desktop_pet.core.daily_log_store import DailyLogEntry
 from desktop_pet.ui import icon_factory, motion_ui, theme
+from desktop_pet.ui.window_chrome import WindowHeader, polish_root
 
 logger = logging.getLogger(__name__)
 
@@ -215,6 +216,8 @@ class LogWindow(QWidget):
         theme.apply_theme(self)
 
         root = QVBoxLayout(self)
+        polish_root(root)
+        root.addWidget(WindowHeader(C.JP_LOG_WINDOW_TITLE, "每日展示与复习流水", "log"))
 
         # 顶部：日期 + 状态 Tab
         top = QHBoxLayout()
